@@ -64,19 +64,6 @@ luajit render_frames.lua
 
 > どうせなら、星の鼓動でいこう！ 🎸✨
 
-其他可用角色：
-
-| 模型 | 路径 |
-|------|------|
-| haru | `resources/haru/` |
-| hibiki | `resources/hibiki/` |
-| shizuku | `resources/shizuku/` |
-| taiga | `resources/taiga/` |
-| Epsilon | `resources/Epsilon/` |
-| ... 以及更多 | `resources/` |
-
-`test-data/` 下是精简版 `.moc` + `.png`，适合快速测试。
-
 ## 项目结构
 
 ```
