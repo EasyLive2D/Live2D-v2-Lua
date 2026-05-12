@@ -7,8 +7,19 @@ local is_win = ffi.os == "Windows"
 -- Calling convention: __stdcall on Windows, default (blank) on Linux
 local CC = is_win and "__stdcall " or ""
 
--- GL library name
-local gl_lib_name = is_win and "opengl32" or "GL"
+-- GL library name(s)
+local gl_lib_names = is_win and {"opengl32"} or {"GL", "GL.so.1", "GL.so"}
+local gl_lib
+for _, name in ipairs(gl_lib_names) do
+    local ok, lib = pcall(ffi.load, name)
+    if ok then
+        gl_lib = lib
+        break
+    end
+end
+if gl_lib == nil then
+    error("Cannot load GL library. Tried: " .. table.concat(gl_lib_names, ", "))
+end
 
 -- GL 1.1 core cdef (same across platforms)
 ffi.cdef[[
@@ -57,8 +68,6 @@ if is_win then
 else
     ffi.cdef[[ void *glXGetProcAddress(const char *name); ]]
 end
-
-local gl_lib = ffi.load(gl_lib_name)
 
 -- Extension function pointer typedefs (calling convention varies by platform)
 ffi.cdef("typedef void (" .. CC .. "*PFNGLACTIVETEXTUREPROC)(GLenum texture);")

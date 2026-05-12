@@ -1,5 +1,5 @@
 -- PlatformManager - I/O abstraction and texture loading
--- Uses Live2DGLWrapper for OpenGL, image_loader for textures via GDI+
+-- Uses Live2DGLWrapper for OpenGL, image_loader for textures
 
 local Live2DModelOpenGL = require("live2d.core.live2d_model_opengl")
 local Live2DGLWrapper = require("live2d.core.live2d_gl_wrapper")

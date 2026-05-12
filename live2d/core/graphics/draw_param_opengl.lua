@@ -317,7 +317,6 @@ void main(){
 ]]
     local aM = [[
 #version 120
-precision mediump float;
 varying vec2       v_texCoord;
 varying vec4       v_clipPos;
 uniform sampler2D  s_texture0;
@@ -363,7 +362,6 @@ void main(){
 ]]
     local aJ = [[
 #version 120
-precision mediump float;
 varying   vec2   v_texCoord;
 varying   vec4   v_clipPos;
 uniform sampler2D  s_texture0;

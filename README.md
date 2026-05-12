@@ -12,7 +12,7 @@
 
 > キラキラドキドキ！Live2D Cubism 2.1 SDK，LuaJIT 纯享版。
 
-将 [EasyLive2D/live2d-v2](https://github.com/EasyLive2D/live2d-v2) 从 Python 完整重构为 Lua，**零 C 编译，纯 FFI**。只要你有 LuaJIT + SDL2.dll + 一颗对二次元赤诚的心，就能跑。
+将 [EasyLive2D/live2d-v2](https://github.com/EasyLive2D/live2d-v2) 从 Python 完整重构为 Lua，**零 C 编译，纯 FFI**。只要你有 LuaJIT + SDL2 + 一颗对二次元赤诚的心，就能跑。
 
 如果问我为什么选 Lua——大概就和香澄在仓库找到 Random Star 一样，有些事情不需要理由。（其实是因为 Python 性能太差了。）
 
@@ -31,10 +31,26 @@
 ## 前置条件
 
 - **LuaJIT 2.1+**（需要 FFI）
-- **SDL2.dll** 在 `PATH` 或当前目录
-- Windows（`opengl32.dll` + `wglGetProcAddress`）
+- **SDL2** 运行时库
+- **OpenGL** 驱动（Windows: `opengl32.dll`，Linux: `libGL.so`）
+- **zlib**（Linux 下 PNG 解码需要）
 
-Linux/macOS 暂时不支持，因为 OpenGL 扩展加载是 Windows 特化的。PR welcome。
+### Windows
+
+```bash
+# SDL2.dll 放在 PATH 或当前目录即可
+luajit main.lua
+```
+
+### Linux
+
+```bash
+# Debian/Ubuntu
+sudo apt install luajit libsdl2-2.0-0 libgl1 zlib1g
+
+# 运行
+luajit main.lua
+```
 
 ## 快速开始
 
@@ -72,7 +88,7 @@ live2d/
   core/                    # Cubism Core 2.1 移植
   framework/               # Cubism Framework 移植
   sdl2.lua                 # SDL2 FFI 绑定（纯 Lua 声明 + 加载）
-  gl_loader.lua            # OpenGL 扩展加载器（wglGetProcAddress）
+  gl_loader.lua            # OpenGL 扩展加载器（wglGetProcAddress / glXGetProcAddress）
   platform_manager.lua     # 文件 I/O 抽象层
   lapp_model.lua           # 高级模型接口（JSON / 动作 / 物理）
 ```
@@ -82,7 +98,7 @@ live2d/
 ## 已知坑位
 
 - **GC Step 是生存必需品**：每次 `model:Draw()` 都会分配临时 FFI 顶点缓冲区。没有 `collectgarbage("step", 200)` 的话，在没有垂直同步的驱动上，内存会直接炸给你看。
-- **OpenGL 扩展加载是 Windows 专供**：`gl_loader.lua` 里硬编码了 `wglGetProcAddress`。想移植到别的平台？先改这里。
+- **OpenGL 扩展加载已跨平台**：`gl_loader.lua` 支持 Windows（`wglGetProcAddress`）和 Linux（`glXGetProcAddress`），自动检测平台。
 - **脚本必须在 repo 根目录运行**：每个入口脚本里都内联了 `package.path` 的扩展，不在 root 跑就找不到模块。
 - **没有测试、没有 CI、没有构建系统**：这是纯 Lua 项目，没有 `make`、`cmake`、`npm` 那些玩意儿。跑就完了。
 

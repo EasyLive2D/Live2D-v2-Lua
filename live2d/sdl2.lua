@@ -107,7 +107,20 @@ ffi.cdef[[
     uint32_t SDL_GetMouseState(int *x, int *y);
 ]]
 
-local sdl = ffi.load("C:\\SDL2\\SDL2.dll")
+local sdl
+
+-- Try common SDL2 library names across platforms
+local sdl_names = { "SDL2", "SDL2-2.0", "libSDL2-2.0.so.0" }
+for _, name in ipairs(sdl_names) do
+    local ok, lib = pcall(ffi.load, name)
+    if ok then
+        sdl = lib
+        break
+    end
+end
+if sdl == nil then
+    error("Cannot load SDL2 library. Tried: " .. table.concat(sdl_names, ", "))
+end
 
 -- Init flags
 local SDL_INIT_VIDEO = 0x00000020

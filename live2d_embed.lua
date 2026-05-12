@@ -34,7 +34,7 @@ local platform_manager = nil
 local function init_runtime()
     if runtime_initialized then return end
 
-    -- Requires an active WGL context; extension pointers are context-bound.
+    -- Requires an active GL context; extension pointers are context-bound.
     gl.ensureExtensions()
 
     platform_manager = require("live2d.platform_manager").new()
