@@ -17,6 +17,8 @@
 如果问我为什么选 Lua——大概就和香澄在仓库找到 Random Star 一样，有些事情不需要理由。（其实是因为 Python 性能太差了。）
 
 > ⚠️ `main.lua` 只是一个演示。使用 Lua 编码的真正目的是：这个高性能（比 Python 高到不知道哪里去了）的 Live2D v2 渲染核心，可以像胶水一样轻松嵌到任何语言里——不管是 C++ 一个 `lua_pcall`，还是 Python 一个 `lupa`，随你喜欢。
+> 
+> 🔌 **Python 调用方法详见 [Embedded2Python.md](Embedded2Python.md)**，内含 lupa / ctypes / 子进程三种接入方案、PySide6 完整示例及常见问题排查。
 
 > 🌸 这是一个粉丝向的移植项目，本仓库源于 [EasyLive2D/live2d-v2](https://github.com/EasyLive2D/live2d-v2)（MIT），并由 Python 重构为 Lua。
 > 
@@ -52,6 +54,8 @@ luajit render_frames.lua
 |------|------|
 | `main.lua` | 交互式查看器，鼠标跟随 + 点击切换动作 + 自动呼吸/眨眼 |
 | `render_frames.lua` | 离线渲染 20 帧并输出 BMP 到 `frames_output/` |
+| `live2d_embed.lua` | 无窗口渲染核心模块，供宿主语言嵌入调用 |
+| `examples/pyside6_lupa_kasumi2.py` | Python 接入完整示例 (PySide6 + lupa) |
 | `simple.lua` | ~~施工中~~ 别用 |
 
 ## 默认角色
