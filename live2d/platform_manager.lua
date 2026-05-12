@@ -17,8 +17,9 @@ local function normalizePath(path)
 end
 
 local function streamData(stream, path)
-    if type(stream) == "function" then
-        stream = stream(path)
+    if type(stream) == "function" or type(stream) == "userdata" then
+        local ok, result = pcall(stream, path)
+        if ok then stream = result end
     end
     if type(stream) == "table" then
         stream = stream.data or stream.bytes or stream[1]
@@ -40,7 +41,6 @@ local function uploadTexture(live2DModel, no, w, h, data, label)
     Live2DGLWrapper.bindTexture(Live2DGLWrapper.TEXTURE_2D, 0)
 
     live2DModel:setTexture(no, texture)
-    print("Texture " .. no .. " loaded: " .. label)
 end
 
 local function normalizeTextureStream(stream, no, path)
@@ -124,6 +124,9 @@ end
 function PlatformManager:loadBytes(path)
     local normalized = normalizePath(path)
     local stream = self.resourceStreams[normalized]
+    if stream == nil and self.resourceStreams.__loader ~= nil then
+        stream = self.resourceStreams.__loader
+    end
     if stream ~= nil then
         return streamData(stream, normalized)
     end
@@ -142,6 +145,11 @@ end
 function PlatformManager:loadTexture(live2DModel, no, path)
     local normalized = normalizePath(path)
     local stream = self.textureStreams[no] or self.textureStreams[no + 1] or self.textureStreams[path] or self.textureStreams[normalized]
+    if stream == nil and self.textureStreams.__loader ~= nil then
+        stream = function(texture_no, texture_path)
+            return self.textureStreams.__loader(texture_no, texture_path)
+        end
+    end
     if stream ~= nil then
         local w, h, data = normalizeTextureStream(stream, no, path)
         uploadTexture(live2DModel, no, w, h, data, "stream:" .. tostring(no))
