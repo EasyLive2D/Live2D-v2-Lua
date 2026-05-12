@@ -30,14 +30,20 @@ local function streamData(stream, path)
     return stream
 end
 
-local function uploadTexture(live2DModel, no, w, h, data, label)
+local function uploadTexture(live2DModel, no, w, h, data, label, useMipmap)
     Live2DGLWrapper.enable(Live2DGLWrapper.TEXTURE_2D)
     local texture = Live2DGLWrapper.createTexture()
     Live2DGLWrapper.bindTexture(Live2DGLWrapper.TEXTURE_2D, texture)
     Live2DGLWrapper.texImage2D(Live2DGLWrapper.TEXTURE_2D, 0, Live2DGLWrapper.RGBA, w, h, 0, Live2DGLWrapper.RGBA, Live2DGLWrapper.UNSIGNED_BYTE, data)
-    Live2DGLWrapper.texParameteri(Live2DGLWrapper.TEXTURE_2D, Live2DGLWrapper.TEXTURE_MIN_FILTER, Live2DGLWrapper.LINEAR_MIPMAP_LINEAR)
+    if useMipmap then
+        Live2DGLWrapper.texParameteri(Live2DGLWrapper.TEXTURE_2D, Live2DGLWrapper.TEXTURE_MIN_FILTER, Live2DGLWrapper.LINEAR_MIPMAP_LINEAR)
+    else
+        Live2DGLWrapper.texParameteri(Live2DGLWrapper.TEXTURE_2D, Live2DGLWrapper.TEXTURE_MIN_FILTER, Live2DGLWrapper.LINEAR)
+    end
     Live2DGLWrapper.texParameteri(Live2DGLWrapper.TEXTURE_2D, Live2DGLWrapper.TEXTURE_MAG_FILTER, Live2DGLWrapper.LINEAR)
-    Live2DGLWrapper.generateMipmap(Live2DGLWrapper.TEXTURE_2D)
+    if useMipmap then
+        Live2DGLWrapper.generateMipmap(Live2DGLWrapper.TEXTURE_2D)
+    end
     Live2DGLWrapper.bindTexture(Live2DGLWrapper.TEXTURE_2D, 0)
 
     live2DModel:setTexture(no, texture)
@@ -71,7 +77,7 @@ local function normalizeTextureStream(stream, no, path)
         data = ffi.cast("const uint8_t*", data)
     end
 
-    return width, height, data
+    return width, height, data, stream.mipmap == true or stream.use_mipmap == true or stream.useMipmap == true
 end
 
 function PlatformManager.new(opts)
@@ -151,13 +157,13 @@ function PlatformManager:loadTexture(live2DModel, no, path)
         end
     end
     if stream ~= nil then
-        local w, h, data = normalizeTextureStream(stream, no, path)
-        uploadTexture(live2DModel, no, w, h, data, "stream:" .. tostring(no))
+        local w, h, data, useMipmap = normalizeTextureStream(stream, no, path)
+        uploadTexture(live2DModel, no, w, h, data, "stream:" .. tostring(no), useMipmap)
         return
     end
 
     local w, h, data = imageLoader.loadImage(path)
-    uploadTexture(live2DModel, no, w, h, data, path)
+    uploadTexture(live2DModel, no, w, h, data, path, true)
 end
 
 function PlatformManager:jsonParseFromBytes(data)

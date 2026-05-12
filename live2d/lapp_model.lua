@@ -45,7 +45,9 @@ function LAppModel:LoadModelJson(modelSettingPath)
         self:loadTexture(i, tex_paths)
     end
 
-    if self.modelSetting:getExpressionNum() > 0 then
+    if self.deferExpressions then
+        self.expressions = {}
+    elseif self.modelSetting:getExpressionNum() > 0 then
         self.expressions = {}
         for j = 0, self.modelSetting:getExpressionNum() - 1 do
             local exp_name = self.modelSetting:getExpressionName(j)
@@ -95,7 +97,6 @@ function LAppModel:LoadModelJson(modelSettingPath)
     end
 
     self.live2DModel:saveParam()
-    self:_preloadMotionGroup("idle")
     self.mainMotionManager:stopAllMotions()
     self:setUpdating(false)
     self:setInitialized(true)
@@ -268,7 +269,16 @@ function LAppModel:ResetExpression()
 end
 
 function LAppModel:SetExpression(name)
+    if self.expressions[name] == nil then
+        for j = 0, self.modelSetting:getExpressionNum() - 1 do
+            if self.modelSetting:getExpressionName(j) == name then
+                self:loadExpression(name, self.modelHomeDir .. self.modelSetting:getExpressionFile(j))
+                break
+            end
+        end
+    end
     local motion = self.expressions[name]
+    if motion == nil then return end
     self.expressionManager:startMotion(motion, false)
 end
 

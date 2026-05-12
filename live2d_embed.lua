@@ -68,6 +68,7 @@ function Renderer:load_model(model_path, width, height, opts)
     pm:setTextureStreams(opts.texture_streams or opts.textureStreams)
 
     local model = LAppModel.new()
+    model.deferExpressions = opts.defer_expressions == true or opts.deferExpressions == true
     model:LoadModelJson(model_path)
     model:Resize(self.width, self.height)
     model:SetAutoBreathEnable(opts.auto_breath ~= false)
