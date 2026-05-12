@@ -37,7 +37,10 @@ ffi.cdef[[
         uint32_t timestamp;
         uint32_t windowID;
         uint32_t which;
-        uint32_t state;
+        uint8_t button;
+        uint8_t state;
+        uint8_t clicks;
+        uint8_t padding1;
         int32_t x;
         int32_t y;
     } SDL_MouseButtonEvent;
@@ -58,6 +61,10 @@ ffi.cdef[[
         uint32_t type;
         uint32_t timestamp;
         uint32_t windowID;
+        uint8_t event;
+        uint8_t padding1;
+        uint8_t padding2;
+        uint8_t padding3;
         int32_t data1;
         int32_t data2;
     } SDL_WindowEvent;

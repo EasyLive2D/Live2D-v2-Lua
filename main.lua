@@ -22,6 +22,7 @@ gl.ensureExtensions()
 local live2d = require("live2d")
 local Live2DFramework = live2d.Live2DFramework
 local Live2D = live2d.Live2D
+local MotionPriority = live2d.MotionPriority
 local Live2DGLWrapper = require("live2d.core.live2d_gl_wrapper")
 
 local pm = require("live2d.platform_manager").new()
@@ -49,6 +50,29 @@ local offsetX, offsetY = 0, 0
 local scale = 1.0
 local frameCount = 0
 local targetFrameMs = 1000 / 60
+local motionNames = model.modelSetting:getMotionNames() or {}
+local motionIndex = 1
+
+table.sort(motionNames)
+
+local function isInsideWindow(x, y)
+    return x >= 0 and x < W and y >= 0 and y < H
+end
+
+local function playNextMotion()
+    local total = #motionNames
+    if total == 0 then return end
+
+    for _ = 1, total do
+        local name = motionNames[motionIndex]
+        motionIndex = motionIndex % total + 1
+        if model.modelSetting:getMotionNum(name) > 0 then
+            print("Motion: " .. name)
+            model:StartMotion(name, 0, MotionPriority.FORCE)
+            return
+        end
+    end
+end
 
 -- Pre-render first frame to ensure shaders compile
 Live2DGLWrapper.clearColor(0.0, 0.0, 0.0, 0.0)
@@ -74,8 +98,26 @@ while running do
         elseif etype == sdl2.SDL_KEYDOWN then
             local key = tonumber(event.key.keysym.sym) or 0
             if key == sdl2.SDLK_ESCAPE then running = false end
+        elseif etype == sdl2.SDL_MOUSEBUTTONDOWN then
+            local x = tonumber(event.button.x) or -1
+            local y = tonumber(event.button.y) or -1
+            if tonumber(event.button.button) == 1 and isInsideWindow(x, y) then
+                playNextMotion()
+            end
+        elseif etype == sdl2.SDL_WINDOWEVENT then
+            if tonumber(event.window.event) == sdl2.SDL_WINDOWEVENT_SIZE_CHANGED then
+                W = tonumber(event.window.data1) or W
+                H = tonumber(event.window.data2) or H
+                model:Resize(W, H)
+                Live2DGLWrapper.viewport(0, 0, W, H)
+            end
         end
         event = sdl2.pollEvent()
+    end
+
+    local mouseX, mouseY = sdl2.getMouseState()
+    if isInsideWindow(mouseX, mouseY) then
+        model:Drag(mouseX, mouseY)
     end
 
     Live2DGLWrapper.clearColor(0.0, 0.0, 0.0, 0.0)
