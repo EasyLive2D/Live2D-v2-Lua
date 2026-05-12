@@ -1,5 +1,15 @@
 # Live2D v2 in LuaJIT
 
+<p align="center">
+  <a href="https://github.com/HELPMEEADICE/Live2D-v2-Lua"><img alt="GitHub Repo" src="https://img.shields.io/badge/GitHub-Live2D--v2--Lua-ff69b4?logo=github"></a>
+  <a href="https://github.com/HELPMEEADICE/Live2D-v2-Lua/blob/main/LICENSE"><img alt="License" src="https://img.shields.io/github/license/HELPMEEADICE/Live2D-v2-Lua?color=blue"></a>
+  <a href="https://github.com/HELPMEEADICE/Live2D-v2-Lua/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/HELPMEEADICE/Live2D-v2-Lua?color=yellow"></a>
+  <a href="https://github.com/HELPMEEADICE/Live2D-v2-Lua/network/members"><img alt="Forks" src="https://img.shields.io/github/forks/HELPMEEADICE/Live2D-v2-Lua?color=orange"></a>
+  <a href="https://luajit.org/"><img alt="LuaJIT" src="https://img.shields.io/badge/LuaJIT-2.1+-000080?logo=lua&logoColor=white"></a>
+  <a href="https://www.live2d.com/"><img alt="Live2D" src="https://img.shields.io/badge/Live2D-Cubism%20v2-EE82EE?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0tMSAxNy45M2MtMy45NS0uNDktNy0zLjg1LTctNy45M3MzLjA1LTcuNDQgNy03LjkzdjE1Ljg2em0yLTE1Ljg2YzMuOTUuNDkgNyAzLjg1IDcgNy45M3MtMy4wNSA3LjQ0LTcgNy45M1Y0LjA3eiIvPjwvc3ZnPg=="></a>
+  <a href="https://github.com/HELPMEEADICE/Live2D-v2-Lua"><img alt="Last Commit" src="https://img.shields.io/github/last-commit/HELPMEEADICE/Live2D-v2-Lua?color=green"></a>
+</p>
+
 > キラキラドキドキ！Live2D Cubism 2.1 SDK，LuaJIT 纯享版。
 
 将 [EasyLive2D/live2d-v2](https://github.com/EasyLive2D/live2d-v2) 从 Python 完整重构为 Lua，**零 C 编译，纯 FFI**。只要你有 LuaJIT + SDL2.dll + 一颗对二次元赤诚的心，就能跑。
@@ -8,7 +18,7 @@
 
 > ⚠️ `main.lua` 只是一个演示。使用 Lua 编码的真正目的是：这个高性能（比 Python 高到不知道哪里去了）的 Live2D v2 渲染核心，可以像胶水一样轻松嵌到任何语言里——不管是 C++ 一个 `lua_pcall`，还是 Python 一个 `lupa`，随你喜欢。
 
-> 🌸 这是一个粉丝向的移植项目，本仓库所有文件均来源于 [EasyLive2D/live2d-v2](https://github.com/EasyLive2D/live2d-v2)（MIT），并由 Python 重构为 Lua。
+> 🌸 这是一个粉丝向的移植项目，本仓库源于 [EasyLive2D/live2d-v2](https://github.com/EasyLive2D/live2d-v2)（MIT），并由 Python 重构为 Lua。
 > 
 > 🤖 特别鸣谢 **DeepSeek V4 Pro**（主力重构编码）与 **GPT 5.5**（疑难杂症 BUG 修复）——没有这两位无声的共犯，这个小破项目现在还困在 import 地狱里。AI 调用总花费约 **5 美元**，大概是两瓶波子汽水的钱。
 
@@ -85,7 +95,9 @@ live2d/
 - **脚本必须在 repo 根目录运行**：每个入口脚本里都内联了 `package.path` 的扩展，不在 root 跑就找不到模块。
 - **没有测试、没有 CI、没有构建系统**：这是纯 Lua 项目，没有 `make`、`cmake`、`npm` 那些玩意儿。跑就完了。
 
-## License
+## 致谢
 
-- 原项目 [EasyLive2D/live2d-v2](https://github.com/EasyLive2D/live2d-v2)：**MIT**
-- 本 Lua 移植：**GPLv3**
+- [EasyLive2D/live2d-v2](https://github.com/EasyLive2D/live2d-v2)
+- [DeepSeek V4 Pro](https://www.deepseek.com)
+- [GPT 5.5](https://chatgpt.com/codex/cloud)
+- [OpenCode](https://opencode.ai)
