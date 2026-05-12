@@ -5,32 +5,28 @@
 ```
 Python GUI (PySide6 / PyQt6 / wxPython 等)
   └─ QOpenGLWidget / GL canvas          ← 创建并持有 OpenGL context
-       ├─ initializeGL()                 ← 调 live2d_embed.init()
-       │    └─ lupa (LuaJIT)             ← 加载并执行 Lua 代码
-       │         └─ live2d_embed.lua     ← 窗口无关的渲染核心模块
-       │              ├─ live2d_embed.init()
-       │              ├─ live2d_embed.load_model(path, w, h)
-       │              ├─ live2d_embed.resize(w, h)
-       │              ├─ live2d_embed.drag(x, y)
-       │              ├─ live2d_embed.draw()
-       │              ├─ live2d_embed.start_motion(...)
-       │              ├─ live2d_embed.set_parameter(...)
-       │              └─ live2d_embed.dispose()
+       ├─ 初始化阶段
+       │    ├─ 递归读取模型目录所有文件          ← Python 侧
+       │    ├─ 用 QImage 解码纹理为 RGBA8888     ← Python 侧
+       │    ├─ 构建 resource_streams 表           ← lupa Lua 表
+       │    ├─ 构建 texture_streams 表            ← lupa Lua 表
+       │    └─ opts = { resource_streams, texture_streams }
        │
-       ├─ resizeGL(w, h)                 ← 调 embed.resize(w, h)
-       ├─ paintGL()                      ← 调 embed.draw()
-       │    └─ model:Update() + model:Draw()
+       ├─ 加载 & 渲染
+       │    ├─ embed.load_model(path, w, h, opts) ← 所有资源走流，零文件系统读
+       │    ├─ resizeGL(w, h)    → embed.resize(w, h)
+       │    └─ paintGL()         → embed.draw()
        │
-       └─ QTimer(16ms)                   ← 驱动 paintGL 循环刷新
+       └─ QTimer(16ms)           ← 驱动循环刷新
 ```
+
+**核心理念**：Python 侧全权管理文件读取和解码，Lua 侧只接收内存字节流，不再依赖文件系统和 `image_loader.lua`。
 
 ## 前置条件
 
 ### 1. LuaJIT 运行时
 
-本项目依赖 **LuaJIT** 的 `ffi` 模块（用于 C 函数调用和 FFI 缓冲区），**不能使用标准 Lua 解释器**。
-
-你需要一个能被 Python 调用的 LuaJIT。提供三种方案：
+本项目依赖 **LuaJIT** 的 `ffi` 模块，**不能使用标准 Lua 解释器**。
 
 | 方案 | 库 | 原理 | 推荐度 |
 |------|-----|------|--------|
@@ -44,7 +40,6 @@ Python GUI 必须提供一个支持 OpenGL 的控件。推荐：
 
 - **PySide6** / **PyQt6**: `QOpenGLWidget`（本文示例使用）
 - **wxPython**: `wx.GLCanvas`
-- **Tkinter**: 不推荐（无原生 GL 控件，需借助 pyopengl 等 hack）
 
 ### 3. 操作系统
 
@@ -56,168 +51,126 @@ Python GUI 必须提供一个支持 OpenGL 的控件。推荐：
 pip install PySide6 lupa
 ```
 
-> **Critical**: lupa 的 wheel 必须基于 LuaJIT 编译，不是标准 Lua。如果 `require("ffi")` 在 lupa 中报错，说明你的 lupa 捆绑了标准 Lua，需要手动编译 LuaJIT 版本的 lupa，或改用 ctypes 方案。
+> **Critical**: lupa 的 wheel 必须基于 LuaJIT 编译。如果 `require("ffi")` 在 lupa 中报错，说明你的 lupa 捆绑了标准 Lua。
 
-## live2d_embed.lua 模块
+---
 
-### 设计原则
+## 流式传输（推荐方式）
 
-- **无窗口**：不创建 SDL 窗口，不调用 `swapWindow`，不跑事件循环
-- **宿主持 context**：假定调用方已经创建并激活了 OpenGL context
-- **延迟初始化**：`init()` 只在第一次调用时注册 GL 扩展和 Live2D 运行时
-- **Singleton API**：提供简单全局接口，方便通过 lupa / ctypes 直接调
-- **对象 API**：也提供面向对象风格的 `Renderer` 类，方便同时管多模型
+从 Python 直接传入字节流给 Lua，完全绕过文件系统读取和纹理解码。这是推荐方式，因为：
 
-### 公共 API
+- **无文件系统依赖**：模型可以从 zip/网络/内存加载
+- **零 I/O 耦合**：Python 侧决定数据来源，Lua 侧只消费字节
+- **绕过 GDI+ 限制**：不用 `image_loader.lua`，避免 Windows GDI+ 解码的坑
+- **跨平台纹理解码**：用 Qt 的 `QImage` 解码纹理，不依赖 `wincodec`
 
-#### 初始化
+### 流式 API 速查
 
-```lua
-local embed = require("live2d_embed")
-embed.init()  -- 注册 GL 扩展 + 初始化 Live2D 运行时
-```
-
-必须在 OpenGL context 已激活之后调用。
-
-#### 加载模型
+#### 资源流（resource_streams）—— 替代所有文件读取
 
 ```lua
-embed.load_model("resources/kasumi2/kasumi2.model.json", 400, 650)
+-- Lua 侧
+embed.set_resource_stream(path, bytes)        -- 单条
+embed.set_resource_streams(resource_streams)  -- 批量
+embed.clear_resource_streams()                -- 清空
 ```
 
-或带配置参数：
+`load_model` 时也可通过 opts 传入：
 
 ```lua
 embed.load_model("resources/kasumi2/kasumi2.model.json", 400, 650, {
-    auto_breath = true,
-    auto_blink  = true,
-    center      = true,
-    model_width = 2.0,
-    center_x    = 0,
-    center_y    = 0,
+    resource_streams = {
+        ["resources/kasumi2/kasumi2.model.json"] = json_bytes,
+        ["resources/kasumi2/live2d/kasumi_school_winter_t03.moc"] = moc_bytes,
+        ["resources/kasumi2/live2d/001_live_event_47_ssr_idle01.mtn"] = mtn_bytes,
+        -- ... 物理、pose、表情等全部通过此表
+    },
 })
 ```
 
-第三个参数 `width/height` 是视口大小，不是模型大小。模型缩放通过 `model_width` 控制。
+路径会自动归一化（`\` → `/`，去掉前导 `./`），匹配 `.model.json` 里相对引用的路径。
 
-#### 每帧绘制
+被覆盖的加载入口：
+- `.model.json` 本身（`loadBytes` 读取 JSON）
+- `.moc` 模型文件（`loadLive2DModel` → `loadBytes`）
+- `.mtn` 动作文件（`loadMotion` → `loadBytes`）
+- `.json` 表情 / pose / 物理（对应 `loadExpression`、`loadPose`、`loadPhysics` → `loadBytes`）
+- 所有其他通过 `PlatformManager:loadBytes()` 读取的文件
 
-```lua
-embed.draw()  -- 等价于 Update() + Draw()，先 clear 再渲染
-```
-
-当宿主已经手动清屏时，可以跳过内置的 clear：
-
-```lua
-embed.draw({ clear = false })
-```
-
-GC step size 可调（默认 200）：
+#### 纹理流（texture_streams）—— 替代 PNG 文件解码和 GL 上传
 
 ```lua
-embed.draw({ gc_step = 100 })
+-- Lua 侧
+embed.set_texture_stream(no, width, height, rgba_bytes)   -- 单张
+embed.set_texture_streams(texture_streams)                 -- 批量
+embed.clear_texture_streams()                              -- 清空
 ```
 
-#### 视口大小
+纹理编号 **从 0 开始**，对应模型 JSON 中 `textures` 数组的顺序。
 
 ```lua
-embed.resize(800, 600)
+embed.load_model("resources/kasumi2/kasumi2.model.json", 400, 650, {
+    texture_streams = {
+        [0] = {
+            width  = 1024,
+            height = 1024,
+            data   = rgba_bytes,  -- Lua string / FFI pointer
+        },
+    },
+})
 ```
 
-#### 鼠标交互
+流水线：Python 侧用任意图像库解码 PNG → RGBA8888 字节 → 通过 lupa 传给 Lua → `platform_manager.lua` 直接用 `glTexImage2D` 上传 OpenGL 纹理，完全跳过 `image_loader.lua`。
 
-```lua
-embed.drag(x, y)  -- 视线追踪 / 头部朝向
-```
-
-#### 动作控制
-
-```lua
--- 播放指定动作
-embed.start_motion("tap_body", 0)  -- motion_name, motion_no
-
--- 播放 idle 动作（kasumi2 通常预加载了 3 个 idle）
-embed.start_motion("idle", 0)
-embed.start_motion("idle", 1)
-embed.start_motion("idle", 2)
-```
-
-#### 参数控制
-
-```lua
-embed.set_parameter("PARAM_ANGLE_X", 20)     -- 设置到绝对值
-embed.add_parameter("PARAM_BODY_ANGLE_X", 5)  -- 累加偏移
-```
-
-#### 表达式
-
-```lua
-embed.set_expression("SMILE")
-embed.reset_expression()
-```
-
-#### 清理
-
-```lua
-embed.dispose()
-```
-
-### 对象 API（多模型场景）
-
-```lua
-local renderer1 = embed.new(400, 650)
-renderer1:load_model("resources/model1.json", 400, 650)
-
-local renderer2 = embed.new(400, 650)
-renderer2:load_model("resources/model2.json", 400, 650)
-
--- 切换渲染
-renderer1:draw()
--- 或者
-renderer2:draw()
-```
-
-## lupa 接入方案（推荐）
-
-### 完整示例
+### lupa 接入完整示例
 
 `examples/pyside6_lupa_kasumi2.py`
 
-核心代码结构：
+核心流程：
 
 ```python
+import json
 import os
 from pathlib import Path
 from lupa.luajit21 import LuaRuntime
 
 from PySide6.QtCore import QTimer, Qt
+from PySide6.QtGui import QImage
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
-from PySide6.QtWidgets import QApplication, QMessageBox
 
 ROOT = Path(__file__).resolve().parents[1]
 MODEL_PATH = "resources/kasumi2/kasumi2.model.json"
 
 class Live2DWidget(QOpenGLWidget):
     def initializeGL(self):
-        # 1. 确保 cwd 在仓库根目录（Lua 的 package.path 从 cwd 拼路径）
         os.chdir(ROOT)
 
-        # 2. 创建 LuaJIT 运行时
-        self.lua = LuaRuntime(unpack_returned_tuples=True)
+        # 1. 创建 LuaJIT 运行时（encoding=None 让 lupa 直接传 Python bytes）
+        self.lua = LuaRuntime(unpack_returned_tuples=True, encoding=None)
+        self.lua.execute(b'assert(require("ffi"), "lupa must be built with LuaJIT FFI")')
 
-        # 3. 验证 FFI 模块可用
-        self.lua.execute('assert(require("ffi"), "lupa needs LuaJIT, not plain Lua")')
+        # 2. 加载 live2d_embed
+        self.embed = self.lua.execute(b'return require("live2d_embed")')
 
-        # 4. 加载 live2d_embed 模块
-        self.embed = self.lua.execute('return require("live2d_embed")')
+        # 3. 预编译高频函数
+        self._load_model = self.lua.eval(
+            b"function(embed, path, w, h, opts) "
+            b"return embed.load_model(path, w, h, opts) end"
+        )
+        self._draw   = self.lua.eval(b"function(e) return e.draw() end")
+        self._resize = self.lua.eval(b"function(e,w,h) return e.resize(w,h) end")
+        self._drag   = self.lua.eval(b"function(e,x,y) return e.drag(x,y) end")
+        self._start_motion = self.lua.eval(
+            b"function(e,n,i) return e.start_motion(n,i,e.MotionPriority.FORCE) end"
+        )
 
-        # 5. 缓存高频函数引用（避免每次 paintGL 都 eval 字面量）
-        self._draw = self.lua.eval("function(e) return e.draw() end")
-        self._resize = self.lua.eval("function(e,w,h) return e.resize(w,h) end")
-        self._drag = self.lua.eval("function(e,x,y) return e.drag(x,y) end")
+        # 4. 构建流表
+        opts = self.lua.table()
+        opts[b"resource_streams"] = load_resource_streams(self.lua, ROOT / "resources" / "kasumi2")
+        opts[b"texture_streams"]  = load_texture_streams(self.lua, ROOT / MODEL_PATH)
 
-        # 6. 加载模型
-        self.embed.load_model(MODEL_PATH, self.width(), self.height())
+        # 5. 加载模型（全部走流）
+        self._load_model(self.embed, MODEL_PATH.encode(), self.width(), self.height(), opts)
 
     def resizeGL(self, w, h):
         self._resize(self.embed, w, h)
@@ -229,13 +182,58 @@ class Live2DWidget(QOpenGLWidget):
         pos = event.position()
         self._drag(self.embed, pos.x(), pos.y())
 
-    def mousePressEvent(self, event):
-        if event.button() == Qt.MouseButton.LeftButton:
-            self._motion_index = (self._motion_index + 1) % 3
-            self._start_motion(self.embed, "idle", self._motion_index)
-
     def closeEvent(self, event):
         self.embed.dispose()
+        super().closeEvent(event)
+
+
+# ---- 流构建辅助函数 -----------------------------------------------------
+
+def load_resource_streams(lua, model_dir):
+    """递归读取模型目录所有文件，构建 Lua table。
+    Key 为仓库相对路径（如 "resources/kasumi2/live2d/xxx.mtn"），Value 为 bytes."""
+    streams = lua.table()
+    for path in model_dir.rglob("*"):
+        if path.is_file():
+            key = path.relative_to(ROOT).as_posix().encode()
+            streams[key] = path.read_bytes()
+    return streams
+
+
+def load_texture_streams(lua, model_json_path):
+    """读取模型 JSON，解码纹理为 RGBA8888，构建 Lua table。
+    Key 为纹理编号（0-based），Value 为 { width, height, data }."""
+    with open(model_json_path, encoding="utf-8") as f:
+        model_json = json.load(f)
+
+    streams = lua.table()
+    for no, tex_name in enumerate(model_json.get("textures", [])):
+        w, h, rgba = decode_rgba(model_json_path.parent / tex_name)
+        entry = lua.table()
+        entry[b"width"]  = w
+        entry[b"height"] = h
+        entry[b"data"]   = rgba
+        streams[no] = entry
+    return streams
+
+
+def decode_rgba(path):
+    """用 QImage 解码图片为 RGBA8888 bytes。"""
+    img = QImage(str(path))
+    if img.isNull():
+        raise RuntimeError(f"Failed to load: {path}")
+
+    img = img.convertToFormat(QImage.Format.Format_RGBA8888)
+    w, h = img.width(), img.height()
+    stride = img.bytesPerLine()
+    row_sz = w * 4
+    data = bytes(img.constBits())
+
+    if stride == row_sz:
+        return w, h, data[: row_sz * h]
+
+    rows = [data[y * stride : y * stride + row_sz] for y in range(h)]
+    return w, h, b"".join(rows)
 ```
 
 运行：
@@ -244,48 +242,155 @@ class Live2DWidget(QOpenGLWidget):
 python examples/pyside6_lupa_kasumi2.py
 ```
 
-### lupa 关键注意事项
+---
 
-#### 1. 全局函数缓存
+## lupa 关键注意事项
 
-每次 `lua.eval("...")` 会解析字符串并编译一个新 Lua 闭包，如果放在 `paintGL()` 里频繁调用会很慢。解决方案：在 `initializeGL()` 里预先 eval，只一次编译，之后只传参数。
+### 1. encoding=None
+
+```python
+self.lua = LuaRuntime(unpack_returned_tuples=True, encoding=None)
+```
+
+`encoding=None` 让 `lua.execute()` 和 `lua.eval()` 接受 Python `bytes`，直接传给 Lua 成为 Lua string —— 对于资源字节流这是必须的，否则编码转换会破坏二进制数据。
+
+### 2. 全局函数缓存
+
+每次 `lua.eval("...")` 会解析并编译一个新 Lua 闭包，不要在 `paintGL()` 里使用。在 `initializeGL()` 中一次性预缓存：
 
 ```python
 # Good: 预编译
-self._draw = self.lua.eval("function(e) return e.draw() end")
+self._draw = self.lua.eval(b"function(e) return e.draw() end")
 self._draw(self.embed)
 
 # Bad: 每帧 eval
-self.lua.eval(f"embed.draw()")  # 每次都在编译
+self.lua.eval(b"embed.draw()")
 ```
 
-#### 2. GC step
+### 3. GC step
 
-`live2d_embed.lua` 已经在每次 `draw()` 内部调用了 `collectgarbage("step", 200)`，Python 侧不需要额外处理。
-
-但如果你自己调 `renderer:update()` 然后 `renderer:get_model():Draw()`（不走 `draw()`），需要在 Python 侧周期性触发 Lua GC：
+`live2d_embed.lua` 的 `draw()` 已经在内部执行了 `collectgarbage("step", 200)`，Python 侧不需要额外处理。如果直接调 `model:Draw()` 而不走 `draw()`，需要手动触发：
 
 ```python
-self.lua.execute("collectgarbage('step', 200)")
+self.lua.execute(b"collectgarbage('step', 200)")
 ```
 
-否则在高帧率下，FFI 临时缓冲区会堆积导致内存爆炸。
+### 4. OpenGL context 线程亲和性
 
-#### 3. OpenGL context 线程亲和性
+QOpenGLWidget 的 `initializeGL` / `paintGL` 在 GL 线程中运行，Qt 会确保 context 已绑定。**不要在非 GL 线程中调用 `embed.draw()`**。
 
-QOpenGLWidget 的 `initializeGL` / `paintGL` 在独立线程中运行（具体的线程行为由 Qt 控制）。Lua 代码直接调用 GL 函数时，必须确保 OpenGL context 已经 `makeCurrent` — QOpenGLWidget 会自动处理这一点。
+### 5. 字节流数据类型
 
-**不要在非 GL 线程中调用 `embed.draw()`**。
+Lua 侧通过 `ffi.cast("const uint8_t*", data)` 处理传入的数据。Python 的 `bytes` 对象在 encoding=None 模式下会被 lupa 作为 Lua string 传递，FFI 可以安全 cast 其地址。如果从其他语言传入，直接传指针也可以。
 
-#### 4. 模型路径
+---
 
-所有路径都相对于 `os.chdir(ROOT)` 设置的工作目录。模型 JSON 文件里的纹理路径也是相对路径，所以确保 cwd 正确。
+## live2d_embed.lua 完整 API
 
-## ctypes 接入方案（备选）
+### Singleton API（全局单模型）
 
-如果 lupa 不能用，可以直接通过 ctypes 加载 `luajit-2.1.dll`，走原生 Lua C API。
+```lua
+local embed = require("live2d_embed")
 
-### 原理
+-- 初始化（延迟执行，OpenGL context 激活后首次调用自动触发）
+embed.init()
+
+-- 加载模型（推荐通过 opts 传入流）
+embed.load_model("resources/kasumi2/kasumi2.model.json", 400, 650, {
+    resource_streams = { ... },
+    texture_streams  = { ... },
+    auto_breath = true,   -- 自动呼吸
+    auto_blink  = true,   -- 自动眨眼
+    center      = true,   -- 模型居中
+    model_width = 2.0,    -- 模型缩放
+    center_x    = 0,      -- X 偏移
+    center_y    = 0,      -- Y 偏移
+})
+
+-- 资源流管理
+embed.set_resource_stream(path, bytes)        -- 注入单条资源
+embed.set_resource_streams(resource_streams)  -- 批量注入
+embed.clear_resource_streams()                -- 清空所有资源流
+
+-- 纹理流管理
+embed.set_texture_stream(no, width, height, rgba_bytes)  -- 注入单纹理
+embed.set_texture_streams(texture_streams)               -- 批量注入
+embed.clear_texture_streams()                            -- 清空所有纹理流
+
+-- 全部流清空
+embed.clear_streams()
+
+-- 绘制（内置 clear + update + draw + GC step）
+embed.draw()               -- 默认 clear
+embed.draw({ clear = false, gc_step = 200 })
+
+-- 仅更新动画（不渲染）
+embed.update()
+
+-- 手动清屏
+embed.clear(r, g, b, a)
+
+-- 视口大小
+embed.resize(w, h)
+
+-- 鼠标交互
+embed.drag(x, y)           -- 视线 / 头部追踪
+embed.set_offset(x, y)     -- 模型平移
+embed.set_scale(scale)     -- 模型缩放
+
+-- 动作
+embed.start_motion(name, no, priority)  -- priority: embed.MotionPriority.FORCE (3)
+embed.clear_motions()
+
+-- 参数
+embed.set_parameter("PARAM_ANGLE_X", 30)
+embed.add_parameter("PARAM_BODY_ANGLE_X", 5)
+
+-- 表达式
+embed.set_expression("SMILE")
+embed.reset_expression()
+
+-- 点击测试
+local part = embed.hit_test(x, y)
+
+-- 获取当前 renderer / 模型
+local r = embed.current()
+local l2d_model = r:get_model():getLive2DModel()
+
+-- 清理
+embed.dispose()
+```
+
+### 对象 API（多模型场景）
+
+```lua
+local r1 = embed.new(400, 650)
+r1:load_model("model_a.json", 400, 650, {
+    resource_streams = { ... },
+    texture_streams  = { ... },
+})
+
+local r2 = embed.new(400, 650)
+r2:load_model("model_b.json", 400, 650, {
+    resource_streams = { ... },
+    texture_streams  = { ... },
+})
+
+-- 所有 Singleton API 的方法在 Renderer 实例上均可用
+r1:draw()
+r1:resize(800, 600)
+r1:drag(x, y)
+```
+
+---
+
+## 平台兼容性
+
+### lupa 不可用时的备选方案
+
+#### ctypes + luajit.dll
+
+如果 lupa 无法安装，可以通过 ctypes 直接调用 LuaJIT 的 C API：
 
 ```python
 import ctypes
@@ -293,196 +398,102 @@ import ctypes
 luajit = ctypes.CDLL("luajit-2.1.dll")
 
 # 创建 Lua 状态机
-lua_newstate = luajit.luaL_newstate
-lua_newstate.restype = ctypes.c_void_p
-L = lua_newstate(None, None)
-
-# 打开标准库
+L = luajit.luaL_newstate()
 luajit.luaL_openlibs(L)
 
-# 加载并执行 live2d_embed.lua
+# 加载 live2d_embed
 luajit.luaL_dofile(L, b"live2d_embed.lua")
 
-# 获取全局函数 embed.load_model
-luajit.lua_getglobal(L, b"embed")       # push embed table
-luajit.lua_getfield(L, -1, b"load_model")  # push embed.load_model
-
-# 压入参数
-luajit.lua_pushstring(L, b"resources/kasumi2/kasumi2.model.json")
-luajit.lua_pushinteger(L, 400)
-luajit.lua_pushinteger(L, 650)
-
-# 调用
-luajit.lua_pcall(L, 3, 0, 0)
+# 调用 embed.load_model（流表需要通过 lua_newtable + lua_pushstring + lua_settable 构建）
+...
 ```
 
-### ctypes 模式的问题
-
+ctypes 方案的缺点：
 - 需要手动管理 Lua 栈
-- 错误处理复杂（`lua_pcall` 失败需要读栈顶错误消息）
-- 返回值需要手动从栈中取出并转换
-- 参数压栈容易出错
-- Python 对象和 Lua 对象之间无自动转换
+- 流表的构建非常繁琐（每个键值对需要多次 push + settable）
+- 错误调试困难
 
-**建议**：只有在 lupa 实在装不上时才用 ctypes。
+**仍然推荐优先安装 lupa。**
 
-## ctypes 完整封装（生产环境可参考）
-
-如果必须用 ctypes 方案，最好先封装一个 Python 类来隐藏 Lua 栈细节：
-
-```python
-import ctypes
-from pathlib import Path
-
-class LuaJITRuntime:
-    """Minimal LuaJIT binding via ctypes."""
-
-    def __init__(self, lib_path: str = "luajit-2.1.dll"):
-        self.lib = ctypes.CDLL(lib_path)
-        self.L = None
-
-    def open(self) -> None:
-        f_newstate = self.lib.luaL_newstate
-        f_newstate.restype = ctypes.c_void_p
-        self.L = f_newstate(None, None)
-        self.lib.luaL_openlibs(self.L)
-
-    def dofile(self, path: str) -> int:
-        return self.lib.luaL_dofile(self.L, path.encode("utf-8"))
-
-    def get_global(self, name: str) -> None:
-        self.lib.lua_getglobal(self.L, name.encode("utf-8"))
-
-    def push_string(self, s: str) -> None:
-        self.lib.lua_pushstring(self.L, s.encode("utf-8"))
-
-    def push_number(self, n: float) -> None:
-        self.lib.lua_pushnumber(self.L, ctypes.c_double(n))
-
-    def push_integer(self, n: int) -> None:
-        self.lib.lua_pushinteger(self.L, n)
-
-    def call(self, nargs: int, nresults: int) -> int:
-        return self.lib.lua_pcall(self.L, nargs, nresults, 0)
-
-    def close(self) -> None:
-        if self.L:
-            self.lib.lua_close(self.L)
-            self.L = None
-```
-
-## 子进程 + IPC 方案（应急备选）
-
-当 lupa 和 ctypes 都无法正常工作时，可以选择"分离进程渲染，传回像素"的方式。
-
-### 架构
-
-```
-Python GUI                  │  独立 luajit 进程 (render_frames.lua)
-  QLabel / QPixmap          │    render → glReadPixels → 共享内存 / socket
-  (显示像素图)              │    等待 Python 发送 resize/drag 指令
-                            │
-  共享内存 (mmap / named pipe)
-```
-
-### 缺点
-
-- **延迟高**：每帧从 GPU 回读像素 + IPC 传输
-- **带宽大**：400×650 RGBA ≈ 1MB/帧，60fps = 60MB/s
-- **不支持实时交互**：鼠标拖拽需要 IPC 把坐标传给 Lua 进程
-- **无 GPU 共享**：需要两个 OpenGL context（Python 窗口 + Lua 进程各一个）
-
-只有当 lupa 和 ctypes 方案都彻底行不通时才考虑这条路。
+---
 
 ## 常见问题
 
-### Q: `gl.ensureExtensions()` 失败 / 找不到 wglGetProcAddress
+### Q: 纹理空白 / 白模型 / 模型不显示
 
-A: 确认在调用 `embed.init()` 时 OpenGL context 已经激活。QOpenGLWidget 会在 `initializeGL()` 之前自动 makeCurrent。
+A: 检查纹理流是否传入正确的 RGBA8888 数据。确保 `texture_streams` 的 key 是 `0` 而不是 `1`（0-based 编号）。使用 QImage 解码时确认格式是 `Format_RGBA8888`。
 
-### Q: 纹理加载失败 / 模型是一片白
+### Q: 动作 / 物理 / 表情不工作
 
-A: 检查工作目录。`live2d_embed.lua` 和模型 JSON 都假设 cwd 是仓库根目录。在 `initializeGL()` 开头加 `os.chdir(ROOT)`。
+A: 确认对应的 `.mtn` / `.json` 文件已包含在 `resource_streams` 中。路径 key 必须是仓库根目录的相对路径（例如 `resources/kasumi2/live2d/001_idle01.mtn`），且路径分隔符为 `/`。
+
+### Q: 模型 JSON 加载失败
+
+A: `.model.json` 本身也需要在 `resource_streams` 中。`load_model` 的第一个参数（如 `"resources/kasumi2/kasumi2.model.json"`）仅用于日志和解析 json 里的相对路径，实际 JSON 内容从流表读取。
+
+### Q: `gl.ensureExtensions()` 失败
+
+A: 确认在调用 `embed.init()` 或首次 `load_model()` 时 OpenGL context 已经激活。QOpenGLWidget 在 `initializeGL()` 中自动 makeCurrent。
 
 ### Q: GC 崩溃 / 内存持续增长
 
-A: 确保每次 `draw()` 调用后执行 `collectgarbage("step", 200)`。`live2d_embed.lua` 的 `draw()` 内部已做这一步，如果直接调 `model:Draw()` 则需要手动补充。
-
-### Q: 帧率不稳定
-
-A: Live2D 模型动画的 dt 由 Python 侧传入。如果帧率不固定，可以在 `update()` 前传入真实的 dt：
-
-```lua
--- 需要在 live2d_embed.lua 或调用侧手动处理
-model.startTimeMSec = model.startTimeMSec + dt_ms
-model:Update()
-```
-
-当前示例用 QTimer(16ms) ≈ 60fps 驱动，配合 `setSwapInterval(1)` 实现 vsync 同步。
-
-### Q: 如何在非 Qt 框架中使用
-
-A: 任何能创建 OpenGL context 的库都可以。核心只有一个：在 GL context 激活后调用 `live2d_embed` 的对应接口。示例使用 QOpenGLWidget 只是因为它在 Python 中配置最简单。
-
-对于 wxPython:
+A: `embed.draw()` 已内置 `collectgarbage("step", 200)`。如果不用 `draw()` 而是手动 `update()` + `Draw()`，需要在 Python 侧触发 GC：
 
 ```python
-import wx
-import wx.glcanvas as gl
-
-class Live2DCanvas(gl.GLCanvas):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.context = gl.GLContext(self)
-
-    def OnPaint(self, event):
-        self.context.SetCurrent(self)  # 手动 makeCurrent
-        self._draw(self.embed)
-        self.SwapBuffers()
+self.lua.execute(b"collectgarbage('step', 200)")
 ```
 
 ### Q: 多模型同时渲染
 
-A: 使用对象 API 创建多个 `Renderer` 实例：
-
-```lua
--- Lua 侧
-local model_a = embed.new(400, 650)
-model_a:load_model("model_a.json", 400, 650)
-
-local model_b = embed.new(400, 650)
-model_b:load_model("model_b.json", 400, 650)
-```
-
-Python 侧缓存两个不同的 lua 函数引用：
+A: 使用对象 API：
 
 ```python
-self._draw_a = self.lua.eval("function(r) return r.draw() end")
-self._draw_b = self.lua.eval("function(r) return r.draw() end")
+self._draw_a = self.lua.eval(b"function(r) return r.draw() end")
+self._draw_b = self.lua.eval(b"function(r) return r.draw() end")
 
 def paintGL(self):
     self._draw_a(self.renderer_a)
     self._draw_b(self.renderer_b)
 ```
 
-注意：Live2D 默认 viewport 会覆盖整个窗口，多模型渲染通常需要额外的 FBO 或裁剪区域管理。
+注意多个模型共享同一个 PlatformManager 和流表。
+
+### Q: 如何支持非文件来源（网络 / zip / 加密包）
+
+A: 这正是流式传输的优势。Python 侧只需把远程数据下载或解压为 `bytes`，构建 `resource_streams` 和 `texture_streams`，注入 Lua 即可：
+
+```python
+import zipfile, requests
+
+zip_data = requests.get("https://example.com/model.zip").content
+with zipfile.ZipFile(io.BytesIO(zip_data)) as zf:
+    resource_streams[key.encode()] = zf.read(name)  # for each file in zip
+```
+
+Lua 侧完全无感知数据来源。
+
+---
 
 ## 文件清单
 
 ```
 live2d-v2/
 ├── live2d_embed.lua                       ← 窗口无关渲染核心模块
+├── Embedded2Python.md                     ← 本文档
 ├── examples/
-│   └── pyside6_lupa_kasumi2.py            ← Python 接入完整示例
+│   └── pyside6_lupa_kasumi2.py            ← Python 接入完整示例（流式）
 ├── live2d/
+│   ├── platform_manager.lua               ← 文件 I/O + 流路由
 │   ├── gl_loader.lua                      ← OpenGL 扩展加载器 (wglGetProcAddress)
-│   ├── lapp_model.lua                     ← 高级模型封装 (LoadModelJson / Update / Draw)
-│   ├── platform_manager.lua               ← 文件 I/O 抽象层
-│   ├── sdl2.lua                           ← SDL2 FFI 绑定 (embed 模式不需要)
+│   ├── image_loader.lua                   ← GDI+ 纹理加载（流模式下不触发）
 │   └── ...
 └── resources/
     └── kasumi2/
         ├── kasumi2.model.json
-        ├── kasumi2.moc
-        └── textures/
+        ├── live2d/
+        │   ├── kasumi_school_winter_t03.moc
+        │   ├── texture_00.png
+        │   ├── *.mtn
+        │   └── ...
+        └── ...
 ```
