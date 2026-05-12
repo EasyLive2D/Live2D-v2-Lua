@@ -3,6 +3,15 @@
 -- The host application must create and make current an OpenGL context before
 -- calling init/load_model/draw. This module intentionally does not create an
 -- SDL window or run an event loop, so it can be driven from Python, C#, etc.
+--
+-- Raw model resources can be supplied before load_model with:
+--   set_resource_stream(path, bytes)
+-- or through opts.resource_streams[path] = bytes. Paths should match the model
+-- JSON path and paths referenced from it, using repo-relative separators.
+-- Raw RGBA textures can be supplied before load_model with:
+--   set_texture_stream(no, width, height, rgba_bytes)
+-- or through opts.texture_streams[no] = { width = w, height = h, data = bytes }.
+-- Texture numbers are zero-based, matching the Live2D model JSON order.
 
 package.path = package.path .. ";./?.lua;./?/init.lua"
 
@@ -20,6 +29,7 @@ Renderer.__index = Renderer
 
 local runtime_initialized = false
 local current_renderer = nil
+local platform_manager = nil
 
 local function init_runtime()
     if runtime_initialized then return end
@@ -27,10 +37,15 @@ local function init_runtime()
     -- Requires an active WGL context; extension pointers are context-bound.
     gl.ensureExtensions()
 
-    local pm = require("live2d.platform_manager").new()
-    Live2DFramework.setPlatformManager(pm)
+    platform_manager = require("live2d.platform_manager").new()
+    Live2DFramework.setPlatformManager(platform_manager)
     Live2D.init()
     runtime_initialized = true
+end
+
+local function get_platform_manager()
+    init_runtime()
+    return platform_manager
 end
 
 local function require_model(self)
@@ -48,6 +63,9 @@ function Renderer:load_model(model_path, width, height, opts)
     opts = opts or {}
     self.width = tonumber(width) or self.width
     self.height = tonumber(height) or self.height
+    local pm = get_platform_manager()
+    pm:setResourceStreams(opts.resource_streams or opts.resourceStreams)
+    pm:setTextureStreams(opts.texture_streams or opts.textureStreams)
 
     local model = LAppModel.new()
     model:LoadModelJson(model_path)
@@ -67,6 +85,58 @@ function Renderer:load_model(model_path, width, height, opts)
     self.model = model
     self.model_path = model_path
     self:resize(self.width, self.height)
+    return self
+end
+
+function Renderer:set_resource_stream(path, data)
+    get_platform_manager():setResourceStream(path, data)
+    return self
+end
+
+function Renderer:set_resource_streams(resource_streams)
+    get_platform_manager():setResourceStreams(resource_streams)
+    return self
+end
+
+function Renderer:clear_resource_streams()
+    get_platform_manager():clearResourceStreams()
+    return self
+end
+
+function Renderer:set_texture_stream(no, width, height, data)
+    local texture_no = tonumber(no)
+    if texture_no == nil then
+        error("texture number is required", 2)
+    end
+
+    local stream
+    if type(width) == "table" or type(width) == "function" then
+        stream = width
+    else
+        stream = { width = width, height = height, data = data }
+    end
+
+    local pm = get_platform_manager()
+    pm.textureStreams[texture_no] = stream
+
+    if self.model ~= nil and self.model.live2DModel ~= nil then
+        pm:loadTexture(self.model.live2DModel, texture_no, "stream:" .. texture_no)
+    end
+    return self
+end
+
+function Renderer:set_texture_streams(texture_streams)
+    get_platform_manager():setTextureStreams(texture_streams)
+    return self
+end
+
+function Renderer:clear_texture_streams()
+    get_platform_manager():clearTextureStreams()
+    return self
+end
+
+function Renderer:clear_streams()
+    get_platform_manager():clearStreams()
     return self
 end
 
@@ -183,6 +253,9 @@ function M.new(width, height, opts)
         model = nil,
         model_path = nil,
     }, Renderer)
+    local pm = get_platform_manager()
+    pm:setResourceStreams(opts.resource_streams or opts.resourceStreams)
+    pm:setTextureStreams(opts.texture_streams or opts.textureStreams)
 
     if opts.model_path ~= nil then
         renderer:load_model(opts.model_path, renderer.width, renderer.height, opts)
@@ -195,7 +268,7 @@ end
 
 -- Singleton API for hosts that prefer simple global-style calls through Lua C API.
 function M.load_model(model_path, width, height, opts)
-    current_renderer = M.new(width, height)
+    current_renderer = current_renderer or M.new(width, height)
     current_renderer:load_model(model_path, width, height, opts)
     return current_renderer
 end
@@ -222,6 +295,50 @@ end
 function M.clear(r, g, b, a)
     if current_renderer == nil then error("no current renderer", 2) end
     return current_renderer:clear(r, g, b, a)
+end
+
+function M.set_texture_stream(no, width, height, data)
+    current_renderer = current_renderer or M.new()
+    return current_renderer:set_texture_stream(no, width, height, data)
+end
+
+function M.set_resource_stream(path, data)
+    current_renderer = current_renderer or M.new()
+    return current_renderer:set_resource_stream(path, data)
+end
+
+function M.set_resource_streams(resource_streams)
+    current_renderer = current_renderer or M.new()
+    return current_renderer:set_resource_streams(resource_streams)
+end
+
+function M.clear_resource_streams()
+    if current_renderer ~= nil then
+        return current_renderer:clear_resource_streams()
+    end
+    get_platform_manager():clearResourceStreams()
+    return true
+end
+
+function M.set_texture_streams(texture_streams)
+    current_renderer = current_renderer or M.new()
+    return current_renderer:set_texture_streams(texture_streams)
+end
+
+function M.clear_texture_streams()
+    if current_renderer ~= nil then
+        return current_renderer:clear_texture_streams()
+    end
+    get_platform_manager():clearTextureStreams()
+    return true
+end
+
+function M.clear_streams()
+    if current_renderer ~= nil then
+        return current_renderer:clear_streams()
+    end
+    get_platform_manager():clearStreams()
+    return true
 end
 
 function M.drag(x, y)
@@ -266,6 +383,7 @@ end
 
 function M.dispose()
     current_renderer = nil
+    platform_manager = nil
     Live2D.dispose()
     runtime_initialized = false
 end

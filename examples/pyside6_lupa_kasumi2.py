@@ -15,12 +15,13 @@ the project depends on LuaJIT FFI.
 
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
 
 from PySide6.QtCore import QTimer, Qt
-from PySide6.QtGui import QSurfaceFormat
+from PySide6.QtGui import QImage, QSurfaceFormat
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtWidgets import QApplication, QMessageBox
 from lupa.luajit21 import LuaRuntime, LuaError
@@ -39,6 +40,7 @@ class Live2DWidget(QOpenGLWidget):
 
         self.lua: LuaRuntime | None = None
         self.embed = None
+        self._load_model = None
         self._draw = None
         self._resize = None
         self._drag = None
@@ -53,20 +55,28 @@ class Live2DWidget(QOpenGLWidget):
         os.chdir(ROOT)
 
         try:
-            self.lua = LuaRuntime(unpack_returned_tuples=True)
-            self.lua.execute('assert(require("ffi"), "lupa must be built with LuaJIT FFI")')
+            self.lua = LuaRuntime(unpack_returned_tuples=True, encoding=None)
+            self.lua.execute(b'assert(require("ffi"), "lupa must be built with LuaJIT FFI")')
 
-            self.embed = self.lua.execute('return require("live2d_embed")')
-            self._draw = self.lua.eval("function(embed) return embed.draw() end")
-            self._resize = self.lua.eval("function(embed, w, h) return embed.resize(w, h) end")
-            self._drag = self.lua.eval("function(embed, x, y) return embed.drag(x, y) end")
+            self.embed = self.lua.execute(b'return require("live2d_embed")')
+            self._load_model = self.lua.eval(
+                b"function(embed, model_path, w, h, opts) "
+                b"return embed.load_model(model_path, w, h, opts) "
+                b"end"
+            )
+            self._draw = self.lua.eval(b"function(embed) return embed.draw() end")
+            self._resize = self.lua.eval(b"function(embed, w, h) return embed.resize(w, h) end")
+            self._drag = self.lua.eval(b"function(embed, x, y) return embed.drag(x, y) end")
             self._start_motion = self.lua.eval(
-                "function(embed, name, no) "
-                "return embed.start_motion(name, no, embed.MotionPriority.FORCE) "
-                "end"
+                b"function(embed, name, no) "
+                b"return embed.start_motion(name, no, embed.MotionPriority.FORCE) "
+                b"end"
             )
 
-            self.embed.load_model(MODEL_PATH, self.width(), self.height())
+            opts = self.lua.table()
+            opts[b"resource_streams"] = _load_resource_streams(self.lua, ROOT / "resources" / "kasumi2")
+            opts[b"texture_streams"] = _load_texture_streams(self.lua, ROOT / MODEL_PATH)
+            self._load_model(self.embed, MODEL_PATH.encode("utf-8"), self.width(), self.height(), opts)
         except (LuaError, RuntimeError) as exc:
             self._show_error(str(exc))
             raise
@@ -91,7 +101,7 @@ class Live2DWidget(QOpenGLWidget):
             # clicks visible without needing a Lua-side motion-name enumerator.
             if self.embed is not None and self._start_motion is not None:
                 self._motion_index = (self._motion_index + 1) % 3
-                self._start_motion(self.embed, "idle", self._motion_index)
+                self._start_motion(self.embed, b"idle", self._motion_index)
         super().mousePressEvent(event)
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
@@ -119,6 +129,52 @@ def main() -> int:
     widget.resize(400, 650)
     widget.show()
     return app.exec()
+
+
+def _load_texture_streams(lua: LuaRuntime, model_path: Path):
+    with model_path.open("r", encoding="utf-8") as file:
+        model_json = json.load(file)
+
+    texture_streams = lua.table()
+    for no, texture_name in enumerate(model_json.get("textures", [])):
+        width, height, rgba = _load_rgba_texture(model_path.parent / texture_name)
+        stream = lua.table()
+        stream[b"width"] = width
+        stream[b"height"] = height
+        stream[b"data"] = rgba
+        texture_streams[no] = stream
+    return texture_streams
+
+
+def _load_resource_streams(lua: LuaRuntime, model_dir: Path):
+    resource_streams = lua.table()
+    for path in model_dir.rglob("*"):
+        if path.is_file():
+            resource_streams[_repo_path(path).encode("utf-8")] = path.read_bytes()
+    return resource_streams
+
+
+def _load_rgba_texture(path: Path) -> tuple[int, int, bytes]:
+    image = QImage(str(path))
+    if image.isNull():
+        raise RuntimeError(f"Failed to load texture: {path}")
+
+    image = image.convertToFormat(QImage.Format.Format_RGBA8888)
+    width = image.width()
+    height = image.height()
+    stride = image.bytesPerLine()
+    row_size = width * 4
+    data = bytes(image.constBits())
+
+    if stride == row_size:
+        return width, height, data[: row_size * height]
+
+    rows = [data[y * stride : y * stride + row_size] for y in range(height)]
+    return width, height, b"".join(rows)
+
+
+def _repo_path(path: Path) -> str:
+    return path.relative_to(ROOT).as_posix()
 
 
 def _make_gl_format() -> QSurfaceFormat:
