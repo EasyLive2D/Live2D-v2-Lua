@@ -1,8 +1,16 @@
 -- OpenGL loader using LuaJIT FFI
--- GL 1.1 core from opengl32.dll, GL 1.2+ via wglGetProcAddress
+-- Cross-platform: Windows (opengl32 + wglGetProcAddress) and Linux (libGL + glXGetProcAddress)
 
 local ffi = require("ffi")
+local is_win = ffi.os == "Windows"
 
+-- Calling convention: __stdcall on Windows, default (blank) on Linux
+local CC = is_win and "__stdcall " or ""
+
+-- GL library name
+local gl_lib_name = is_win and "opengl32" or "GL"
+
+-- GL 1.1 core cdef (same across platforms)
 ffi.cdef[[
     typedef unsigned int GLenum;
     typedef unsigned char GLboolean;
@@ -22,8 +30,8 @@ ffi.cdef[[
     typedef char GLchar;
     typedef ptrdiff_t GLintptr;
     typedef ptrdiff_t GLsizeiptr;
-    
-    // GL 1.1 core - available in opengl32.dll
+
+    // GL 1.1 core
     void glClear(GLbitfield mask);
     void glClearColor(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha);
     void glViewport(GLint x, GLint y, GLsizei width, GLsizei height);
@@ -41,57 +49,66 @@ ffi.cdef[[
     void glReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void *pixels);
     void glDrawArrays(GLenum mode, GLint first, GLsizei count);
     void glBlendFunc(GLenum sfactor, GLenum dfactor);
-    void *wglGetProcAddress(const char *name);
 ]]
 
-local opengl = ffi.load("opengl32")
-local wgl = ffi.load("opengl32")
+-- Platform-specific extension loader declaration
+if is_win then
+    ffi.cdef[[ void *wglGetProcAddress(const char *name); ]]
+else
+    ffi.cdef[[ void *glXGetProcAddress(const char *name); ]]
+end
 
-ffi.cdef[[
-    typedef void (__stdcall *PFNGLACTIVETEXTUREPROC)(GLenum texture);
-    typedef void (__stdcall *PFNGLBLENDFUNCSEPARATEPROC)(GLenum srcRGB, GLenum dstRGB, GLenum srcAlpha, GLenum dstAlpha);
-    typedef void (__stdcall *PFNGLBLENDEQUATIONSEPARATEPROC)(GLenum modeRGB, GLenum modeAlpha);
-    typedef GLuint (__stdcall *PFNGLCREATESHADERPROC)(GLenum type);
-    typedef void (__stdcall *PFNGLSHADERSOURCEPROC)(GLuint shader, GLsizei count, const GLchar* const* string, const GLint* length);
-    typedef void (__stdcall *PFNGLCOMPILESHADERPROC)(GLuint shader);
-    typedef void (__stdcall *PFNGLGETSHADERIVPROC)(GLuint shader, GLenum pname, GLint *params);
-    typedef void (__stdcall *PFNGLGETSHADERINFOLOGPROC)(GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog);
-    typedef void (__stdcall *PFNGLDELETESHADERPROC)(GLuint shader);
-    typedef GLuint (__stdcall *PFNGLCREATEPROGRAMPROC)(void);
-    typedef void (__stdcall *PFNGLATTACHSHADERPROC)(GLuint program, GLuint shader);
-    typedef void (__stdcall *PFNGLLINKPROGRAMPROC)(GLuint program);
-    typedef void (__stdcall *PFNGLUSEPROGRAMPROC)(GLuint program);
-    typedef void (__stdcall *PFNGLGETPROGRAMIVPROC)(GLuint program, GLenum pname, GLint *params);
-    typedef void (__stdcall *PFNGLGETPROGRAMINFOLOGPROC)(GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog);
-    typedef void (__stdcall *PFNGLDELETEPROGRAMPROC)(GLuint program);
-    typedef void (__stdcall *PFNGLGENBUFFERSPROC)(GLsizei n, GLuint *buffers);
-    typedef void (__stdcall *PFNGLDELETEBUFFERSPROC)(GLsizei n, const GLuint *buffers);
-    typedef void (__stdcall *PFNGLBINDBUFFERPROC)(GLenum target, GLuint buffer);
-    typedef void (__stdcall *PFNGLBUFFERDATAPROC)(GLenum target, GLsizeiptr size, const void *data, GLenum usage);
-    typedef void (__stdcall *PFNGLENABLEVERTEXATTRIBARRAYPROC)(GLuint index);
-    typedef void (__stdcall *PFNGLVERTEXATTRIBPOINTERPROC)(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
-    typedef void (__stdcall *PFNGLUNIFORM1IPROC)(GLint location, GLint v0);
-    typedef void (__stdcall *PFNGLUNIFORM4FPROC)(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);
-    typedef void (__stdcall *PFNGLUNIFORMMATRIX4FVPROC)(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
-    typedef GLint (__stdcall *PFNGLGETATTRIBLOCATIONPROC)(GLuint program, const GLchar *name);
-    typedef GLint (__stdcall *PFNGLGETUNIFORMLOCATIONPROC)(GLuint program, const GLchar *name);
-    typedef void (__stdcall *PFNGLGENFRAMEBUFFERSPROC)(GLsizei n, GLuint *framebuffers);
-    typedef void (__stdcall *PFNGLBINDFRAMEBUFFERPROC)(GLenum target, GLuint framebuffer);
-    typedef void (__stdcall *PFNGLFRAMEBUFFERTEXTURE2DPROC)(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
-    typedef void (__stdcall *PFNGLFRAMEBUFFERRENDERBUFFERPROC)(GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer);
-    typedef void (__stdcall *PFNGLGENRENDERBUFFERSPROC)(GLsizei n, GLuint *renderbuffers);
-    typedef void (__stdcall *PFNGLBINDRENDERBUFFERPROC)(GLenum target, GLuint renderbuffer);
-    typedef void (__stdcall *PFNGLRENDERBUFFERSTORAGEPROC)(GLenum target, GLenum internalformat, GLsizei width, GLsizei height);
-    typedef void (__stdcall *PFNGLDELETEFRAMEBUFFERSPROC)(GLsizei n, const GLuint *framebuffers);
-    typedef void (__stdcall *PFNGLDELETERENDERBUFFERSPROC)(GLsizei n, const GLuint *renderbuffers);
-    typedef void (__stdcall *PFNGLGENERATEMIPMAPPROC)(GLenum target);
-]]
+local gl_lib = ffi.load(gl_lib_name)
 
-local gl = setmetatable({}, { __index = opengl })
+-- Extension function pointer typedefs (calling convention varies by platform)
+ffi.cdef("typedef void (" .. CC .. "*PFNGLACTIVETEXTUREPROC)(GLenum texture);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLBLENDFUNCSEPARATEPROC)(GLenum srcRGB, GLenum dstRGB, GLenum srcAlpha, GLenum dstAlpha);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLBLENDEQUATIONSEPARATEPROC)(GLenum modeRGB, GLenum modeAlpha);")
+ffi.cdef("typedef GLuint (" .. CC .. "*PFNGLCREATESHADERPROC)(GLenum type);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLSHADERSOURCEPROC)(GLuint shader, GLsizei count, const GLchar* const* string, const GLint* length);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLCOMPILESHADERPROC)(GLuint shader);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLGETSHADERIVPROC)(GLuint shader, GLenum pname, GLint *params);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLGETSHADERINFOLOGPROC)(GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLDELETESHADERPROC)(GLuint shader);")
+ffi.cdef("typedef GLuint (" .. CC .. "*PFNGLCREATEPROGRAMPROC)(void);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLATTACHSHADERPROC)(GLuint program, GLuint shader);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLLINKPROGRAMPROC)(GLuint program);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLUSEPROGRAMPROC)(GLuint program);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLGETPROGRAMIVPROC)(GLuint program, GLenum pname, GLint *params);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLGETPROGRAMINFOLOGPROC)(GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLDELETEPROGRAMPROC)(GLuint program);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLGENBUFFERSPROC)(GLsizei n, GLuint *buffers);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLDELETEBUFFERSPROC)(GLsizei n, const GLuint *buffers);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLBINDBUFFERPROC)(GLenum target, GLuint buffer);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLBUFFERDATAPROC)(GLenum target, GLsizeiptr size, const void *data, GLenum usage);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLENABLEVERTEXATTRIBARRAYPROC)(GLuint index);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLVERTEXATTRIBPOINTERPROC)(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLUNIFORM1IPROC)(GLint location, GLint v0);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLUNIFORM4FPROC)(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLUNIFORMMATRIX4FVPROC)(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);")
+ffi.cdef("typedef GLint (" .. CC .. "*PFNGLGETATTRIBLOCATIONPROC)(GLuint program, const GLchar *name);")
+ffi.cdef("typedef GLint (" .. CC .. "*PFNGLGETUNIFORMLOCATIONPROC)(GLuint program, const GLchar *name);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLGENFRAMEBUFFERSPROC)(GLsizei n, GLuint *framebuffers);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLBINDFRAMEBUFFERPROC)(GLenum target, GLuint framebuffer);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLFRAMEBUFFERTEXTURE2DPROC)(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLFRAMEBUFFERRENDERBUFFERPROC)(GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLGENRENDERBUFFERSPROC)(GLsizei n, GLuint *renderbuffers);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLBINDRENDERBUFFERPROC)(GLenum target, GLuint renderbuffer);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLRENDERBUFFERSTORAGEPROC)(GLenum target, GLenum internalformat, GLsizei width, GLsizei height);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLDELETEFRAMEBUFFERSPROC)(GLsizei n, const GLuint *framebuffers);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLDELETERENDERBUFFERSPROC)(GLsizei n, const GLuint *renderbuffers);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLGENERATEMIPMAPPROC)(GLenum target);")
+
+local gl = setmetatable({}, { __index = gl_lib })
 local extensions_loaded = false
 
 local function loadGL(name, cast_type)
-    local ptr = wgl.wglGetProcAddress(name)
+    local ptr
+    if is_win then
+        ptr = gl_lib.wglGetProcAddress(name)
+    else
+        ptr = gl_lib.glXGetProcAddress(name)
+    end
     if ptr == nil then
         error("Failed to load GL function: " .. name)
     end
