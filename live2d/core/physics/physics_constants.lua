@@ -1,0 +1,8 @@
+local physics_constants = {
+    SRC_TO_X = "SRC_TO_X",
+    SRC_TO_Y = "SRC_TO_Y",
+    SRC_TO_G_ANGLE = "SRC_TO_G_ANGLE",
+    TARGET_FROM_ANGLE = "TARGET_FROM_ANGLE",
+    TARGET_FROM_ANGLE_V = "TARGET_FROM_ANGLE_V",
+}
+return physics_constants
