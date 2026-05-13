@@ -43,7 +43,7 @@ Python GUI 必须提供一个支持 OpenGL 的控件。推荐：
 
 ### 3. 操作系统
 
-当前仓库的 `live2d/gl_loader.lua` **仅支持 Windows**（使用 `wglGetProcAddress` 加载 OpenGL 扩展）。如需 Linux/macOS，需要重写该文件。
+当前仓库的 `live2d/gl_loader.lua` **支持 Windows 与 Linux**，MacOS未测试兼容性
 
 ### 4. 依赖安装
 
