@@ -1,14 +1,28 @@
 -- OpenGL loader using LuaJIT FFI
--- Cross-platform: Windows (opengl32 + wglGetProcAddress) and Linux (libGL + glXGetProcAddress)
+-- Cross-platform: Windows (opengl32 + wglGetProcAddress), Linux (libGL +
+-- glXGetProcAddress), macOS (OpenGL.framework, direct symbol lookup).
 
 local ffi = require("ffi")
 local is_win = ffi.os == "Windows"
+local is_mac = ffi.os == "OSX"
 
--- Calling convention: __stdcall on Windows, default (blank) on Linux
+-- Calling convention: __stdcall on Windows, default (blank) everywhere else.
 local CC = is_win and "__stdcall " or ""
 
--- GL library name(s)
-local gl_lib_names = is_win and {"opengl32"} or {"GL", "GL.so.1", "GL.so"}
+-- GL library name(s). macOS ships OpenGL as a framework, not libGL.so.
+local gl_lib_names
+if is_win then
+    gl_lib_names = {"opengl32"}
+elseif is_mac then
+    gl_lib_names = {
+        "/System/Library/Frameworks/OpenGL.framework/OpenGL",
+        "OpenGL.framework/OpenGL",
+        "OpenGL",
+    }
+else
+    gl_lib_names = {"GL", "GL.so.1", "GL.so"}
+end
+
 local gl_lib
 for _, name in ipairs(gl_lib_names) do
     local ok, lib = pcall(ffi.load, name)
@@ -62,11 +76,56 @@ ffi.cdef[[
     void glBlendFunc(GLenum sfactor, GLenum dfactor);
 ]]
 
--- Platform-specific extension loader declaration
+-- Platform-specific extension loader declaration. macOS exposes every GL 2.1
+-- entry point directly from OpenGL.framework, so no procaddress shim is needed
+-- — but the symbols still have to be declared in cdef so ffi.load can resolve
+-- them. We declare the prototypes below in the macOS branch.
 if is_win then
     ffi.cdef[[ void *wglGetProcAddress(const char *name); ]]
-else
+elseif not is_mac then
     ffi.cdef[[ void *glXGetProcAddress(const char *name); ]]
+end
+
+if is_mac then
+    ffi.cdef[[
+        void glActiveTexture(GLenum texture);
+        void glBlendFuncSeparate(GLenum srcRGB, GLenum dstRGB, GLenum srcAlpha, GLenum dstAlpha);
+        void glBlendEquationSeparate(GLenum modeRGB, GLenum modeAlpha);
+        GLuint glCreateShader(GLenum type);
+        void glShaderSource(GLuint shader, GLsizei count, const GLchar* const* string, const GLint* length);
+        void glCompileShader(GLuint shader);
+        void glGetShaderiv(GLuint shader, GLenum pname, GLint *params);
+        void glGetShaderInfoLog(GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog);
+        void glDeleteShader(GLuint shader);
+        GLuint glCreateProgram(void);
+        void glAttachShader(GLuint program, GLuint shader);
+        void glLinkProgram(GLuint program);
+        void glUseProgram(GLuint program);
+        void glGetProgramiv(GLuint program, GLenum pname, GLint *params);
+        void glGetProgramInfoLog(GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog);
+        void glDeleteProgram(GLuint program);
+        void glGenBuffers(GLsizei n, GLuint *buffers);
+        void glDeleteBuffers(GLsizei n, const GLuint *buffers);
+        void glBindBuffer(GLenum target, GLuint buffer);
+        void glBufferData(GLenum target, GLsizeiptr size, const void *data, GLenum usage);
+        void glEnableVertexAttribArray(GLuint index);
+        void glVertexAttribPointer(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
+        void glUniform1i(GLint location, GLint v0);
+        void glUniform4f(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);
+        void glUniformMatrix4fv(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
+        GLint glGetAttribLocation(GLuint program, const GLchar *name);
+        GLint glGetUniformLocation(GLuint program, const GLchar *name);
+        void glGenFramebuffers(GLsizei n, GLuint *framebuffers);
+        void glBindFramebuffer(GLenum target, GLuint framebuffer);
+        void glFramebufferTexture2D(GLenum target, GLenum attachment, GLenum textarget, GLuint texture, GLint level);
+        void glFramebufferRenderbuffer(GLenum target, GLenum attachment, GLenum renderbuffertarget, GLuint renderbuffer);
+        void glGenRenderbuffers(GLsizei n, GLuint *renderbuffers);
+        void glBindRenderbuffer(GLenum target, GLuint renderbuffer);
+        void glRenderbufferStorage(GLenum target, GLenum internalformat, GLsizei width, GLsizei height);
+        void glDeleteFramebuffers(GLsizei n, const GLuint *framebuffers);
+        void glDeleteRenderbuffers(GLsizei n, const GLuint *renderbuffers);
+        void glGenerateMipmap(GLenum target);
+    ]]
 end
 
 -- Extension function pointer typedefs (calling convention varies by platform)
@@ -112,6 +171,16 @@ local gl = setmetatable({}, { __index = gl_lib })
 local extensions_loaded = false
 
 local function loadGL(name, cast_type)
+    if is_mac then
+        -- OpenGL.framework exports GL 2.1 entry points directly; no procaddress
+        -- lookup. The function is already declared in cdef above, so we can
+        -- index gl_lib for it.
+        local ok, fn = pcall(function() return gl_lib[name] end)
+        if not ok or fn == nil then
+            error("Failed to load GL function: " .. name)
+        end
+        return fn
+    end
     local ptr
     if is_win then
         ptr = gl_lib.wglGetProcAddress(name)
