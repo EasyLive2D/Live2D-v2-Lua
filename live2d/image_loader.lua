@@ -161,7 +161,32 @@ else
         int inflateEnd(z_stream *strm);
     ]]
 
-    local zlib = ffi.load("z")
+    -- macOS Homebrew on Apple Silicon installs to /opt/homebrew/lib, which is
+    -- NOT in dyld's default fallback search path. libz.dylib normally lives in
+    -- the system dyld cache, but list explicit fallbacks for SIP-restricted
+    -- or non-standard environments.
+    local zlib_names
+    if ffi.os == "OSX" then
+        zlib_names = {
+            "z",
+            "/usr/lib/libz.dylib",
+            "/opt/homebrew/lib/libz.dylib",
+            "/usr/local/opt/zlib/lib/libz.dylib",
+        }
+    else
+        zlib_names = { "z", "libz.so.1", "libz.so" }
+    end
+    local zlib
+    for _, name in ipairs(zlib_names) do
+        local ok, lib = pcall(ffi.load, name)
+        if ok then
+            zlib = lib
+            break
+        end
+    end
+    if zlib == nil then
+        error("Cannot load zlib. Tried: " .. table.concat(zlib_names, ", "))
+    end
 
     local M = {}
 
