@@ -109,8 +109,26 @@ ffi.cdef[[
 
 local sdl
 
--- Try common SDL2 library names across platforms
-local sdl_names = { "SDL2", "SDL2-2.0", "libSDL2-2.0.so.0" }
+-- Try common SDL2 library names across platforms. macOS Homebrew on Apple
+-- Silicon installs to /opt/homebrew/lib, which is NOT in dyld's default
+-- fallback search path, so the full path must be listed explicitly.
+local sdl_names
+if ffi.os == "OSX" then
+    sdl_names = {
+        "SDL2",
+        "/opt/homebrew/lib/libSDL2.dylib",         -- Homebrew (Apple Silicon)
+        "/usr/local/lib/libSDL2.dylib",            -- Homebrew (Intel)
+        "/opt/local/lib/libSDL2.dylib",            -- MacPorts
+        "/Library/Frameworks/SDL2.framework/SDL2", -- System-wide framework
+        "libSDL2-2.0.0.dylib",
+    }
+    local home = os.getenv("HOME")
+    if home then
+        sdl_names[#sdl_names + 1] = home .. "/Library/Frameworks/SDL2.framework/SDL2"
+    end
+else
+    sdl_names = { "SDL2", "SDL2-2.0", "libSDL2-2.0.so.0" }
+end
 for _, name in ipairs(sdl_names) do
     local ok, lib = pcall(ffi.load, name)
     if ok then
