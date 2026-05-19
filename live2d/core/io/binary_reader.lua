@@ -21,6 +21,7 @@ function BinaryReader.new(buf)
     self.current8Bit = 0
     self.formatVersion = 0
     self.objects = {}
+    self.objectCount = 0
     self.buf = buf
     self.len = #buf
     self.offset = 0
@@ -193,14 +194,15 @@ function BinaryReader:readObject(aJ)
     end
     if aJ == def.OBJECT_REF then
         local aH = self:readInt32()
-        if 0 <= aH and aH < #self.objects then
+        if 0 <= aH and aH < self.objectCount then
             return self.objects[aH + 1]
         else
-            error("_sL _4i @_m0 ref=" .. tostring(aH) .. " len=" .. tostring(#self.objects))
+            error("_sL _4i @_m0 ref=" .. tostring(aH) .. " len=" .. tostring(self.objectCount))
         end
     else
         local aI = self:readKnownTypeObject(aJ)
-        self.objects[#self.objects + 1] = aI
+        self.objectCount = self.objectCount + 1
+        self.objects[self.objectCount] = aI
         return aI
     end
 end

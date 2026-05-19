@@ -107,7 +107,7 @@ function IDrawData:setTargetId(aH)
 end
 
 function IDrawData:needTransform()
-    return self.targetId ~= nil and self.targetId ~= Id.DST_BASE_ID()
+    return type(self.targetId) == "table" and self.targetId.Id_eq and self.targetId ~= Id.DST_BASE_ID()
 end
 
 function IDrawData:getType()
