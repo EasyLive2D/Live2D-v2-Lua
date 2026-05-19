@@ -176,6 +176,14 @@ function Renderer:draw(opts)
     end
 
     model:Update()
+    if opts.parameters ~= nil then
+        for i = 1, #opts.parameters do
+            local p = opts.parameters[i]
+            if p ~= nil and p.id ~= nil then
+                model:SetParameterValue(p.id, tonumber(p.value) or 0, tonumber(p.weight) or 1.0)
+            end
+        end
+    end
     model:Draw()
 
     -- Draw allocates short-lived FFI buffers per mesh. Keep memory stable when
