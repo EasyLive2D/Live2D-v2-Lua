@@ -45,11 +45,58 @@ local function premultiplyAlpha(w, h, data)
     return out
 end
 
-local function uploadTexture(live2DModel, no, w, h, data, label, useMipmap, isPremultiplied)
+local function bleedEdgeColors(w, h, data)
+    local pixelCount = w * h
+    local out = ffi.new("uint8_t[?]", pixelCount * 4)
+    local src = ffi.cast("const uint8_t*", data)
+    ffi.copy(out, src, pixelCount * 4)
+
+    for y = 0, h - 1 do
+        for x = 0, w - 1 do
+            local base = (y * w + x) * 4
+            local a = src[base + 3]
+            if a > 0 and a < 255 then
+                local total = 0
+                local r = 0
+                local g = 0
+                local b = 0
+                for oy = -1, 1 do
+                    for ox = -1, 1 do
+                        if ox ~= 0 or oy ~= 0 then
+                            local nx = x + ox
+                            local ny = y + oy
+                            if nx >= 0 and nx < w and ny >= 0 and ny < h then
+                                local nbase = (ny * w + nx) * 4
+                                local na = src[nbase + 3]
+                                if na > a then
+                                    r = r + src[nbase] * na
+                                    g = g + src[nbase + 1] * na
+                                    b = b + src[nbase + 2] * na
+                                    total = total + na
+                                end
+                            end
+                        end
+                    end
+                end
+                if total > 0 then
+                    out[base] = math.floor((r + total / 2) / total)
+                    out[base + 1] = math.floor((g + total / 2) / total)
+                    out[base + 2] = math.floor((b + total / 2) / total)
+                end
+            end
+        end
+    end
+    return out
+end
+
+local function uploadTexture(live2DModel, no, w, h, data, label, useMipmap, isPremultiplied, edgeBleed)
     Live2DGLWrapper.enable(Live2DGLWrapper.TEXTURE_2D)
     local texture = Live2DGLWrapper.createTexture()
     Live2DGLWrapper.bindTexture(Live2DGLWrapper.TEXTURE_2D, texture)
     if not isPremultiplied then
+        if edgeBleed then
+            data = bleedEdgeColors(w, h, data)
+        end
         data = premultiplyAlpha(w, h, data)
     end
     Live2DGLWrapper.texImage2D(Live2DGLWrapper.TEXTURE_2D, 0, Live2DGLWrapper.RGBA, w, h, 0, Live2DGLWrapper.RGBA, Live2DGLWrapper.UNSIGNED_BYTE, data)
@@ -99,7 +146,8 @@ local function normalizeTextureStream(stream, no, path)
 
     local useMipmap = stream.mipmap == true or stream.use_mipmap == true or stream.useMipmap == true
     local isPremultiplied = stream.premultiplied == true or stream.premultiplied_alpha == true or stream.premultipliedAlpha == true
-    return width, height, data, useMipmap, isPremultiplied
+    local edgeBleed = stream.edge_bleed ~= false and stream.edgeBleed ~= false
+    return width, height, data, useMipmap, isPremultiplied, edgeBleed
 end
 
 function PlatformManager.new(opts)
@@ -179,13 +227,13 @@ function PlatformManager:loadTexture(live2DModel, no, path)
         end
     end
     if stream ~= nil then
-        local w, h, data, useMipmap, isPremultiplied = normalizeTextureStream(stream, no, path)
-        uploadTexture(live2DModel, no, w, h, data, "stream:" .. tostring(no), useMipmap, isPremultiplied)
+        local w, h, data, useMipmap, isPremultiplied, edgeBleed = normalizeTextureStream(stream, no, path)
+        uploadTexture(live2DModel, no, w, h, data, "stream:" .. tostring(no), useMipmap, isPremultiplied, edgeBleed)
         return
     end
 
     local w, h, data = imageLoader.loadImage(path)
-    uploadTexture(live2DModel, no, w, h, data, path, true, false)
+    uploadTexture(live2DModel, no, w, h, data, path, false, false, true)
 end
 
 function PlatformManager:jsonParseFromBytes(data)
