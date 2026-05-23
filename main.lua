@@ -127,8 +127,8 @@ while running do
     sdl2.swapWindow(win)
     frameCount = frameCount + 1
 
-    -- Rendering allocates temporary FFI buffers per mesh; keep the viewer from
-    -- outrunning GC on drivers where vsync is unavailable or disabled.
+    -- Keep unrelated short-lived Lua/FFI allocations bounded when vsync is
+    -- unavailable or disabled; mesh upload buffers are reused by the GL wrapper.
     collectgarbage("step", 200)
 
     local elapsed = sdl2.getTicks() - frameStart

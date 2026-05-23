@@ -99,7 +99,7 @@ Module naming follows the original C++ class hierarchy (e.g. `live2d.core.live2d
 
 ## Known Issues
 
-- **GC Step is essential**: Every `model:Draw()` call allocates temporary FFI vertex buffers. Without `collectgarbage("step", 200)`, memory will explode on drivers without vsync.
+- **GL upload buffers are reused**: `model:Draw()` keeps reusable FFI upload buffers for mesh data, so fast render loops no longer need per-frame vertex-buffer GC pressure workarounds.
 - **OpenGL extension loading is cross-platform**: `gl_loader.lua` supports Windows (`wglGetProcAddress`) and Linux (`glXGetProcAddress`), auto-detecting the platform.
 - **Scripts must run from repo root**: Every entry script inlines `package.path` extensions. Running outside the root means modules won't be found.
 - **No tests, no CI, no build system**: This is a pure Lua project. No `make`, `cmake`, `npm`, stuff like that. Just run it.

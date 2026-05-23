@@ -99,7 +99,7 @@ live2d/
 
 ## 已知坑位
 
-- **GC Step 是生存必需品**：每次 `model:Draw()` 都会分配临时 FFI 顶点缓冲区。没有 `collectgarbage("step", 200)` 的话，在没有垂直同步的驱动上，内存会直接炸给你看。
+- **GL 上传缓冲区会被复用**：`model:Draw()` 会为网格数据保留可复用的 FFI 上传缓冲区，高速渲染循环不再需要靠逐帧顶点缓冲 GC 来兜底。
 - **OpenGL 扩展加载已跨平台**：`gl_loader.lua` 支持 Windows（`wglGetProcAddress`）和 Linux（`glXGetProcAddress`），自动检测平台。
 - **脚本必须在 repo 根目录运行**：每个入口脚本里都内联了 `package.path` 的扩展，不在 root 跑就找不到模块。
 - **没有测试、没有 CI、没有构建系统**：这是纯 Lua 项目，没有 `make`、`cmake`、`npm` 那些玩意儿。跑就完了。

@@ -210,8 +210,8 @@ function Renderer:draw(opts)
     end
     model:Draw()
 
-    -- Draw allocates short-lived FFI buffers per mesh. Keep memory stable when
-    -- the host renders faster than display refresh.
+    -- Keep unrelated short-lived Lua/FFI allocations bounded when the host
+    -- renders faster than display refresh; mesh upload buffers are reused.
     collectgarbage("step", tonumber(opts.gc_step) or 200)
     return self
 end
