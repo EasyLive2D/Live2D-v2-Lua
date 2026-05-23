@@ -336,7 +336,6 @@ void main(){
         smpColor = u_channelFlag * texture2D(s_texture0, v_texCoord).a * isInside;
     }else{
         smpColor = texture2D(s_texture0 , v_texCoord);
-        smpColor.rgb = smpColor.rgb * smpColor.a;
         smpColor.rgb = smpColor.rgb * u_multiplyColor.rgb;
         smpColor.rgb = smpColor.rgb + u_screenColor.rgb - (smpColor.rgb * u_screenColor.rgb);
         smpColor = smpColor * u_baseColor;
@@ -372,7 +371,6 @@ uniform vec4       u_screenColor;
 uniform vec4       u_multiplyColor;
 void main(){
     vec4 col_formask = texture2D(s_texture0, v_texCoord);
-    col_formask.rgb = col_formask.rgb * col_formask.a;
     col_formask.rgb = col_formask.rgb * u_multiplyColor.rgb;
     col_formask.rgb = col_formask.rgb + u_screenColor.rgb - (col_formask.rgb * u_screenColor.rgb);
     col_formask = col_formask * u_baseColor;

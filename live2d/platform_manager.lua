@@ -30,10 +30,28 @@ local function streamData(stream, path)
     return stream
 end
 
-local function uploadTexture(live2DModel, no, w, h, data, label, useMipmap)
+local function premultiplyAlpha(w, h, data)
+    local pixelCount = w * h
+    local out = ffi.new("uint8_t[?]", pixelCount * 4)
+    local src = ffi.cast("const uint8_t*", data)
+    for i = 0, pixelCount - 1 do
+        local base = i * 4
+        local a = src[base + 3]
+        out[base] = math.floor((src[base] * a + 127) / 255)
+        out[base + 1] = math.floor((src[base + 1] * a + 127) / 255)
+        out[base + 2] = math.floor((src[base + 2] * a + 127) / 255)
+        out[base + 3] = a
+    end
+    return out
+end
+
+local function uploadTexture(live2DModel, no, w, h, data, label, useMipmap, isPremultiplied)
     Live2DGLWrapper.enable(Live2DGLWrapper.TEXTURE_2D)
     local texture = Live2DGLWrapper.createTexture()
     Live2DGLWrapper.bindTexture(Live2DGLWrapper.TEXTURE_2D, texture)
+    if not isPremultiplied then
+        data = premultiplyAlpha(w, h, data)
+    end
     Live2DGLWrapper.texImage2D(Live2DGLWrapper.TEXTURE_2D, 0, Live2DGLWrapper.RGBA, w, h, 0, Live2DGLWrapper.RGBA, Live2DGLWrapper.UNSIGNED_BYTE, data)
     if useMipmap then
         Live2DGLWrapper.texParameteri(Live2DGLWrapper.TEXTURE_2D, Live2DGLWrapper.TEXTURE_MIN_FILTER, Live2DGLWrapper.LINEAR_MIPMAP_LINEAR)
@@ -41,6 +59,8 @@ local function uploadTexture(live2DModel, no, w, h, data, label, useMipmap)
         Live2DGLWrapper.texParameteri(Live2DGLWrapper.TEXTURE_2D, Live2DGLWrapper.TEXTURE_MIN_FILTER, Live2DGLWrapper.LINEAR)
     end
     Live2DGLWrapper.texParameteri(Live2DGLWrapper.TEXTURE_2D, Live2DGLWrapper.TEXTURE_MAG_FILTER, Live2DGLWrapper.LINEAR)
+    Live2DGLWrapper.texParameteri(Live2DGLWrapper.TEXTURE_2D, Live2DGLWrapper.TEXTURE_WRAP_S, Live2DGLWrapper.CLAMP_TO_EDGE)
+    Live2DGLWrapper.texParameteri(Live2DGLWrapper.TEXTURE_2D, Live2DGLWrapper.TEXTURE_WRAP_T, Live2DGLWrapper.CLAMP_TO_EDGE)
     if useMipmap then
         Live2DGLWrapper.generateMipmap(Live2DGLWrapper.TEXTURE_2D)
     end
@@ -77,7 +97,9 @@ local function normalizeTextureStream(stream, no, path)
         data = ffi.cast("const uint8_t*", data)
     end
 
-    return width, height, data, stream.mipmap == true or stream.use_mipmap == true or stream.useMipmap == true
+    local useMipmap = stream.mipmap == true or stream.use_mipmap == true or stream.useMipmap == true
+    local isPremultiplied = stream.premultiplied == true or stream.premultiplied_alpha == true or stream.premultipliedAlpha == true
+    return width, height, data, useMipmap, isPremultiplied
 end
 
 function PlatformManager.new(opts)
@@ -157,13 +179,13 @@ function PlatformManager:loadTexture(live2DModel, no, path)
         end
     end
     if stream ~= nil then
-        local w, h, data, useMipmap = normalizeTextureStream(stream, no, path)
-        uploadTexture(live2DModel, no, w, h, data, "stream:" .. tostring(no), useMipmap)
+        local w, h, data, useMipmap, isPremultiplied = normalizeTextureStream(stream, no, path)
+        uploadTexture(live2DModel, no, w, h, data, "stream:" .. tostring(no), useMipmap, isPremultiplied)
         return
     end
 
     local w, h, data = imageLoader.loadImage(path)
-    uploadTexture(live2DModel, no, w, h, data, path, true)
+    uploadTexture(live2DModel, no, w, h, data, path, true, false)
 end
 
 function PlatformManager:jsonParseFromBytes(data)
