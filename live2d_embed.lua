@@ -61,6 +61,7 @@ function Renderer:load_model(model_path, width, height, opts)
     end
 
     opts = opts or {}
+    self:dispose_model()
     self.width = tonumber(width) or self.width
     self.height = tonumber(height) or self.height
     local pm = get_platform_manager()
@@ -86,7 +87,30 @@ function Renderer:load_model(model_path, width, height, opts)
     self.model = model
     self.model_path = model_path
     self:resize(self.width, self.height)
+    if opts.release_streams_after_load == true or opts.releaseStreamsAfterLoad == true or opts.clear_streams_after_load == true then
+        pm:clearStreams()
+        collectgarbage("collect")
+    end
     return self
+end
+
+function Renderer:dispose_model()
+    if self.model ~= nil and self.model.live2DModel ~= nil then
+        local drawParam = self.model.live2DModel:getDrawParam()
+        if drawParam ~= nil and drawParam.dispose ~= nil then
+            drawParam:dispose()
+        end
+    end
+    self.model = nil
+    self.model_path = nil
+    return self
+end
+
+function Renderer:dispose()
+    self:dispose_model()
+    self:clear_streams()
+    collectgarbage("collect")
+    return true
 end
 
 function Renderer:set_resource_stream(path, data)
@@ -391,9 +415,15 @@ function M.hit_test(x, y)
 end
 
 function M.dispose()
+    if current_renderer ~= nil then
+        current_renderer:dispose()
+    elseif platform_manager ~= nil then
+        platform_manager:clearStreams()
+    end
     current_renderer = nil
     platform_manager = nil
     Live2D.dispose()
+    collectgarbage("collect")
     runtime_initialized = false
 end
 

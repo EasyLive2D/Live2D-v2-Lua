@@ -45,16 +45,18 @@ local function premultiplyAlpha(w, h, data)
     return out
 end
 
-local function bleedEdgeColors(w, h, data)
+local function bleedAndPremultiplyAlpha(w, h, data)
     local pixelCount = w * h
     local out = ffi.new("uint8_t[?]", pixelCount * 4)
     local src = ffi.cast("const uint8_t*", data)
-    ffi.copy(out, src, pixelCount * 4)
 
     for y = 0, h - 1 do
         for x = 0, w - 1 do
             local base = (y * w + x) * 4
             local a = src[base + 3]
+            local sr = src[base]
+            local sg = src[base + 1]
+            local sb = src[base + 2]
             if a > 0 and a < 255 then
                 local total = 0
                 local r = 0
@@ -79,11 +81,15 @@ local function bleedEdgeColors(w, h, data)
                     end
                 end
                 if total > 0 then
-                    out[base] = math.floor((r + total / 2) / total)
-                    out[base + 1] = math.floor((g + total / 2) / total)
-                    out[base + 2] = math.floor((b + total / 2) / total)
+                    sr = math.floor((r + total / 2) / total)
+                    sg = math.floor((g + total / 2) / total)
+                    sb = math.floor((b + total / 2) / total)
                 end
             end
+            out[base] = math.floor((sr * a + 127) / 255)
+            out[base + 1] = math.floor((sg * a + 127) / 255)
+            out[base + 2] = math.floor((sb * a + 127) / 255)
+            out[base + 3] = a
         end
     end
     return out
@@ -95,9 +101,10 @@ local function uploadTexture(live2DModel, no, w, h, data, label, useMipmap, isPr
     Live2DGLWrapper.bindTexture(Live2DGLWrapper.TEXTURE_2D, texture)
     if not isPremultiplied then
         if edgeBleed then
-            data = bleedEdgeColors(w, h, data)
+            data = bleedAndPremultiplyAlpha(w, h, data)
+        else
+            data = premultiplyAlpha(w, h, data)
         end
-        data = premultiplyAlpha(w, h, data)
     end
     Live2DGLWrapper.texImage2D(Live2DGLWrapper.TEXTURE_2D, 0, Live2DGLWrapper.RGBA, w, h, 0, Live2DGLWrapper.RGBA, Live2DGLWrapper.UNSIGNED_BYTE, data)
     if useMipmap then

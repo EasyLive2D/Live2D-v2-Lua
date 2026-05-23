@@ -239,6 +239,10 @@ function DrawParamOpenGL:setTexture(aH, aI)
             self.textures[#self.textures + 1] = nil
         end
     end
+    local oldTexture = self.textures[aH + 1]
+    if oldTexture ~= nil and oldTexture ~= 0 and oldTexture ~= aI then
+        Live2DGLWrapper.deleteTexture(oldTexture)
+    end
     self.textures[aH + 1] = aI
 end
 
@@ -437,6 +441,60 @@ function DrawParamOpenGL:createFramebuffer()
     Live2DGLWrapper.bindRenderbuffer(Live2DGLWrapper.RENDERBUFFER, 0)
     Live2DGLWrapper.bindFramebuffer(Live2DGLWrapper.FRAMEBUFFER, 0)
     self.framebufferObject = FrameBufferObject.new(aJ, aH, aI)
+end
+
+function DrawParamOpenGL:dispose()
+    for i = 1, #self.textures do
+        local texture = self.textures[i]
+        if texture ~= nil and texture ~= 0 then
+            Live2DGLWrapper.deleteTexture(texture)
+        end
+    end
+    self.textures = {}
+
+    if self.vbo ~= nil and self.vbo ~= 0 then
+        Live2DGLWrapper.deleteBuffer(self.vbo)
+        self.vbo = nil
+    end
+    if self.uvbo ~= nil and self.uvbo ~= 0 then
+        Live2DGLWrapper.deleteBuffer(self.uvbo)
+        self.uvbo = nil
+    end
+    if self.ebo ~= nil and self.ebo ~= 0 then
+        Live2DGLWrapper.deleteBuffer(self.ebo)
+        self.ebo = nil
+    end
+
+    if self.framebufferObject ~= nil then
+        if self.framebufferObject.framebuffer ~= nil and self.framebufferObject.framebuffer ~= 0 then
+            Live2DGLWrapper.deleteFramebuffer(self.framebufferObject.framebuffer)
+        end
+        if self.framebufferObject.renderbuffer ~= nil and self.framebufferObject.renderbuffer ~= 0 then
+            Live2DGLWrapper.deleteRenderbuffer(self.framebufferObject.renderbuffer)
+        end
+        if self.framebufferObject.texture ~= nil and self.framebufferObject.texture ~= 0 then
+            Live2DGLWrapper.deleteTexture(self.framebufferObject.texture)
+        end
+        self.framebufferObject = nil
+    end
+
+    if self.vertShader ~= nil and self.vertShader ~= 0 then
+        Live2DGLWrapper.deleteShader(self.vertShader)
+        self.vertShader = nil
+    end
+    if self.fragShader ~= nil and self.fragShader ~= 0 then
+        Live2DGLWrapper.deleteShader(self.fragShader)
+        self.fragShader = nil
+    end
+    if self.vertShaderOff ~= nil and self.vertShaderOff ~= 0 then
+        Live2DGLWrapper.deleteShader(self.vertShaderOff)
+        self.vertShaderOff = nil
+    end
+    if self.fragShaderOff ~= nil and self.fragShaderOff ~= 0 then
+        Live2DGLWrapper.deleteShader(self.fragShaderOff)
+        self.fragShaderOff = nil
+    end
+    self:disposeShader()
 end
 
 DrawParamOpenGL.FrameBufferObject = FrameBufferObject

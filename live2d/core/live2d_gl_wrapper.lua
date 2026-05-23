@@ -7,6 +7,28 @@ local ffi = require("ffi")
 local Live2DGLWrapper = {}
 Live2DGLWrapper.__index = Live2DGLWrapper
 
+local uploadFloatBuffer = nil
+local uploadFloatCapacity = 0
+local uploadUint16Buffer = nil
+local uploadUint16Capacity = 0
+local matrixBuffer = ffi.new("float[16]")
+
+local function ensureFloatUploadBuffer(size)
+    if uploadFloatCapacity < size then
+        uploadFloatBuffer = ffi.new("float[?]", size)
+        uploadFloatCapacity = size
+    end
+    return uploadFloatBuffer
+end
+
+local function ensureUint16UploadBuffer(size)
+    if uploadUint16Capacity < size then
+        uploadUint16Buffer = ffi.new("uint16_t[?]", size)
+        uploadUint16Capacity = size
+    end
+    return uploadUint16Buffer
+end
+
 -- GL constants
 Live2DGLWrapper.FRAMEBUFFER = 0x8D40
 Live2DGLWrapper.RENDERBUFFER = 0x8D41
@@ -208,17 +230,19 @@ end
 
 function Live2DGLWrapper.bufferData(t, data, usage)
     if t == Live2DGLWrapper.ARRAY_BUFFER then
-        local arr = ffi.new("float[?]", #data)
-        for i = 1, #data do
+        local size = #data
+        local arr = ensureFloatUploadBuffer(size)
+        for i = 1, size do
             arr[i - 1] = data[i]
         end
-        gl.glBufferData(t, #data * ffi.sizeof("float"), arr, usage)
+        gl.glBufferData(t, size * ffi.sizeof("float"), arr, usage)
     elseif t == Live2DGLWrapper.ELEMENT_ARRAY_BUFFER then
-        local arr = ffi.new("uint16_t[?]", #data)
-        for i = 1, #data do
+        local size = #data
+        local arr = ensureUint16UploadBuffer(size)
+        for i = 1, size do
             arr[i - 1] = data[i]
         end
-        gl.glBufferData(t, #data * ffi.sizeof("uint16_t"), arr, usage)
+        gl.glBufferData(t, size * ffi.sizeof("uint16_t"), arr, usage)
     end
 end
 
@@ -239,11 +263,10 @@ function Live2DGLWrapper.uniform1i(loc, v)
 end
 
 function Live2DGLWrapper.uniformMatrix4fv(loc, transpose, value)
-    local arr = ffi.new("float[16]")
     for i = 1, 16 do
-        arr[i - 1] = value[i] or 0
+        matrixBuffer[i - 1] = value[i] or 0
     end
-    gl.glUniformMatrix4fv(loc, 1, transpose and 1 or 0, arr)
+    gl.glUniformMatrix4fv(loc, 1, transpose and 1 or 0, matrixBuffer)
 end
 
 function Live2DGLWrapper.uniform4f(loc, a, b, c, d)
