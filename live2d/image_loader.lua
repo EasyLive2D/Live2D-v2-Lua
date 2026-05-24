@@ -249,72 +249,119 @@ else
         return c
     end
 
-    local function applyFilters(raw, width, height, bytesPerPixel)
+    local function decodeFilteredToRGBA(raw, width, height, bytesPerPixel, colorType, palette, hasTRNS)
         local rowBytes = width * bytesPerPixel
         local out = ffi.new("uint8_t[?]", rowBytes)
         local prevRow = ffi.new("uint8_t[?]", rowBytes) -- previous row output
-        local unfiltered = {}
+        local data = ffi.new("uint8_t[?]", width * height * 4)
         local pos = 0
 
         for y = 0, height - 1 do
             local filterType = string.byte(raw, pos + 1)
             pos = pos + 1
 
-            local filtered = {}
-            for x = 0, rowBytes - 1 do
-                filtered[x] = string.byte(raw, pos + 1 + x)
-            end
-            pos = pos + rowBytes
-
             if filterType == 0 then
                 -- None
                 for x = 0, rowBytes - 1 do
-                    out[x] = filtered[x]
+                    out[x] = string.byte(raw, pos + 1 + x)
                 end
             elseif filterType == 1 then
-                -- Sub: out[x] = filtered[x] + out[x - bpp]
+                -- Sub: out[x] = raw[x] + out[x - bpp]
                 for x = 0, rowBytes - 1 do
+                    local filtered = string.byte(raw, pos + 1 + x)
                     local left = (x >= bytesPerPixel) and out[x - bytesPerPixel] or 0
-                    out[x] = (filtered[x] + left) % 256
+                    out[x] = (filtered + left) % 256
                 end
             elseif filterType == 2 then
-                -- Up: out[x] = filtered[x] + prevRow[x]
+                -- Up: out[x] = raw[x] + prevRow[x]
                 for x = 0, rowBytes - 1 do
-                    out[x] = (filtered[x] + prevRow[x]) % 256
+                    local filtered = string.byte(raw, pos + 1 + x)
+                    out[x] = (filtered + prevRow[x]) % 256
                 end
             elseif filterType == 3 then
-                -- Average: out[x] = filtered[x] + floor((out[x - bpp] + prevRow[x]) / 2)
+                -- Average: out[x] = raw[x] + floor((out[x - bpp] + prevRow[x]) / 2)
                 for x = 0, rowBytes - 1 do
+                    local filtered = string.byte(raw, pos + 1 + x)
                     local left = (x >= bytesPerPixel) and out[x - bytesPerPixel] or 0
                     local avg = math.floor((left + prevRow[x]) / 2)
-                    out[x] = (filtered[x] + avg) % 256
+                    out[x] = (filtered + avg) % 256
                 end
             elseif filterType == 4 then
                 -- Paeth: a = out[x - bpp], b = prevRow[x], c = prevRow[x - bpp]
                 for x = 0, rowBytes - 1 do
+                    local filtered = string.byte(raw, pos + 1 + x)
                     local a = (x >= bytesPerPixel) and out[x - bytesPerPixel] or 0
                     local b = prevRow[x]
                     local c = (x >= bytesPerPixel) and prevRow[x - bytesPerPixel] or 0
-                    out[x] = (filtered[x] + paethPredictor(a, b, c)) % 256
+                    out[x] = (filtered + paethPredictor(a, b, c)) % 256
                 end
             else
                 -- Unknown filter: copy raw bytes
                 print("Warning: unknown PNG filter " .. filterType)
                 for x = 0, rowBytes - 1 do
-                    out[x] = filtered[x]
+                    out[x] = string.byte(raw, pos + 1 + x)
+                end
+            end
+            pos = pos + rowBytes
+
+            local dst = y * width * 4
+            if colorType == 6 then
+                for x = 0, width - 1 do
+                    local src = x * 4
+                    local base = dst + src
+                    data[base] = out[src]
+                    data[base + 1] = out[src + 1]
+                    data[base + 2] = out[src + 2]
+                    data[base + 3] = out[src + 3]
+                end
+            elseif colorType == 2 then
+                local tr, tg, tb = palette._tRNS_r, palette._tRNS_g, palette._tRNS_b
+                for x = 0, width - 1 do
+                    local src = x * 3
+                    local base = dst + x * 4
+                    local r, g, b = out[src], out[src + 1], out[src + 2]
+                    data[base] = r
+                    data[base + 1] = g
+                    data[base + 2] = b
+                    data[base + 3] = (hasTRNS and r == tr and g == tg and b == tb) and 0 or 255
+                end
+            elseif colorType == 0 then
+                local transparentGray = palette._tRNS_gray
+                for x = 0, width - 1 do
+                    local v = out[x]
+                    local base = dst + x * 4
+                    data[base] = v
+                    data[base + 1] = v
+                    data[base + 2] = v
+                    data[base + 3] = (hasTRNS and v == transparentGray) and 0 or 255
+                end
+            elseif colorType == 3 then
+                for x = 0, width - 1 do
+                    local entry = palette[out[x]]
+                    local base = dst + x * 4
+                    data[base] = entry and (entry[1] or 0) or 0
+                    data[base + 1] = entry and (entry[2] or 0) or 0
+                    data[base + 2] = entry and (entry[3] or 0) or 0
+                    data[base + 3] = entry and (entry[4] or 255) or 0
+                end
+            elseif colorType == 4 then
+                for x = 0, width - 1 do
+                    local src = x * 2
+                    local base = dst + x * 4
+                    local v = out[src]
+                    data[base] = v
+                    data[base + 1] = v
+                    data[base + 2] = v
+                    data[base + 3] = out[src + 1]
                 end
             end
 
-            -- Build output string and save for next row's "Up" reference
-            local rowStr = {}
             for x = 0, rowBytes - 1 do
-                rowStr[#rowStr + 1] = string.char(out[x])
                 prevRow[x] = out[x]
             end
-            unfiltered[y + 1] = table.concat(rowStr)
         end
 
-        return table.concat(unfiltered)
+        return data
     end
 
     local function decodePNG(path)
@@ -426,76 +473,7 @@ else
         -- Check if tRNS applies for RGB (colorType 2)
         local hasTRNS = palette._tRNS_r ~= nil or palette._tRNS_gray ~= nil
 
-        local imageData
-        if colorType == 6 then
-            -- RGBA: no conversion needed
-            imageData = applyFilters(rawImage, width, height, bytesPerPixel)
-        elseif colorType == 2 then
-            -- RGB → RGBA
-            local filtered = applyFilters(rawImage, width, height, bytesPerPixel)
-            local rgba = {}
-            local tr, tg, tb = palette._tRNS_r, palette._tRNS_g, palette._tRNS_b
-            for i = 1, #filtered, 3 do
-                local r = string.byte(filtered, i)
-                local g = string.byte(filtered, i + 1)
-                local b = string.byte(filtered, i + 2)
-                local a = 255
-                if hasTRNS and r == tr and g == tg and b == tb then
-                    a = 0
-                end
-                rgba[#rgba + 1] = string.char(r, g, b, a)
-            end
-            imageData = table.concat(rgba)
-        elseif colorType == 0 then
-            -- Grayscale → RGBA
-            local filtered = applyFilters(rawImage, width, height, bytesPerPixel)
-            local rgba = {}
-            local transparentGray = palette._tRNS_gray
-            for i = 1, #filtered do
-                local v = string.byte(filtered, i)
-                local a = 255
-                if hasTRNS and v == transparentGray then
-                    a = 0
-                end
-                rgba[#rgba + 1] = string.char(v, v, v, a)
-            end
-            imageData = table.concat(rgba)
-        elseif colorType == 3 then
-            -- Indexed → RGBA
-            local filtered = applyFilters(rawImage, width, height, bytesPerPixel)
-            local rgba = {}
-            for i = 1, #filtered do
-                local idx = string.byte(filtered, i)
-                local entry = palette[idx]
-                if not entry then
-                    -- Invalid palette index
-                    rgba[#rgba + 1] = string.char(0, 0, 0, 0)
-                else
-                    local r = entry[1] or 0
-                    local g = entry[2] or 0
-                    local b = entry[3] or 0
-                    local a = entry[4] or 255
-                    rgba[#rgba + 1] = string.char(r, g, b, a)
-                end
-            end
-            imageData = table.concat(rgba)
-        elseif colorType == 4 then
-            -- Grayscale + Alpha → RGBA
-            local filtered = applyFilters(rawImage, width, height, bytesPerPixel)
-            local rgba = {}
-            for i = 1, #filtered, 2 do
-                local v = string.byte(filtered, i)
-                local a = string.byte(filtered, i + 1)
-                rgba[#rgba + 1] = string.char(v, v, v, a)
-            end
-            imageData = table.concat(rgba)
-        end
-
-        -- Copy to FFI cdata (uint8_t*) for return
-        local data = ffi.new("uint8_t[?]", width * height * 4)
-        for i = 0, width * height * 4 - 1 do
-            data[i] = string.byte(imageData, i + 1)
-        end
+        local data = decodeFilteredToRGBA(rawImage, width, height, bytesPerPixel, colorType, palette, hasTRNS)
 
         print("Loaded texture " .. path .. " (" .. width .. "x" .. height .. ")")
         return width, height, data
