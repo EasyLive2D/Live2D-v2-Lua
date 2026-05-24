@@ -282,6 +282,16 @@ function LAppModel:SetExpression(name)
     self.expressionManager:startMotion(motion, false)
 end
 
+function LAppModel:PreloadExpression(name)
+    if name == nil or name == "" or self.expressions[name] ~= nil then return end
+    for j = 0, self.modelSetting:getExpressionNum() - 1 do
+        if self.modelSetting:getExpressionName(j) == name then
+            self:loadExpression(name, self.modelHomeDir .. self.modelSetting:getExpressionFile(j))
+            break
+        end
+    end
+end
+
 function LAppModel:StartRandomMotion(name, priority, onStartMotionHandler, onFinishMotionHandler)
     priority = priority or MotionPriority.IDLE
     if name == nil then
@@ -310,11 +320,12 @@ function LAppModel:StartMotion(name, no, priority, onStartMotionHandler, onFinis
         return
     end
 
+    local motion_key = tostring(name) .. "#" .. tostring(no)
     local mtn
-    if self.motions[name] == nil then
-        mtn = self:loadMotion(nil, self.modelHomeDir .. motion_name)
+    if self.motions[motion_key] == nil then
+        mtn = self:loadMotion(motion_key, self.modelHomeDir .. motion_name)
     else
-        mtn = self.motions[name]
+        mtn = self.motions[motion_key]
     end
 
     self.finishCallback = onFinishMotionHandler
@@ -391,10 +402,18 @@ end
 function LAppModel:_preloadMotionGroup(name)
     for i = 0, self.modelSetting:getMotionNum(name) - 1 do
         local file = self.modelSetting:getMotionFile(name, i)
-        local motion = self:loadMotion(file, self.modelHomeDir .. file)
-        motion:setFadeIn(self.modelSetting:getMotionFadeIn(name, i))
-        motion:setFadeOut(self.modelSetting:getMotionFadeOut(name, i))
+        local motion_key = tostring(name) .. "#" .. tostring(i)
+        if file ~= nil and file ~= "" and self.motions[motion_key] == nil then
+            local motion = self:loadMotion(motion_key, self.modelHomeDir .. file)
+            motion:setFadeIn(self.modelSetting:getMotionFadeIn(name, i))
+            motion:setFadeOut(self.modelSetting:getMotionFadeOut(name, i))
+        end
     end
+end
+
+function LAppModel:PreloadMotionGroup(name)
+    if name == nil or name == "" then return end
+    self:_preloadMotionGroup(name)
 end
 
 function LAppModel:_setFadeInFadeOut(name, no, priority, motion)
