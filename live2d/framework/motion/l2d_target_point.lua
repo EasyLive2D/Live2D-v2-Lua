@@ -63,6 +63,14 @@ function L2DTargetPoint:update()
         self.faceVX = self.faceVX * max_v / cur_v
         self.faceVY = self.faceVY * max_v / cur_v
     end
+
+    if self.faceVX * dx > 0 and math.abs(self.faceVX) > math.abs(dx) then
+        self.faceVX = dx
+    end
+    if self.faceVY * dy > 0 and math.abs(self.faceVY) > math.abs(dy) then
+        self.faceVY = dy
+    end
+
     self.faceX = self.faceX + self.faceVX
     self.faceY = self.faceY + self.faceVY
 end
