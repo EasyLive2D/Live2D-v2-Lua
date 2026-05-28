@@ -364,13 +364,8 @@ else
         return data
     end
 
-    local function decodePNG(path)
-        local f = io.open(path, "rb")
-        if not f then
-            error("Cannot open file: " .. path)
-        end
-        local raw = f:read("*all")
-        f:close()
+    local function decodePNG(raw, path)
+        path = path or "<memory>"
 
         -- Verify PNG signature
         local sig = { string.byte(raw, 1, 8) }
@@ -479,10 +474,30 @@ else
         return width, height, data
     end
 
+    local function decodePNGFile(path)
+        local f = io.open(path, "rb")
+        if not f then
+            error("Cannot open file: " .. path)
+        end
+        local raw = f:read("*all")
+        f:close()
+        return decodePNG(raw, path)
+    end
+
     function M.loadImage(path)
-        local ok, w, h, data = pcall(decodePNG, path)
+        local ok, w, h, data = pcall(decodePNGFile, path)
         if not ok then
             print("PNG load failed for: " .. path .. " (" .. tostring(w) .. ")")
+            return createDummyTexture(4, 4)
+        end
+        return w, h, data
+    end
+
+    function M.loadImageBytes(bytes, label)
+        local ok, w, h, data = pcall(decodePNG, bytes, label)
+        if not ok then
+            label = label or "<memory>"
+            print("PNG load failed for: " .. label .. " (" .. tostring(w) .. ")")
             return createDummyTexture(4, 4)
         end
         return w, h, data
