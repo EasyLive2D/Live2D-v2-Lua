@@ -423,6 +423,7 @@ end
 
 function DrawParamOpenGL:createFramebuffer()
     local aK = Live2D.clippingMaskBufferSize
+    local oldFbo = Live2DGLWrapper.getParameter(Live2DGLWrapper.FRAMEBUFFER_BINDING)
     local aJ = Live2DGLWrapper.createFramebuffer()
     Live2DGLWrapper.bindFramebuffer(Live2DGLWrapper.FRAMEBUFFER, aJ)
     local aH = Live2DGLWrapper.createRenderbuffer()
@@ -439,7 +440,7 @@ function DrawParamOpenGL:createFramebuffer()
     Live2DGLWrapper.framebufferTexture2D(Live2DGLWrapper.FRAMEBUFFER, Live2DGLWrapper.COLOR_ATTACHMENT0, Live2DGLWrapper.TEXTURE_2D, aI, 0)
     Live2DGLWrapper.bindTexture(Live2DGLWrapper.TEXTURE_2D, 0)
     Live2DGLWrapper.bindRenderbuffer(Live2DGLWrapper.RENDERBUFFER, 0)
-    Live2DGLWrapper.bindFramebuffer(Live2DGLWrapper.FRAMEBUFFER, 0)
+    Live2DGLWrapper.bindFramebuffer(Live2DGLWrapper.FRAMEBUFFER, oldFbo)
     self.framebufferObject = FrameBufferObject.new(aJ, aH, aI)
 end
 
