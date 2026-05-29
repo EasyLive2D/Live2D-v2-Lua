@@ -409,14 +409,15 @@ void main(){
 
     if not aH or not aX then
         local aI = aH and Live2DGLWrapper.getProgramInfoLog(self.shaderProgram) or Live2DGLWrapper.getProgramInfoLog(self.shaderProgramOff)
-        print("failed to link program: " .. aI)
+        local message = "failed to link program: " .. aI
+        print(message)
         if self.vertShader then Live2DGLWrapper.deleteShader(self.vertShader); self.vertShader = 0 end
         if self.fragShader then Live2DGLWrapper.deleteShader(self.fragShader); self.fragShader = 0 end
         if self.shaderProgram and self.shaderProgram ~= 0 then Live2DGLWrapper.deleteProgram(self.shaderProgram); self.shaderProgram = 0 end
         if self.vertShaderOff then Live2DGLWrapper.deleteShader(self.vertShaderOff); self.vertShaderOff = 0 end
         if self.fragShaderOff then Live2DGLWrapper.deleteShader(self.fragShaderOff); self.fragShaderOff = 0 end
         if self.shaderProgramOff and self.shaderProgramOff ~= 0 then Live2DGLWrapper.deleteProgram(self.shaderProgramOff); self.shaderProgramOff = 0 end
-        return false
+        error(message)
     end
     return true
 end

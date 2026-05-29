@@ -170,6 +170,29 @@ ffi.cdef("typedef void (" .. CC .. "*PFNGLGENERATEMIPMAPPROC)(GLenum target);")
 local gl = setmetatable({}, { __index = gl_lib })
 local extensions_loaded = false
 
+local function parseHexPointer(hex)
+    if hex == nil or hex == "" then return nil end
+    local value = ffi.new("uintptr_t", 0)
+    for i = 1, #hex do
+        local byte = string.byte(hex, i)
+        local digit
+        if byte >= 48 and byte <= 57 then
+            digit = byte - 48
+        elseif byte >= 65 and byte <= 70 then
+            digit = byte - 55
+        elseif byte >= 97 and byte <= 102 then
+            digit = byte - 87
+        else
+            return nil
+        end
+        value = value * 16 + digit
+    end
+    if value == 0 or value == 1 or value == 2 or value == 3 or value == ffi.new("uintptr_t", -1) then
+        return nil
+    end
+    return ffi.cast("void *", value)
+end
+
 local function loadGL(name, cast_type)
     if is_mac then
         -- OpenGL.framework exports GL 2.1 entry points directly; no procaddress
@@ -181,6 +204,15 @@ local function loadGL(name, cast_type)
         end
         return fn
     end
+    if type(_G.__bandori_gl_get_proc_address) == "function" then
+        local ok, hex = pcall(_G.__bandori_gl_get_proc_address, name)
+        if ok then
+            local ptr = parseHexPointer(hex)
+            if ptr ~= nil then
+                return ffi.cast(cast_type, ptr)
+            end
+        end
+    end
     local ptr
     if is_win then
         ptr = gl_lib.wglGetProcAddress(name)
@@ -188,6 +220,10 @@ local function loadGL(name, cast_type)
         ptr = gl_lib.glXGetProcAddress(name)
     end
     if ptr == nil then
+        error("Failed to load GL function: " .. name)
+    end
+    local invalid = ffi.cast("intptr_t", ptr)
+    if invalid == 0 or invalid == 1 or invalid == 2 or invalid == 3 or invalid == -1 then
         error("Failed to load GL function: " .. name)
     end
     return ffi.cast(cast_type, ptr)
