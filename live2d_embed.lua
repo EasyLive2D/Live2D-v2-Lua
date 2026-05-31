@@ -22,7 +22,6 @@ local Live2D = live2d.Live2D
 local MotionPriority = live2d.MotionPriority
 local LAppModel = live2d.LAppModel
 local Live2DGLWrapper = require("live2d.core.live2d_gl_wrapper")
-local UtSystem = require("live2d.core.util.ut_system")
 
 local M = {}
 local Renderer = {}
@@ -56,19 +55,12 @@ local function require_model(self)
     return self.model
 end
 
-local function apply_host_time(opts)
-    if opts ~= nil and opts.time_msec ~= nil then
-        UtSystem.setUserTimeMSec(tonumber(opts.time_msec))
-    end
-end
-
 function Renderer:load_model(model_path, width, height, opts)
     if model_path == nil or model_path == "" then
         error("model_path is required", 2)
     end
 
     opts = opts or {}
-    apply_host_time(opts)
     self:dispose_model()
     self.width = tonumber(width) or self.width
     self.height = tonumber(height) or self.height
@@ -194,8 +186,7 @@ function Renderer:clear(r, g, b, a)
     return self
 end
 
-function Renderer:update(opts)
-    apply_host_time(opts)
+function Renderer:update()
     require_model(self):Update()
     return self
 end
@@ -203,15 +194,11 @@ end
 function Renderer:draw(opts)
     opts = opts or {}
     local model = require_model(self)
-    local profile = opts.profile == true
-    local update_draw_start = nil
 
     if opts.clear ~= false then
         self:clear(opts.r, opts.g, opts.b, opts.a)
     end
 
-    apply_host_time(opts)
-    if profile then update_draw_start = os.clock() end
     model:Update()
     if opts.parameters ~= nil then
         for i = 1, #opts.parameters do
@@ -222,18 +209,10 @@ function Renderer:draw(opts)
         end
     end
     model:Draw()
-    if profile then
-        opts.profile_update_draw_seconds = os.clock() - update_draw_start
-    end
 
     -- Keep unrelated short-lived Lua/FFI allocations bounded when the host
     -- renders faster than display refresh; mesh upload buffers are reused.
-    local gc_start = nil
-    if profile then gc_start = os.clock() end
     collectgarbage("step", tonumber(opts.gc_step) or 200)
-    if profile then
-        opts.profile_gc_seconds = os.clock() - gc_start
-    end
     return self
 end
 
@@ -351,9 +330,9 @@ function M.draw(opts)
     return current_renderer:draw(opts)
 end
 
-function M.update(opts)
+function M.update()
     if current_renderer == nil then error("no current renderer", 2) end
-    return current_renderer:update(opts)
+    return current_renderer:update()
 end
 
 function M.clear(r, g, b, a)
