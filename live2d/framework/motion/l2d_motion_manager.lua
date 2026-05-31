@@ -10,9 +10,6 @@ function L2DMotionManager.new()
     return self
 end
 
-function L2DMotionManager:getCurrentPriority() return self.currentPriority end
-function L2DMotionManager:getReservePriority() return self.reservePriority end
-
 function L2DMotionManager:reserveMotion(priority)
     if self.reservePriority >= priority then return false end
     if self.currentPriority >= priority then return false end

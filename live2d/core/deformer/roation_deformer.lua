@@ -366,16 +366,6 @@ function AffineEnt.new()
     return self
 end
 
-function AffineEnt:init(other)
-    self.originX = other.originX
-    self.originY = other.originY
-    self.scaleX = other.scaleX
-    self.scaleY = other.scaleY
-    self.rotationDeg = other.rotationDeg
-    self.reflectX = other.reflectX
-    self.reflectY = other.reflectY
-end
-
 function AffineEnt:read(br)
     self.originX = br:readFloat32()
     self.originY = br:readFloat32()

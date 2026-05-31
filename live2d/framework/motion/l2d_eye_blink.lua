@@ -32,16 +32,6 @@ function L2DEyeBlink:calcNextBlink()
     return time + r * (2 * self.blinkIntervalMsec - 1)
 end
 
-function L2DEyeBlink:setInterval(blinkIntervalMsec)
-    self.blinkIntervalMsec = blinkIntervalMsec
-end
-
-function L2DEyeBlink:setEyeMotion(closingMotionMsec, closedMotionMsec, openingMotionMsec)
-    self.closingMotionMsec = closingMotionMsec
-    self.closedMotionMsec = closedMotionMsec
-    self.openingMotionMsec = openingMotionMsec
-end
-
 function L2DEyeBlink:updateParam(model)
     local time = UtSystem.getUserTimeMSec()
     local eye_param_value = 0

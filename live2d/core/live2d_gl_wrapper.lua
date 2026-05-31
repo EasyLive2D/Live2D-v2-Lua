@@ -335,10 +335,4 @@ function Live2DGLWrapper.generateMipmap(t)
     gl.glGenerateMipmap(t)
 end
 
-function Live2DGLWrapper.genTextures(n)
-    local tex = ffi.new("GLuint[?]", n)
-    gl.glGenTextures(n, tex)
-    return tex[0]
-end
-
 return Live2DGLWrapper

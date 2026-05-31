@@ -15,21 +15,10 @@ function Avatar:getDeformer()
     return self.deformerList
 end
 
-function Avatar:getDrawDataList()
-    return self.drawDataList
-end
-
 function Avatar:read(br)
     self.id = br:readObject()
     self.drawDataList = br:readObject()
     self.deformerList = br:readObject()
-end
-
-function Avatar:replacePartsData(parts)
-    parts:setDeformer(self.deformerList)
-    parts:setDrawDataList(self.drawDataList)
-    self.deformerList = nil
-    self.drawDataList = nil
 end
 
 return Avatar

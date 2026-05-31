@@ -19,12 +19,6 @@ function L2DMatrix44:getArray()
     return self.tr
 end
 
-function L2DMatrix44:getCopyMatrix()
-    local c = {}
-    for i = 1, 16 do c[i] = self.tr[i] end
-    return c
-end
-
 function L2DMatrix44:setMatrix(tr)
     if tr == nil or #tr ~= 16 then return end
     for i = 1, 16 do self.tr[i] = tr[i] end

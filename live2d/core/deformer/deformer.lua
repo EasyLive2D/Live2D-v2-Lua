@@ -58,14 +58,6 @@ function Deformer:getType()
     error("abstract method: getType() not implemented")
 end
 
-function Deformer:setTargetId(aH)
-    self.targetId = aH
-end
-
-function Deformer:setId(aH)
-    self.id = aH
-end
-
 function Deformer:getTargetId()
     return self.targetId
 end

@@ -136,8 +136,4 @@ function dkjson.decode(s)
     return result
 end
 
-function dkjson.encode(t)
-    error("encode not implemented")
-end
-
 return dkjson

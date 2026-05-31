@@ -271,15 +271,14 @@ function PlatformManager:clearResourceStreams()
     self.resourceStreams = {}
 end
 
-function PlatformManager:setTextureStream(no, width, height, data)
-    self.textureStreams[tonumber(no)] = {
-        width = width,
-        height = height,
-        data = data,
-    }
+function PlatformManager:setTextureStreams(textureStreams)
+    if textureStreams == nil then return end
+    for k, v in pairs(textureStreams) do
+        self.textureStreams[k] = v
+    end
 end
 
-function PlatformManager:setTextureStreams(textureStreams)
+function PlatformManager:jsonParseFromBytes(data)
     if textureStreams == nil then return end
     for k, v in pairs(textureStreams) do
         self.textureStreams[k] = v
@@ -336,10 +335,6 @@ end
 
 function PlatformManager:jsonParseFromBytes(data)
     return dkjson.decode(data)
-end
-
-function PlatformManager:log(msg)
-    print(msg)
 end
 
 return PlatformManager

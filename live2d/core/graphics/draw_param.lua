@@ -55,34 +55,6 @@ function DrawParam:setMatrix(aH)
     end
 end
 
-function DrawParam:getMatrix()
-    return self.matrix4x4
-end
-
-function DrawParam:setPreMultipliedAlpha(aH)
-    self.preMultipliedAlpha = aH
-end
-
-function DrawParam:isPreMultipliedAlpha()
-    return self.preMultipliedAlpha
-end
-
-function DrawParam:setAnisotropy(aH)
-    self.anisotropy = aH
-end
-
-function DrawParam:getAnisotropy()
-    return self.anisotropy
-end
-
-function DrawParam:getClippingProcess()
-    return self.clippingProcess
-end
-
-function DrawParam:setClippingProcess(aH)
-    self.clippingProcess = aH
-end
-
 function DrawParam:setClipBufPre_clipContextForMask(aH)
     self.clipBufPre_clipContextMask = aH
 end

@@ -493,15 +493,5 @@ else
         return w, h, data
     end
 
-    function M.loadImageBytes(bytes, label)
-        local ok, w, h, data = pcall(decodePNG, bytes, label)
-        if not ok then
-            label = label or "<memory>"
-            print("PNG load failed for: " .. label .. " (" .. tostring(w) .. ")")
-            return createDummyTexture(4, 4)
-        end
-        return w, h, data
-    end
-
     return M
 end

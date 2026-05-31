@@ -38,24 +38,9 @@ function L2DBaseModel.new()
     return self
 end
 
-function L2DBaseModel:getModelMatrix() return self.modelMatrix end
-
-function L2DBaseModel:setAlpha(a)
-    if a > 0.999 then a = 1 end
-    if a < 0.001 then a = 0 end
-    self.alpha = a
-end
-
-function L2DBaseModel:getAlpha() return self.alpha end
-function L2DBaseModel:isInitialized() return self.initialized end
 function L2DBaseModel:setInitialized(v) self.initialized = v end
-function L2DBaseModel:isUpdating() return self.updating end
 function L2DBaseModel:setUpdating(v) self.updating = v end
-function L2DBaseModel:getLive2DModel() return self.live2DModel end
-function L2DBaseModel:setAccel(x, y, z) self.accelX = x; self.accelY = y; self.accelZ = z end
 function L2DBaseModel:setDrag(x, y) self.dragX = x; self.dragY = y end
-function L2DBaseModel:getMainMotionManager() return self.mainMotionManager end
-function L2DBaseModel:getExpressionManager() return self.expressionManager end
 
 function L2DBaseModel:loadModelData(path)
     local pm = Live2DFramework.getPlatformManager()

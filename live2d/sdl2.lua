@@ -159,25 +159,13 @@ local SDL_GL_DOUBLEBUFFER = 5
 local SDL_QUIT = 0x100
 local SDL_WINDOWEVENT = 0x200
 local SDL_KEYDOWN = 0x300
-local SDL_KEYUP = 0x301
-local SDL_MOUSEMOTION = 0x400
 local SDL_MOUSEBUTTONDOWN = 0x401
-local SDL_MOUSEBUTTONUP = 0x402
 
 -- Window event types
 local SDL_WINDOWEVENT_SIZE_CHANGED = 6
 
 -- Keycodes
 local SDLK_ESCAPE = 27
-local SDLK_w = 119
-local SDLK_a = 97
-local SDLK_s = 115
-local SDLK_d = 100
-local SDLK_q = 113
-local SDLK_KP_PLUS = 1073741951
-local SDLK_KP_MINUS = 1073741952
-local SDLK_EQUALS = 61
-local SDLK_MINUS = 45
 
 local M = {}
 
@@ -246,13 +234,6 @@ function M.delay(ms)
     sdl.SDL_Delay(ms)
 end
 
-function M.getWindowSize(win)
-    local w = ffi.new("int[1]")
-    local h = ffi.new("int[1]")
-    sdl.SDL_GetWindowSize(win, w, h)
-    return w[0], h[0]
-end
-
 function M.getMouseState()
     local x = ffi.new("int[1]")
     local y = ffi.new("int[1]")
@@ -260,28 +241,12 @@ function M.getMouseState()
     return x[0], y[0]
 end
 
-function M.getError()
-    return ffi.string(sdl.SDL_GetError())
-end
-
 -- Exports
 M.SDL_QUIT = SDL_QUIT
 M.SDL_WINDOWEVENT = SDL_WINDOWEVENT
 M.SDL_KEYDOWN = SDL_KEYDOWN
-M.SDL_KEYUP = SDL_KEYUP
-M.SDL_MOUSEMOTION = SDL_MOUSEMOTION
 M.SDL_MOUSEBUTTONDOWN = SDL_MOUSEBUTTONDOWN
-M.SDL_MOUSEBUTTONUP = SDL_MOUSEBUTTONUP
 M.SDL_WINDOWEVENT_SIZE_CHANGED = SDL_WINDOWEVENT_SIZE_CHANGED
 M.SDLK_ESCAPE = SDLK_ESCAPE
-M.SDLK_w = SDLK_w
-M.SDLK_a = SDLK_a
-M.SDLK_s = SDLK_s
-M.SDLK_d = SDLK_d
-M.SDLK_q = SDLK_q
-M.SDLK_KP_PLUS = SDLK_KP_PLUS
-M.SDLK_KP_MINUS = SDLK_KP_MINUS
-M.SDLK_EQUALS = SDLK_EQUALS
-M.SDLK_MINUS = SDLK_MINUS
 
 return M

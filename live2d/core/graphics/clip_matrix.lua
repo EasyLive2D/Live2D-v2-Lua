@@ -24,10 +24,6 @@ function ClipMatrix:getArray()
     return self.m
 end
 
-function ClipMatrix:getCopyMatrix()
-    return Float32Array(#self.m)
-end
-
 function ClipMatrix:setMatrix(aI)
     if aI == nil or #aI ~= 16 then
         return

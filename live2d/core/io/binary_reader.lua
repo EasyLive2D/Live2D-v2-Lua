@@ -135,12 +135,6 @@ function BinaryReader:readUShort()
     return be_int16(self.buf, ret)
 end
 
-function BinaryReader:readLong()
-    self:checkBits()
-    self.offset = self.offset + 8
-    error("_L _q read long")
-end
-
 function BinaryReader:readBoolean()
     self:checkBits()
     local ret = self.offset

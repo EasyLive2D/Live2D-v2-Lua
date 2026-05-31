@@ -86,10 +86,6 @@ function IDrawData:getId()
     return self.id
 end
 
-function IDrawData:setId(value)
-    self.id = value
-end
-
 function IDrawData.getOpacity(ctx)
     return ctx.interpolatedOpacity
 end
@@ -100,10 +96,6 @@ end
 
 function IDrawData:getTargetId()
     return self.targetId
-end
-
-function IDrawData:setTargetId(aH)
-    self.targetId = aH
 end
 
 function IDrawData:needTransform()

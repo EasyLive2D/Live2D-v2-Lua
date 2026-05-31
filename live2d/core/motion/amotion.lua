@@ -20,16 +20,8 @@ function AMotion:setFadeOut(aH)
     self.fadeOutMSec = aH
 end
 
-function AMotion:setWeight(aH)
-    self.weight = aH
-end
-
 function AMotion:getFadeOut()
     return self.fadeOutMSec
-end
-
-function AMotion:getWeight()
-    return self.weight
 end
 
 function AMotion:getDurationMSec()
@@ -82,30 +74,6 @@ end
 
 function AMotion:updateParamExe(aH, aI, aJ, aK)
     error("abstract method: updateParamExe() not implemented")
-end
-
-function AMotion.getEasing(t, totalTime, accelerateTime)
-    local aQ = t / totalTime
-    local a1 = accelerateTime / totalTime
-    local aU = a1
-    local aZ = 1 / 3
-    local aR = 2 / 3
-    local a0 = 1 - (1 - a1) * (1 - a1)
-    local a2 = 1 - (1 - aU) * (1 - aU)
-    local aM = 0
-    local aL = ((1 - a1) * aZ) * a0 + (aU * aR + (1 - aU) * aZ) * (1 - a0)
-    local aK = (aU + (1 - aU) * aR) * a2 + (a1 * aZ + (1 - a1) * aR) * (1 - a2)
-    local aJ = 1
-    local aY = aJ - 3 * aK + 3 * aL - aM
-    local aX = 3 * aK - 6 * aL + 3 * aM
-    local aW = 3 * aL - 3 * aM
-    local aV = aM
-    if aQ <= 0 then return 0 end
-    if aQ >= 1 then return 1 end
-    local aS = aQ
-    local aI = aS * aS
-    local aH = aS * aI
-    return aY * aH + aX * aI + aW * aS + aV
 end
 
 return AMotion

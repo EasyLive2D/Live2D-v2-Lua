@@ -154,8 +154,4 @@ function PivotManager:calcPivotIndices(aN, aT, aP)
     end
 end
 
-function PivotManager:getParamCount()
-    return #self.paramPivotTable
-end
-
 return PivotManager

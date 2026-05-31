@@ -5,7 +5,6 @@ local L2DExpressionMotion = require("live2d.framework.motion.l2d_expression_moti
 local UtSystem = require("live2d.core.util.ut_system")
 local MatrixManager = require("live2d.matrix_manager")
 local ModelSettingJson = require("live2d.model_setting_json")
-local Parameter = require("live2d.params").Parameter
 
 local MotionPriority = require("live2d.lapp_define").MotionPriority
 
@@ -112,10 +111,6 @@ function LAppModel:Drag(x, y)
     self.dragMgr:setPoint(scx, scy)
 end
 
-function LAppModel:IsMotionFinished()
-    return self.mainMotionManager:isFinished()
-end
-
 function LAppModel:SetOffset(dx, dy)
     self.matrixManager:setOffset(dx, dy)
 end
@@ -140,44 +135,6 @@ end
 
 function LAppModel:SetAutoBlinkEnable(enable)
     self.autoBlink = enable
-end
-
-function LAppModel:GetParameterCount()
-    return #self.live2DModel:getModelContext().paramIdList
-end
-
-function LAppModel:GetParameter(index)
-    local p = Parameter.new()
-    p.value = self.live2DModel:getParamFloat(index)
-    p.max = self.live2DModel:getModelContext():getParamMax(index)
-    p.min = self.live2DModel:getModelContext():getParamMin(index)
-    local inner_params = self.live2DModel:getModelImpl().paramDefSet:getParamDefFloatList()
-    local is_inner = index < #inner_params
-    p.type = is_inner and Parameter.TYPE_INNER or Parameter.TYPE_OUTER
-    p.default = is_inner and inner_params[index + 1]:getDefaultValue() or 0
-    p.id = self.live2DModel:getModelContext().paramIdList[index + 1]
-    return p
-end
-
-function LAppModel:GetPartCount()
-    return #self.live2DModel:getModelImpl():getPartsDataList()
-end
-
-function LAppModel:GetPartId(index)
-    return self.live2DModel:getModelContext():getPartsContext(index).partsData.id.id
-end
-
-function LAppModel:GetPartIds()
-    local ids = {}
-    local ctx = self.live2DModel:getModelContext()
-    for i = 1, #ctx.partsDataList do
-        ids[#ids + 1] = tostring(ctx.partsDataList[i].id)
-    end
-    return ids
-end
-
-function LAppModel:SetPartOpacity(index, opacity)
-    self.live2DModel:setPartsOpacity(index, opacity)
 end
 
 function LAppModel:Update()
@@ -248,18 +205,6 @@ function LAppModel:Draw()
     self.live2DModel:draw()
 end
 
-function LAppModel:HitTest(hitAreaName, testX, testY)
-    local size = self.modelSetting:getHitAreaNum()
-    for i = 0, size - 1 do
-        local area_id = self.modelSetting:getHitAreaName(i)
-        local draw_id = self.modelSetting:getHitAreaID(i)
-        if self:hitTestSimple(draw_id, testX, testY) then
-            return area_id
-        end
-    end
-    return nil
-end
-
 function LAppModel:ClearMotions()
     self._clearFlag = true
 end
@@ -290,21 +235,6 @@ function LAppModel:PreloadExpression(name)
             break
         end
     end
-end
-
-function LAppModel:StartRandomMotion(name, priority, onStartMotionHandler, onFinishMotionHandler)
-    priority = priority or MotionPriority.IDLE
-    if name == nil then
-        local names = self.modelSetting:getMotionNames()
-        if names ~= nil and #names > 0 then
-            name = names[math.random(#names)]
-        else
-            name = "idle"
-        end
-    end
-    local count = self.modelSetting:getMotionNum(name)
-    local no = math.random(count - 1)
-    self:StartMotion(name, no, priority, onStartMotionHandler, onFinishMotionHandler)
 end
 
 function LAppModel:StartMotion(name, no, priority, onStartMotionHandler, onFinishMotionHandler)

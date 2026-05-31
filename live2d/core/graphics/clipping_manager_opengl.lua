@@ -49,17 +49,6 @@ function ClippingManagerOpenGL.new(aJ)
     return self
 end
 
-function ClippingManagerOpenGL:releaseShader()
-    local aI = #Live2D.frameBuffers
-    for aH = 1, aI do
-        if Live2D.frameBuffers[aH] then
-            Live2DGLWrapper.deleteFramebuffer(Live2D.frameBuffers[aH].framebuffer)
-        end
-    end
-    Live2D.frameBuffers = {}
-    Live2D.__glContext = {}
-end
-
 function ClippingManagerOpenGL:init(aO, aN, aL)
     for aM = 1, #aN do
         local aH = aN[aM]:getClipIDList()
@@ -152,10 +141,6 @@ function ClippingManagerOpenGL:setupClip(a1, aQ)
         aQ:setClipBufPre_clipContextForMask(nil)
         Live2DGLWrapper.viewport(rect[1], rect[2], rect[3], rect[4])
     end
-end
-
-function ClippingManagerOpenGL:getColorBuffer()
-    return self.colorBuffer
 end
 
 function ClippingManagerOpenGL:findSameClip(aK)

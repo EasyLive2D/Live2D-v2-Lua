@@ -85,22 +85,6 @@ function Live2DMotion:updateParamExe(aJ, aN, aQ, a3)
     self.lastWeight = aQ
 end
 
-function Live2DMotion:isLoop()
-    return self.loop
-end
-
-function Live2DMotion:setLoop(aH)
-    self.loop = aH
-end
-
-function Live2DMotion:isLoopFadeIn()
-    return self.loopFadeIn
-end
-
-function Live2DMotion:setLoopFadeIn(value)
-    self.loopFadeIn = value
-end
-
 function Live2DMotion.loadMotion(aT)
     local mtn = Live2DMotion.new()
     local aI = {0}

@@ -12,9 +12,7 @@ local M = {
     Live2DGLWrapper = Live2DGLWrapper,
     log = log,
     Live2DFramework = Live2DFramework,
-    MotionGroup = lapp_define.MotionGroup,
     MotionPriority = lapp_define.MotionPriority,
-    HitArea = lapp_define.HitArea,
     LAppModel = LAppModel,
     Parameter = params.Parameter,
     StandardParams = params.StandardParams,
@@ -23,14 +21,6 @@ local M = {
 
 function M.init()
     Live2D.init()
-end
-
-function M.clearBuffer()
-    Live2D.clearBuffer()
-end
-
-function M.setLogEnable(v)
-    log.setLogEnable(v)
 end
 
 function M.dispose()

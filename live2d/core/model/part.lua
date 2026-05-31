@@ -14,11 +14,6 @@ function PartsData.new()
     return self
 end
 
-function PartsData:initDirect()
-    self.deformerList = {}
-    self.drawDataList = {}
-end
-
 function PartsData:read(aH)
     self.locked = aH:readBit()
     self.visible = aH:readBit()
@@ -37,28 +32,12 @@ function PartsData:init()
     return aH
 end
 
-function PartsData:setDeformerList(aH)
-    self.deformerList = aH
-end
-
 function PartsData:setDrawDataList(aH)
     self.drawDataList = aH
 end
 
 function PartsData:isVisible()
     return self.visible
-end
-
-function PartsData:isLocked()
-    return self.locked
-end
-
-function PartsData:setVisible(aH)
-    self.visible = aH
-end
-
-function PartsData:setLocked(aH)
-    self.locked = aH
 end
 
 function PartsData:getDeformer()
@@ -71,10 +50,6 @@ end
 
 function PartsData:getId()
     return self.id
-end
-
-function PartsData:setId(aH)
-    self.id = aH
 end
 
 return PartsData

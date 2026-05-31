@@ -308,10 +308,6 @@ function ModelContext:extendAndAddParam(param_id, default_val, max_val, min_val)
     return ret
 end
 
-function ModelContext:setDeformer(aI, aH)
-    self.deformerList[aI + 1] = aH
-end
-
 function ModelContext:setParamFloat(aH, aI)
     if aI < self.paramMinValues[aH + 1] then
         aI = self.paramMinValues[aH + 1]
@@ -406,36 +402,8 @@ function ModelContext:getPartsContext(aH)
     return self.partsContextList[aH + 1]
 end
 
-function ModelContext:setPartMultiplyColor(aH, r, g, b, a)
-    local aI = self.partsContextList[aH + 1]
-    aI.multiplyColor[1] = r
-    aI.multiplyColor[2] = g
-    aI.multiplyColor[3] = b
-    aI.multiplyColor[4] = a
-end
-
-function ModelContext:getPartMultiplyColor(aH)
-    return self.partsContextList[aH + 1].multiplyColor
-end
-
-function ModelContext:setPartScreenColor(aH, r, g, b, a)
-    local aI = self.partsContextList[aH + 1]
-    aI.screenColor[1] = r
-    aI.screenColor[2] = g
-    aI.screenColor[3] = b
-    aI.screenColor[4] = a
-end
-
-function ModelContext:getPartScreenColor(aH)
-    return self.partsContextList[aH + 1].screenColor
-end
-
 function ModelContext:setDrawParam(aH)
     self.dpGL = aH
-end
-
-function ModelContext:getDrawParam()
-    return self.dpGL
 end
 
 return ModelContext

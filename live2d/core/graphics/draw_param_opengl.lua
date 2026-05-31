@@ -61,20 +61,8 @@ function DrawParamOpenGL.new()
     return self
 end
 
-function DrawParamOpenGL:getGL()
-    return self.gl
-end
-
-function DrawParamOpenGL:setGL(aH)
-    self.gl = aH
-end
-
 function DrawParamOpenGL:resize(ww, wh)
     self.gl:resize(ww, wh)
-end
-
-function DrawParamOpenGL:setTransform(aH)
-    self.transform = aH
 end
 
 function DrawParamOpenGL:setupDraw()

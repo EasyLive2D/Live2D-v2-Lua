@@ -15,9 +15,6 @@ function MatrixManager.new()
     return self
 end
 
-function MatrixManager:getWidth() return self._ww end
-function MatrixManager:getHeight() return self._wh end
-
 function MatrixManager:onResize(width, height)
     self._ww = width
     self._wh = height

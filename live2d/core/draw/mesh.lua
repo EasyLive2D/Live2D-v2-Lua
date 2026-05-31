@@ -32,26 +32,6 @@ function Mesh.new()
     return self
 end
 
-function Mesh:setTextureNo(aH)
-    self.textureNo = aH
-end
-
-function Mesh:getTextureNo()
-    return self.textureNo
-end
-
-function Mesh:getUvs()
-    return self.uvs
-end
-
-function Mesh:getOptionFlag()
-    return self.optionFlag
-end
-
-function Mesh:getNumPoints()
-    return self.pointCount
-end
-
 function Mesh:getType()
     return IDrawData.TYPE_MESH
 end
