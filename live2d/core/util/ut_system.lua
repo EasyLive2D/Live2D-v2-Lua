@@ -7,7 +7,7 @@ local os_clock = os.clock
 local getTimeMSec
 
 local ok_ffi, ffi = pcall(require, "ffi")
-if ok_ffi and ffi.os == "Linux" then
+if ok_ffi and (ffi.os == "Linux" or ffi.os == "OSX") then
     local ok_cdef = pcall(ffi.cdef, [[
         typedef long time_t;
         struct timespec {
@@ -18,7 +18,11 @@ if ok_ffi and ffi.os == "Linux" then
     ]])
 
     if ok_cdef then
-        local CLOCK_MONOTONIC = 1
+        -- CLOCK_MONOTONIC's numeric value differs by platform: 1 on Linux,
+        -- 6 on macOS (Darwin). Using the wrong value makes clock_gettime fail
+        -- and fall back to os.clock() (CPU time), which causes slow-motion
+        -- animation on macOS just like the original Linux bug.
+        local CLOCK_MONOTONIC = (ffi.os == "OSX") and 6 or 1
         local ts = ffi.new("struct timespec[1]")
         getTimeMSec = function()
             if ffi.C.clock_gettime(CLOCK_MONOTONIC, ts) == 0 then
