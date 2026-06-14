@@ -22,6 +22,13 @@ function LAppModel.new()
     self.autoBlink = true
     self.finishCallback = nil
     self._clearFlag = false
+    self._hasBreathParam = false
+    self._hasLightParam = false
+    self._suppressAutoBreathParam = false
+    self._baseBreathValue = 0.0
+    self._baseLightValue = 0.0
+    self._protectHeadsetLightParams = false
+    self._currentExpressionName = nil
     return self
 end
 
@@ -95,10 +102,49 @@ function LAppModel:LoadModelJson(modelSettingPath)
         self.live2DModel:setPartsOpacity(self.modelSetting:getInitPartsVisibleID(j), self.modelSetting:getInitPartsVisibleValue(j))
     end
 
+    self._hasBreathParam = self:_hasParamId("PARAM_BREATH")
+    if self._hasBreathParam then
+        self._baseBreathValue = self.live2DModel:getParamFloat("PARAM_BREATH")
+    end
+    self._hasLightParam = self:_hasParamId("PARAM_LIGHT")
+    if self._hasLightParam then
+        self._baseLightValue = self.live2DModel:getParamFloat("PARAM_LIGHT")
+    end
+    self._protectHeadsetLightParams =
+        self:_hasPartId("PARTS_HEADSET") and (self._hasBreathParam or self._hasLightParam)
+    self._suppressAutoBreathParam =
+        self._protectHeadsetLightParams and self._hasBreathParam
+
     self.live2DModel:saveParam()
     self.mainMotionManager:stopAllMotions()
     self:setUpdating(false)
     self:setInitialized(true)
+end
+
+function LAppModel:_hasParamId(paramId)
+    local ctx = self.live2DModel:getModelContext()
+    for i = 1, #ctx.paramIdList do
+        if tostring(ctx.paramIdList[i]) == paramId then
+            return true
+        end
+    end
+    return false
+end
+
+function LAppModel:_hasPartId(partId)
+    return self.live2DModel:getPartsDataIndex(partId) >= 0
+end
+
+function LAppModel:_restoreProtectedHeadsetLightParams()
+    if not self._protectHeadsetLightParams then
+        return
+    end
+    if self._hasBreathParam then
+        self.live2DModel:setParamFloat("PARAM_BREATH", self._baseBreathValue, 1)
+    end
+    if self._hasLightParam then
+        self.live2DModel:setParamFloat("PARAM_LIGHT", self._baseLightValue, 1)
+    end
 end
 
 function LAppModel:Resize(ww, wh)
@@ -161,6 +207,7 @@ function LAppModel:Update()
         self.live2DModel:loadParam()
         updated = self.mainMotionManager:updateParam(self.live2DModel)
     end
+    self:_restoreProtectedHeadsetLightParams()
     self.live2DModel:saveParam()
 
     if not updated then
@@ -185,12 +232,16 @@ function LAppModel:Update()
         self.live2DModel:addToParamFloat("PARAM_ANGLE_Y", 8 * math.sin(t / 3.5345), 0.5)
         self.live2DModel:addToParamFloat("PARAM_ANGLE_Z", 10 * math.sin(t / 5.5345), 0.5)
         self.live2DModel:addToParamFloat("PARAM_BODY_ANGLE_X", 4 * math.sin(t / 15.5345), 0.5)
-        self.live2DModel:setParamFloat("PARAM_BREATH", 0.5 + 0.5 * math.sin(t / 3.2345), 1)
+        if self._hasBreathParam and not self._suppressAutoBreathParam then
+            self.live2DModel:setParamFloat("PARAM_BREATH", 0.5 + 0.5 * math.sin(t / 3.2345), 1)
+        end
     end
 
     if self.physics ~= nil then
         self.physics:updateParam(self.live2DModel)
     end
+
+    self:_restoreProtectedHeadsetLightParams()
 
     if self.pose ~= nil then
         self.pose:updateParam(self.live2DModel)
@@ -211,6 +262,7 @@ end
 
 function LAppModel:ResetExpression()
     self.expressionManager:stopAllMotions()
+    self._currentExpressionName = nil
 end
 
 function LAppModel:SetExpression(name)
@@ -224,6 +276,11 @@ function LAppModel:SetExpression(name)
     end
     local motion = self.expressions[name]
     if motion == nil then return end
+    if self._currentExpressionName == name and not self.expressionManager:isFinished() then
+        return
+    end
+    self.expressionManager:stopAllMotions()
+    self._currentExpressionName = name
     self.expressionManager:startMotion(motion, false)
 end
 
