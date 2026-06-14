@@ -187,33 +187,33 @@ function DrawParamOpenGL:drawTexture(texNo, screenColor, indexArray, vertexArray
 
     Live2DGLWrapper.enable(Live2DGLWrapper.BLEND)
 
-    local src_color, src_factor, dst_color, dst_factor
+    local src_rgb, dst_rgb, src_alpha, dst_alpha
     if self.clipBufPre_clipContextMask ~= nil then
-        src_color = Live2DGLWrapper.ONE
-        src_factor = Live2DGLWrapper.ONE_MINUS_SRC_ALPHA
-        dst_color = Live2DGLWrapper.ONE
-        dst_factor = Live2DGLWrapper.ONE_MINUS_SRC_ALPHA
+        src_rgb = Live2DGLWrapper.ONE
+        dst_rgb = Live2DGLWrapper.ONE_MINUS_SRC_ALPHA
+        src_alpha = Live2DGLWrapper.ONE
+        dst_alpha = Live2DGLWrapper.ONE_MINUS_SRC_ALPHA
     elseif comp == Mesh.COLOR_COMPOSITION_NORMAL then
-        src_color = Live2DGLWrapper.ONE
-        src_factor = Live2DGLWrapper.ONE_MINUS_SRC_ALPHA
-        dst_color = Live2DGLWrapper.ONE
-        dst_factor = Live2DGLWrapper.ONE_MINUS_SRC_ALPHA
+        src_rgb = Live2DGLWrapper.ONE
+        dst_rgb = Live2DGLWrapper.ONE_MINUS_SRC_ALPHA
+        src_alpha = Live2DGLWrapper.ONE
+        dst_alpha = Live2DGLWrapper.ONE_MINUS_SRC_ALPHA
     elseif comp == Mesh.COLOR_COMPOSITION_SCREEN then
-        src_color = Live2DGLWrapper.ONE
-        src_factor = Live2DGLWrapper.ONE
-        dst_color = Live2DGLWrapper.ZERO
-        dst_factor = Live2DGLWrapper.ONE
+        src_rgb = Live2DGLWrapper.ONE
+        dst_rgb = Live2DGLWrapper.ONE
+        src_alpha = Live2DGLWrapper.ZERO
+        dst_alpha = Live2DGLWrapper.ONE
     elseif comp == Mesh.COLOR_COMPOSITION_MULTIPLY then
-        src_color = Live2DGLWrapper.DST_COLOR
-        src_factor = Live2DGLWrapper.ONE_MINUS_SRC_ALPHA
-        dst_color = Live2DGLWrapper.ZERO
-        dst_factor = Live2DGLWrapper.ONE
+        src_rgb = Live2DGLWrapper.DST_COLOR
+        dst_rgb = Live2DGLWrapper.ONE_MINUS_SRC_ALPHA
+        src_alpha = Live2DGLWrapper.ZERO
+        dst_alpha = Live2DGLWrapper.ONE
     else
         error("unknown comp")
     end
 
     Live2DGLWrapper.blendEquationSeparate(Live2DGLWrapper.FUNC_ADD, Live2DGLWrapper.FUNC_ADD)
-    Live2DGLWrapper.blendFuncSeparate(src_color, src_factor, dst_color, dst_factor)
+    Live2DGLWrapper.blendFuncSeparate(src_rgb, dst_rgb, src_alpha, dst_alpha)
 
     local count = #indexArray
     Live2DGLWrapper.drawElements(Live2DGLWrapper.TRIANGLES, count, Live2DGLWrapper.UNSIGNED_SHORT, nil)
@@ -328,8 +328,10 @@ void main(){
         smpColor = u_channelFlag * texture2D(s_texture0, v_texCoord).a * isInside;
     }else{
         smpColor = texture2D(s_texture0 , v_texCoord);
-        smpColor.rgb = smpColor.rgb * u_multiplyColor.rgb;
-        smpColor.rgb = smpColor.rgb + u_screenColor.rgb - (smpColor.rgb * u_screenColor.rgb);
+        vec3 multipliedColor = smpColor.rgb * u_multiplyColor.rgb;
+        smpColor.rgb = mix(smpColor.rgb, multipliedColor, u_multiplyColor.a);
+        vec3 screenedColor = smpColor.rgb + u_screenColor.rgb - (smpColor.rgb * u_screenColor.rgb);
+        smpColor.rgb = mix(smpColor.rgb, screenedColor, u_screenColor.a);
         smpColor = smpColor * u_baseColor;
     }
     gl_FragColor = smpColor;
@@ -363,8 +365,10 @@ uniform vec4       u_screenColor;
 uniform vec4       u_multiplyColor;
 void main(){
     vec4 col_formask = texture2D(s_texture0, v_texCoord);
-    col_formask.rgb = col_formask.rgb * u_multiplyColor.rgb;
-    col_formask.rgb = col_formask.rgb + u_screenColor.rgb - (col_formask.rgb * u_screenColor.rgb);
+    vec3 multipliedColor = col_formask.rgb * u_multiplyColor.rgb;
+    col_formask.rgb = mix(col_formask.rgb, multipliedColor, u_multiplyColor.a);
+    vec3 screenedColor = col_formask.rgb + u_screenColor.rgb - (col_formask.rgb * u_screenColor.rgb);
+    col_formask.rgb = mix(col_formask.rgb, screenedColor, u_screenColor.a);
     col_formask = col_formask * u_baseColor;
     vec4 clipMask = texture2D(s_texture1, v_clipPos.xy / v_clipPos.w) * u_channelFlag;
     float maskVal = clipMask.r + clipMask.g + clipMask.b + clipMask.a;
