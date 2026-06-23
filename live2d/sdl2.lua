@@ -154,6 +154,7 @@ local SDL_GL_CONTEXT_MINOR_VERSION = 18
 local SDL_GL_CONTEXT_PROFILE_MASK = 19
 local SDL_GL_CONTEXT_PROFILE_COMPATIBILITY = 2
 local SDL_GL_DOUBLEBUFFER = 5
+local SDL_GL_STENCIL_SIZE = 7
 
 -- Event types
 local SDL_QUIT = 0x100
@@ -181,6 +182,7 @@ function M.quit()
 end
 
 function M.createWindow(title, width, height)
+    sdl.SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8)
     local flags = bit.bor(SDL_WINDOW_OPENGL, SDL_WINDOW_SHOWN, SDL_WINDOW_RESIZABLE)
     local win = sdl.SDL_CreateWindow(title, 0x1FFF0000, 0x1FFF0000, width, height, flags)
     if win == nil then

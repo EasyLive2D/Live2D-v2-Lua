@@ -3,6 +3,17 @@
 
 local ffi = require("ffi")
 local draw_order_from_raw = require("live2d.cubism3.core.art_mesh").draw_order_from_raw
+local drawable = require("live2d.cubism3.moc3.drawable")
+
+local GL_STENCIL_TEST = 0x0B90
+local GL_ALPHA_TEST = 0x0BC0
+local GL_STENCIL_BUFFER_BIT = 0x00000400
+local GL_ALWAYS = 0x0207
+local GL_EQUAL = 0x0202
+local GL_NOTEQUAL = 0x0205
+local GL_KEEP = 0x1E00
+local GL_REPLACE = 0x1E01
+local GL_GREATER = 0x0204
 
 -- Vertex shader: position + uv + opacity + multiply + screen colors
 local VERTEX_SHADER = [[
@@ -193,8 +204,48 @@ function OpenGLRenderer:render_meshes(meshes, textures, projection)
     for _, idx in ipairs(draw_order_indices) do
         local mesh = meshes[idx + 1]
         if mesh and mesh.opacity > 0.001 then
-            self:draw_mesh(mesh, textures, projection)
+            if #mesh.masks > 0 and gl.glStencilFunc and gl.glStencilOp and gl.glStencilMask then
+                self:draw_clipped_mesh(mesh, meshes, textures, projection)
+            else
+                self:draw_mesh(mesh, textures, projection)
+            end
         end
+    end
+end
+
+function OpenGLRenderer:draw_clipped_mesh(mesh, meshes, textures, projection)
+    local gl = self.gl
+
+    gl.glEnable(GL_STENCIL_TEST)
+    if gl.glAlphaFunc then
+        gl.glEnable(GL_ALPHA_TEST)
+        gl.glAlphaFunc(GL_GREATER, 0.01)
+    end
+
+    gl.glClear(GL_STENCIL_BUFFER_BIT)
+    gl.glColorMask(0, 0, 0, 0)
+    gl.glStencilMask(0xFF)
+    gl.glStencilFunc(GL_ALWAYS, 1, 0xFF)
+    gl.glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE)
+
+    for _, mask_idx in ipairs(mesh.masks) do
+        local mask_mesh = meshes[mask_idx + 1]
+        if mask_mesh and mask_mesh.opacity > 0.001 then
+            self:draw_mesh(mask_mesh, textures, projection)
+        end
+    end
+
+    gl.glColorMask(1, 1, 1, 1)
+    gl.glStencilMask(0x00)
+    local stencil_func = drawable.is_inverted_mask(mesh.drawable_flags) and GL_NOTEQUAL or GL_EQUAL
+    gl.glStencilFunc(stencil_func, 1, 0xFF)
+    gl.glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP)
+    self:draw_mesh(mesh, textures, projection)
+
+    gl.glStencilMask(0xFF)
+    gl.glDisable(GL_STENCIL_TEST)
+    if gl.glAlphaFunc then
+        gl.glDisable(GL_ALPHA_TEST)
     end
 end
 
@@ -241,7 +292,7 @@ function OpenGLRenderer:draw_mesh(mesh, textures, projection)
     end
 
     -- Set blend mode
-    local blend = require("live2d.cubism3.moc3.drawable").blend_mode_from_flags(mesh.drawable_flags)
+    local blend = drawable.blend_mode_from_flags(mesh.drawable_flags)
     if blend == "normal" then
         gl.glBlendFunc(0x0302, 0x0303) -- GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
         gl.glBlendEquationSeparate(0x8006, 0x8006) -- GL_FUNC_ADD

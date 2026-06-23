@@ -63,6 +63,11 @@ ffi.cdef[[
     void glEnable(GLenum cap);
     void glDisable(GLenum cap);
     void glColorMask(GLboolean red, GLboolean green, GLboolean blue, GLboolean alpha);
+    void glAlphaFunc(GLenum func, GLclampf ref);
+    void glClearStencil(GLint s);
+    void glStencilFunc(GLenum func, GLint ref, GLuint mask);
+    void glStencilMask(GLuint mask);
+    void glStencilOp(GLenum fail, GLenum zfail, GLenum zpass);
     void glFrontFace(GLenum mode);
     void glBindTexture(GLenum target, GLuint texture);
     void glDeleteTextures(GLsizei n, const GLuint *textures);
