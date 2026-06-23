@@ -8,19 +8,21 @@
   <a href="https://github.com/HELPMEEADICE/Live2D-v2-Lua/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/HELPMEEADICE/Live2D-v2-Lua?color=yellow"></a>
   <a href="https://github.com/HELPMEEADICE/Live2D-v2-Lua/network/members"><img alt="Forks" src="https://img.shields.io/github/forks/HELPMEEADICE/Live2D-v2-Lua?color=orange"></a>
   <a href="https://luajit.org/"><img alt="LuaJIT" src="https://img.shields.io/badge/LuaJIT-2.1+-000080?logo=lua&logoColor=white"></a>
-  <a href="https://www.live2d.com/"><img alt="Live2D" src="https://img.shields.io/badge/Live2D-Cubism%20v2-EE82EE?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0tMSAxNy45M2MtMy45NS0uNDktNy0zLjg1LTctNy45M3MzLjA1LTcuNDQgNy03LjkzdjE1Ljg2em0yLTE1Ljg2YzMuOTUuNDkgNyAzLjg1IDcgNy45M3MtMy4wNSA3LjQ0LTcgNy45M1Y0LjA3eiIvPjwvc3ZnPg=="></a>
+  <a href="https://www.live2d.com/"><img alt="Live2D" src="https://img.shields.io/badge/Live2D-Cubism%202%2F3-EE82EE"></a>
   <a href="https://github.com/HELPMEEADICE/Live2D-v2-Lua"><img alt="Last Commit" src="https://img.shields.io/github/last-commit/HELPMEEADICE/Live2D-v2-Lua?color=green"></a>
 </p>
 
-> キラキラドキドキ！Live2D Cubism 2.1 SDK，LuaJIT 纯享版。
+> キラキラドキドキ！Live2D Cubism 2.1 & Cubism 3 (MOC3) SDK，LuaJIT 纯享版。
 
-将 [EasyLive2D/live2d-v2](https://github.com/EasyLive2D/live2d-v2) 从 Python 完整重构为 Lua，**零 C 编译，纯 FFI**。只要你有 LuaJIT + SDL2 + 一颗对二次元赤诚的心，就能跑。
+将 [EasyLive2D/live2d-v2](https://github.com/EasyLive2D/live2d-v2) 从 Python 完整重构为 Lua，**零 C 编译，纯 FFI**。Cubism 3 (MOC3) 支持移植自 Rust 运行时 [Eatgrapes/Mocari](https://github.com/Eatgrapes/Mocari)。只要你有 LuaJIT + SDL2 + 一颗对二次元赤诚的心，就能跑。
 
 如果问我为什么选 Lua——大概就和香澄在仓库找到 Random Star 一样，有些事情不需要理由。（其实是因为 Python 性能太差了。）
 
 > ⚠️ `main.lua` 只是一个演示。使用 Lua 编码的真正目的是：这个高性能（比 Python 高到不知道哪里去了）的 Live2D v2 渲染核心，可以像胶水一样轻松嵌到任何语言里——不管是 C++ 一个 `lua_pcall`，还是 Python 一个 `lupa`，随你喜欢。
 > 
-> 🔌 **Python 调用方法详见 [Embedded2Python_cn.md](Embedded2Python_cn.md)**，内含 lupa / ctypes / 子进程三种接入方案、PySide6 完整示例及常见问题排查。
+> 🔌 **Python 调用方法详见 [Embedded2Python_cn.md](Embedded2Python_cn.md)** (Cubism 2.1)，内含 lupa / ctypes / 子进程三种接入方案、PySide6 完整示例及常见问题排查。
+>
+> 🎀 **Cubism 3 (MOC3) Python 嵌入：[Embedded2PythonCubism3_cn.md](Embedded2PythonCubism3_cn.md)** — ModelRuntime API、动作播放、OpenGL 着色器渲染、完整 lupa 示例。
 
 > 🌸 这是一个粉丝向的移植项目，本仓库源于 [EasyLive2D/live2d-v2](https://github.com/EasyLive2D/live2d-v2)（MIT），并由 Python 重构为 Lua。
 > 
@@ -70,7 +72,8 @@ luajit render_frames.lua
 
 | 脚本 | 功能 |
 |------|------|
-| `main.lua` | 交互式查看器，鼠标跟随 + 点击切换动作 + 自动呼吸/眨眼 |
+| `main.lua` | 交互式查看器 (Cubism 2.1)，鼠标跟随 + 点击切换动作 + 自动呼吸/眨眼 |
+| `main_moc3.lua` | 交互式查看器 (Cubism 3 / MOC3)，Hiyori 模型 + 点击播放动作 |
 | `render_frames.lua` | 离线渲染 20 帧并输出 BMP 到 `frames_output/` |
 | `live2d_embed.lua` | 无窗口渲染核心模块，供宿主语言嵌入调用 |
 | `examples/pyside6_lupa_kasumi2.py` | Python 接入完整示例 (PySide6 + lupa) |
@@ -78,9 +81,14 @@ luajit render_frames.lua
 
 ## 默认角色
 
-`kasumi2`——是的，就是那个香澄，BanG Dream! Poppin'Party 的主唱兼吉他手。模型文件在 `resources/kasumi2/kasumi2.model.json`。
+| 角色 | 格式 | 查看器 | 说明 |
+|------|------|--------|------|
+| `kasumi2` | Cubism 2.1 (`.moc`) | `main.lua` | BanG Dream! Poppin'Party 的香澄 |
+| `Hiyori` | Cubism 3 (`.moc3`) | `main_moc3.lua` | 日和，附带 10 个待机动作 + 1 个点击动作 |
 
 > どうせなら、星の鼓動でいこう！ 🎸✨
+> 
+> 🌸 日和酱也要よろしく！
 
 ## 项目结构
 
@@ -89,6 +97,13 @@ live2d/
   init.lua                 # facade
   core/                    # Cubism Core 2.1 移植
   framework/               # Cubism Framework 移植
+  cubism3/                 # Cubism 3 (MOC3) 移植自 Mocari (Rust)
+    core/                  #   数学、插值、变形器、物理
+    json/                  #   Model3/Motion3/Physics3/Pose3 JSON 解析器
+    moc3/                  #   MOC3 二进制格式解析器（14 个 section）
+    runtime.lua            #   ModelRuntime - 状态机
+    motion.lua             #   MotionPlayer
+    opengl_renderer.lua    #   OpenGL 着色器渲染器
   sdl2.lua                 # SDL2 FFI 绑定（纯 Lua 声明 + 加载）
   gl_loader.lua            # OpenGL 扩展加载器（wglGetProcAddress / glXGetProcAddress）
   platform_manager.lua     # 文件 I/O 抽象层

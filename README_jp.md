@@ -8,19 +8,21 @@
   <a href="https://github.com/HELPMEEADICE/Live2D-v2-Lua/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/HELPMEEADICE/Live2D-v2-Lua?color=yellow"></a>
   <a href="https://github.com/HELPMEEADICE/Live2D-v2-Lua/network/members"><img alt="Forks" src="https://img.shields.io/github/forks/HELPMEEADICE/Live2D-v2-Lua?color=orange"></a>
   <a href="https://luajit.org/"><img alt="LuaJIT" src="https://img.shields.io/badge/LuaJIT-2.1+-000080?logo=lua&logoColor=white"></a>
-  <a href="https://www.live2d.com/"><img alt="Live2D" src="https://img.shields.io/badge/Live2D-Cubism%20v2-EE82EE?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0tMSAxNy45M2MtMy45NS0uNDktNy0zLjg1LTctNy45M3MzLjA1LTcuNDQgNy03LjkzdjE1Ljg2em0yLTE1Ljg2YzMuOTUuNDkgNyAzLjg1IDcgNy45M3MtMy4wNSA3LjQ0LTcgNy45M1Y0LjA3eiIvPjwvc3ZnPg=="></a>
+  <a href="https://www.live2d.com/"><img alt="Live2D" src="https://img.shields.io/badge/Live2D-Cubism%202%2F3-EE82EE"></a>
   <a href="https://github.com/HELPMEEADICE/Live2D-v2-Lua"><img alt="Last Commit" src="https://img.shields.io/github/last-commit/HELPMEEADICE/Live2D-v2-Lua?color=green"></a>
 </p>
 
-> キラキラドキドキ！Live2D Cubism 2.1 SDK、LuaJIT 純粋版。
+> キラキラドキドキ！Live2D Cubism 2.1 & Cubism 3 (MOC3) SDK、LuaJIT 純粋版。
 
-[EasyLive2D/live2d-v2](https://github.com/EasyLive2D/live2d-v2) を Python から Lua へ完全にリファクタリングしました。**C コンパイル不要、純粋 FFI**。LuaJIT + SDL2 + アニメへの熱い心があれば動きます。
+[EasyLive2D/live2d-v2](https://github.com/EasyLive2D/live2d-v2) を Python から Lua へ完全にリファクタリングしました。**C コンパイル不要、純粋 FFI**。Cubism 3 (MOC3) は Rust ランタイム [Eatgrapes/Mocari](https://github.com/Eatgrapes/Mocari) から移植しました。LuaJIT + SDL2 + アニメへの熱い心があれば動きます。
 
 なぜ Lua を選んだのか——それは多分、香澄が倉庫で Random Star を見つけた時と同じで、理由なんて要らないからです。（本当は Python のパフォーマンスが酷すぎるからですが。）
 
 > ⚠️ `main.lua` はデモに過ぎません。この Lua 実装の本当の目的は：この高性能（Python より圧倒的に速い）Live2D v2 レンダリングコアが、接着剤のようにどんな言語にも簡単に埋め込めることです——C++ なら `lua_pcall`、Python なら `lupa`、お好みでどうぞ。
 >
-> 🔌 **Python からの呼び出し方法は [Embedded2Python_jp.md](Embedded2Python_jp.md) を参照**。lupa / ctypes / サブプロセス の3つの統合方法、PySide6 の完全な例、トラブルシューティング FAQ を含みます。
+> 🔌 **Python からの呼び出し方法は [Embedded2Python_jp.md](Embedded2Python_jp.md) を参照** (Cubism 2.1)。lupa / ctypes / サブプロセス の3つの統合方法、PySide6 の完全な例、トラブルシューティング FAQ を含みます。
+>
+> 🎀 **Cubism 3 (MOC3) Python 埋め込み：[Embedded2PythonCubism3_jp.md](Embedded2PythonCubism3_jp.md)** — ModelRuntime API、モーション再生、OpenGL シェーダーレンダリング、完全な lupa 例。
 
 > 🌸 これはファンメイドの移植プロジェクトです。このリポジトリは [EasyLive2D/live2d-v2](https://github.com/EasyLive2D/live2d-v2)（MIT）に由来し、Python から Lua にリファクタリングされました。
 >
@@ -70,7 +72,8 @@ luajit render_frames.lua
 
 | スクリプト | 機能 |
 |-----------|------|
-| `main.lua` | インタラクティブビューア、マウス追跡 + クリックでモーション切替 + 自動呼吸/まばたき |
+| `main.lua` | インタラクティブビューア (Cubism 2.1)、マウス追跡 + クリックでモーション切替 + 自動呼吸/まばたき |
+| `main_moc3.lua` | インタラクティブビューア (Cubism 3 / MOC3)、Hiyori モデル + クリックでモーション再生 |
 | `render_frames.lua` | 20フレームを BMP として `frames_output/` にオフラインレンダリング |
 | `live2d_embed.lua` | ヘッドレスレンダリングコアモジュール、ホスト言語への埋め込み用 |
 | `examples/pyside6_lupa_kasumi2.py` | Python 統合の完全な例 (PySide6 + lupa) |
@@ -78,9 +81,14 @@ luajit render_frames.lua
 
 ## デフォルトキャラクター
 
-`kasumi2`——そうです、あの香澄、BanG Dream! Poppin'Party のボーカル兼ギタリストです。モデルファイルは `resources/kasumi2/kasumi2.model.json` にあります。
+| 名前 | 形式 | ビューア | 説明 |
+|------|------|---------|------|
+| `kasumi2` | Cubism 2.1 (`.moc`) | `main.lua` | BanG Dream! Poppin'Party の香澄 |
+| `Hiyori` | Cubism 3 (`.moc3`) | `main_moc3.lua` | ひより、10個の待機モーション + 1個のタップモーション付き |
 
 > どうせなら、星の鼓動でいこう！ 🎸✨
+>
+> 🌸 ひよりちゃんもよろしくね！
 
 ## プロジェクト構成
 
@@ -89,6 +97,13 @@ live2d/
   init.lua                 # facade
   core/                    # Cubism Core 2.1 移植
   framework/               # Cubism Framework 移植
+  cubism3/                 # Cubism 3 (MOC3) 移植 (Mocari / Rust から)
+    core/                  #   数学、補間、デフォーマー、物理演算
+    json/                  #   Model3/Motion3/Physics3/Pose3 JSON パーサー
+    moc3/                  #   MOC3 バイナリフォーマットパーサー (14 セクション)
+    runtime.lua            #   ModelRuntime - 状態マシン
+    motion.lua             #   MotionPlayer
+    opengl_renderer.lua    #   OpenGL シェーダーレンダラー
   sdl2.lua                 # SDL2 FFI バインディング（純粋 Lua 宣言 + ローダー）
   gl_loader.lua            # OpenGL 拡張ローダー（wglGetProcAddress / glXGetProcAddress）
   platform_manager.lua     # ファイル I/O 抽象レイヤー

@@ -8,19 +8,21 @@
   <a href="https://github.com/HELPMEEADICE/Live2D-v2-Lua/stargazers"><img alt="Stars" src="https://img.shields.io/github/stars/HELPMEEADICE/Live2D-v2-Lua?color=yellow"></a>
   <a href="https://github.com/HELPMEEADICE/Live2D-v2-Lua/network/members"><img alt="Forks" src="https://img.shields.io/github/forks/HELPMEEADICE/Live2D-v2-Lua?color=orange"></a>
   <a href="https://luajit.org/"><img alt="LuaJIT" src="https://img.shields.io/badge/LuaJIT-2.1+-000080?logo=lua&logoColor=white"></a>
-  <a href="https://www.live2d.com/"><img alt="Live2D" src="https://img.shields.io/badge/Live2D-Cubism%20v2-EE82EE?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAyQzYuNDggMiAyIDYuNDggMiAxMnM0LjQ4IDEwIDEwIDEwIDEwLTQuNDggMTAtMTBTMTcuNTIgMiAxMiAyem0tMSAxNy45M2MtMy45NS0uNDktNy0zLjg1LTctNy45M3MzLjA1LTcuNDQgNy03LjkzdjE1Ljg2em0yLTE1Ljg2YzMuOTUuNDkgNyAzLjg1IDcgNy45M3MtMy4wNSA3LjQ0LTcgNy45M1Y0LjA3eiIvPjwvc3ZnPg=="></a>
+  <a href="https://www.live2d.com/"><img alt="Live2D" src="https://img.shields.io/badge/Live2D-Cubism%202%2F3-EE82EE"></a>
   <a href="https://github.com/HELPMEEADICE/Live2D-v2-Lua"><img alt="Last Commit" src="https://img.shields.io/github/last-commit/HELPMEEADICE/Live2D-v2-Lua?color=green"></a>
 </p>
 
-> Kirakira dokidoki! Live2D Cubism 2.1 SDK, pure LuaJIT edition.
+> Kirakira dokidoki! Live2D Cubism 2.1 & Cubism 3 (MOC3) SDK, pure LuaJIT edition.
 
-A complete Lua rewrite of [EasyLive2D/live2d-v2](https://github.com/EasyLive2D/live2d-v2) from Python — **zero C compilation, pure FFI**. As long as you have LuaJIT + SDL2 + a heart burning with anime passion, it just runs.
+A complete Lua rewrite of [EasyLive2D/live2d-v2](https://github.com/EasyLive2D/live2d-v2) from Python — **zero C compilation, pure FFI**. Cubism 3 (MOC3) support is ported from the Rust runtime [Eatgrapes/Mocari](https://github.com/Eatgrapes/Mocari). As long as you have LuaJIT + SDL2 + a heart burning with anime passion, it just runs.
 
 If you ask me why Lua — it's probably like when Kasumi found the Random Star in the warehouse. Some things need no reason. (Actually, it's because Python performance is awful.)
 
 > ⚠️ `main.lua` is just a demo. The real purpose of this Lua implementation is: this high-performance (way beyond Python) Live2D v2 rendering core can be embedded into any language like glue — whether it's C++ via `lua_pcall` or Python via `lupa`, whatever you like.
 >
-> 🔌 **See [Embedded2Python.md](Embedded2Python.md) for Python integration**, with lupa / ctypes / subprocess approaches, full PySide6 example, and troubleshooting FAQ.
+> 🔌 **See [Embedded2Python.md](Embedded2Python.md) for Python integration** (Cubism 2.1), with lupa / ctypes / subprocess approaches, full PySide6 example, and troubleshooting FAQ.
+>
+> 🎀 **Cubism 3 (MOC3) Python embedding: [Embedded2PythonCubism3.md](Embedded2PythonCubism3.md)** — ModelRuntime API, motion playback, OpenGL shader rendering, complete lupa example.
 
 > 🌸 This is a fan-made port. This repository originates from [EasyLive2D/live2d-v2](https://github.com/EasyLive2D/live2d-v2) (MIT), rewritten from Python to Lua.
 >
@@ -70,17 +72,23 @@ luajit render_frames.lua
 
 | Script | Function |
 |--------|----------|
-| `main.lua` | Interactive viewer with mouse tracking + click motion switching + auto breathing/blinking |
+| `main.lua` | Interactive viewer (Cubism 2.1) with mouse tracking + click motion switching + auto breathing/blinking |
+| `main_moc3.lua` | Interactive viewer (Cubism 3 / MOC3) for Hiyori model, motion play on click |
 | `render_frames.lua` | Offline render 20 frames as BMP to `frames_output/` |
 | `live2d_embed.lua` | Headless rendering core module for host language embedding |
 | `examples/pyside6_lupa_kasumi2.py` | Complete Python integration example (PySide6 + lupa) |
 | `simple.lua` | ~~Work in progress~~ Don't use |
 
-## Default Character
+## Default Characters
 
-`kasumi2` — yes, that Kasumi, the vocalist and guitarist of Poppin'Party from BanG Dream! The model files are in `resources/kasumi2/kasumi2.model.json`.
+| Name | Format | Viewer | Description |
+|------|--------|--------|-------------|
+| `kasumi2` | Cubism 2.1 (`.moc`) | `main.lua` | Kasumi from BanG Dream! Poppin'Party |
+| `Hiyori` | Cubism 3 (`.moc3`) | `main_moc3.lua` | Hiyori Momose, bundled with 10 idle motions + 1 tap motion |
 
 > Douse nara, hoshi no kodou de ikou! 🎸✨
+>
+> 🌸 Hiyori-chan mo yoroshiku ne!
 
 ## Project Structure
 
@@ -89,6 +97,13 @@ live2d/
   init.lua                 # facade
   core/                    # Cubism Core 2.1 port
   framework/               # Cubism Framework port
+  cubism3/                 # Cubism 3 (MOC3) port from Mocari (Rust)
+    core/                  #   Math, interpolation, deformers, physics
+    json/                  #   Model3/Motion3/Physics3/Pose3 JSON parsers
+    moc3/                  #   MOC3 binary format parser (14 sections)
+    runtime.lua            #   ModelRuntime - state machine
+    motion.lua             #   MotionPlayer
+    opengl_renderer.lua    #   OpenGL shader renderer
   sdl2.lua                 # SDL2 FFI bindings (pure Lua declarations + loader)
   gl_loader.lua            # OpenGL extension loader (wglGetProcAddress / glXGetProcAddress)
   platform_manager.lua     # File I/O abstraction layer
