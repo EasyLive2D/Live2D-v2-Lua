@@ -109,7 +109,10 @@ if is_mac then
         void glBindBuffer(GLenum target, GLuint buffer);
         void glBufferData(GLenum target, GLsizeiptr size, const void *data, GLenum usage);
         void glEnableVertexAttribArray(GLuint index);
+        void glDisableVertexAttribArray(GLuint index);
         void glVertexAttribPointer(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
+        void glGenVertexArrays(GLsizei n, GLuint *arrays);
+        void glBindVertexArray(GLuint array);
         void glUniform1i(GLint location, GLint v0);
         void glUniform4f(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);
         void glUniformMatrix4fv(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
@@ -150,7 +153,10 @@ ffi.cdef("typedef void (" .. CC .. "*PFNGLDELETEBUFFERSPROC)(GLsizei n, const GL
 ffi.cdef("typedef void (" .. CC .. "*PFNGLBINDBUFFERPROC)(GLenum target, GLuint buffer);")
 ffi.cdef("typedef void (" .. CC .. "*PFNGLBUFFERDATAPROC)(GLenum target, GLsizeiptr size, const void *data, GLenum usage);")
 ffi.cdef("typedef void (" .. CC .. "*PFNGLENABLEVERTEXATTRIBARRAYPROC)(GLuint index);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLDISABLEVERTEXATTRIBARRAYPROC)(GLuint index);")
 ffi.cdef("typedef void (" .. CC .. "*PFNGLVERTEXATTRIBPOINTERPROC)(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLGENVERTEXARRAYSPROC)(GLsizei n, GLuint *arrays);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLBINDVERTEXARRAYPROC)(GLuint array);")
 ffi.cdef("typedef void (" .. CC .. "*PFNGLUNIFORM1IPROC)(GLint location, GLint v0);")
 ffi.cdef("typedef void (" .. CC .. "*PFNGLUNIFORM4FPROC)(GLint location, GLfloat v0, GLfloat v1, GLfloat v2, GLfloat v3);")
 ffi.cdef("typedef void (" .. CC .. "*PFNGLUNIFORMMATRIX4FVPROC)(GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);")
@@ -216,7 +222,10 @@ function gl.ensureExtensions()
     gl.glBindBuffer = loadGL("glBindBuffer", "PFNGLBINDBUFFERPROC")
     gl.glBufferData = loadGL("glBufferData", "PFNGLBUFFERDATAPROC")
     gl.glEnableVertexAttribArray = loadGL("glEnableVertexAttribArray", "PFNGLENABLEVERTEXATTRIBARRAYPROC")
+    gl.glDisableVertexAttribArray = loadGL("glDisableVertexAttribArray", "PFNGLDISABLEVERTEXATTRIBARRAYPROC")
     gl.glVertexAttribPointer = loadGL("glVertexAttribPointer", "PFNGLVERTEXATTRIBPOINTERPROC")
+    gl.glGenVertexArrays = loadGL("glGenVertexArrays", "PFNGLGENVERTEXARRAYSPROC")
+    gl.glBindVertexArray = loadGL("glBindVertexArray", "PFNGLBINDVERTEXARRAYPROC")
     gl.glUniform1i = loadGL("glUniform1i", "PFNGLUNIFORM1IPROC")
     gl.glUniform4f = loadGL("glUniform4f", "PFNGLUNIFORM4FPROC")
     gl.glUniformMatrix4fv = loadGL("glUniformMatrix4fv", "PFNGLUNIFORMMATRIX4FVPROC")
