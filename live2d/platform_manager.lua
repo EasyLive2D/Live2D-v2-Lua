@@ -6,6 +6,7 @@ local Live2DGLWrapper = require("live2d.core.live2d_gl_wrapper")
 local imageLoader = require("live2d.image_loader")
 local dkjson = require("live2d.dkjson")
 local ffi = require("ffi")
+local floor = math.floor
 
 local PlatformManager = {}
 PlatformManager.__index = PlatformManager
@@ -37,9 +38,9 @@ local function premultiplyAlpha(w, h, data)
     for i = 0, pixelCount - 1 do
         local base = i * 4
         local a = src[base + 3]
-        out[base] = math.floor((src[base] * a + 127) / 255)
-        out[base + 1] = math.floor((src[base + 1] * a + 127) / 255)
-        out[base + 2] = math.floor((src[base + 2] * a + 127) / 255)
+        out[base] = floor((src[base] * a + 127) / 255)
+        out[base + 1] = floor((src[base + 1] * a + 127) / 255)
+        out[base + 2] = floor((src[base + 2] * a + 127) / 255)
         out[base + 3] = a
     end
     return out
@@ -51,9 +52,9 @@ local function premultiplyAlphaInPlace(w, h, data)
     for i = 0, pixelCount - 1 do
         local base = i * 4
         local a = src[base + 3]
-        src[base] = math.floor((src[base] * a + 127) / 255)
-        src[base + 1] = math.floor((src[base + 1] * a + 127) / 255)
-        src[base + 2] = math.floor((src[base + 2] * a + 127) / 255)
+        src[base] = floor((src[base] * a + 127) / 255)
+        src[base + 1] = floor((src[base + 1] * a + 127) / 255)
+        src[base + 2] = floor((src[base + 2] * a + 127) / 255)
     end
     return src
 end
@@ -94,14 +95,14 @@ local function bleedAndPremultiplyAlpha(w, h, data)
                     end
                 end
                 if total > 0 then
-                    sr = math.floor((r + total / 2) / total)
-                    sg = math.floor((g + total / 2) / total)
-                    sb = math.floor((b + total / 2) / total)
+                    sr = floor((r + total / 2) / total)
+                    sg = floor((g + total / 2) / total)
+                    sb = floor((b + total / 2) / total)
                 end
             end
-            out[base] = math.floor((sr * a + 127) / 255)
-            out[base + 1] = math.floor((sg * a + 127) / 255)
-            out[base + 2] = math.floor((sb * a + 127) / 255)
+            out[base] = floor((sr * a + 127) / 255)
+            out[base + 1] = floor((sg * a + 127) / 255)
+            out[base + 2] = floor((sb * a + 127) / 255)
             out[base + 3] = a
         end
     end
@@ -158,16 +159,16 @@ local function bleedAndPremultiplyAlphaInPlace(w, h, data)
                     end
                 end
                 if total > 0 then
-                    sr = math.floor((r + total / 2) / total)
-                    sg = math.floor((g + total / 2) / total)
-                    sb = math.floor((b + total / 2) / total)
+                    sr = floor((r + total / 2) / total)
+                    sg = floor((g + total / 2) / total)
+                    sb = floor((b + total / 2) / total)
                 end
             end
 
             local base = (y * w + x) * 4
-            src[base] = math.floor((sr * a + 127) / 255)
-            src[base + 1] = math.floor((sg * a + 127) / 255)
-            src[base + 2] = math.floor((sb * a + 127) / 255)
+            src[base] = floor((sr * a + 127) / 255)
+            src[base + 1] = floor((sg * a + 127) / 255)
+            src[base + 2] = floor((sb * a + 127) / 255)
             src[base + 3] = a
         end
 
@@ -236,10 +237,8 @@ local function normalizeTextureStream(stream, no, path)
         if #data < required then
             error("texture stream data is shorter than width * height * 4 for texture " .. tostring(no), 3)
         end
-        data = ffi.cast("const uint8_t*", data)
-    else
-        data = ffi.cast("const uint8_t*", data)
     end
+    data = ffi.cast("const uint8_t*", data)
 
     local useMipmap = stream.mipmap == true or stream.use_mipmap == true or stream.useMipmap == true
     local isPremultiplied = stream.premultiplied == true or stream.premultiplied_alpha == true or stream.premultipliedAlpha == true

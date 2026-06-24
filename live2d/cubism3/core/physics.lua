@@ -2,10 +2,17 @@
 -- Ported from Mocari src/core/physics.rs
 
 local math_lib = math
-local Vector2 = require("live2d.cubism3.core.math").Vector2
-local direction_to_radian = require("live2d.cubism3.core.math").direction_to_radian
-local radian_to_direction = require("live2d.cubism3.core.math").radian_to_direction
-local degrees_to_radian = require("live2d.cubism3.core.math").degrees_to_radian
+local abs = math_lib.abs
+local cos = math_lib.cos
+local max = math_lib.max
+local min = math_lib.min
+local sin = math_lib.sin
+local sqrt = math_lib.sqrt
+local cubism_math = require("live2d.cubism3.core.math")
+local Vector2 = cubism_math.Vector2
+local direction_to_radian = cubism_math.direction_to_radian
+local radian_to_direction = cubism_math.radian_to_direction
+local degrees_to_radian = cubism_math.degrees_to_radian
 
 local physics = {}
 
@@ -82,7 +89,7 @@ local function vec_div(value, factor)
 end
 
 local function vec_normalize(value)
-    local length = math_lib.sqrt(value:x() * value:x() + value:y() * value:y())
+    local length = sqrt(value:x() * value:x() + value:y() * value:y())
     if length == 0 then
         return value
     end
@@ -90,13 +97,13 @@ local function vec_normalize(value)
 end
 
 function physics.normalize_physics_parameter(value, parameter, normalized, reflect)
-    local maximum = math.max(parameter.maximum, parameter.minimum)
-    local minimum = math.min(parameter.maximum, parameter.minimum)
-    value = math.max(minimum, math.min(maximum, value))
-    local normalized_minimum = math.min(normalized.minimum, normalized.maximum)
-    local normalized_maximum = math.max(normalized.minimum, normalized.maximum)
+    local maximum = max(parameter.maximum, parameter.minimum)
+    local minimum = min(parameter.maximum, parameter.minimum)
+    value = max(minimum, min(maximum, value))
+    local normalized_minimum = min(normalized.minimum, normalized.maximum)
+    local normalized_maximum = max(normalized.minimum, normalized.maximum)
     local normalized_middle = normalized.default
-    local middle = minimum + math.abs(maximum - minimum) / 2
+    local middle = minimum + abs(maximum - minimum) / 2
     local parameter_value = value - middle
 
     local result
@@ -171,40 +178,66 @@ function physics.update_physics_particles(strand, total_translation, total_angle
     first.position = total_translation
     local current_gravity = vec_normalize(radian_to_direction(degrees_to_radian(total_angle)))
     local previous_position = first.position
+    local current_gravity_x = current_gravity:x()
+    local current_gravity_y = current_gravity:y()
+    local wind_x = wind_direction:x()
+    local wind_y = wind_direction:y()
 
     for p = 2, #strand do
         local particle = strand[p]
-        particle.force = vec_add(vec_mul(current_gravity, particle.acceleration), wind_direction)
-        particle.last_position = particle.position
+        local force = particle.force
+        local force_x = current_gravity_x * particle.acceleration + wind_x
+        local force_y = current_gravity_y * particle.acceleration + wind_y
+        force._x = force_x
+        force._y = force_y
+
+        local position = particle.position
+        local last_position = particle.last_position
+        local last_x = position:x()
+        local last_y = position:y()
+        last_position._x = last_x
+        last_position._y = last_y
 
         local delay = particle.delay * delta_time_seconds * 30
-        local direction = vec_sub(particle.position, previous_position)
+        local previous_x = previous_position:x()
+        local previous_y = previous_position:y()
+        local direction_x = last_x - previous_x
+        local direction_y = last_y - previous_y
         local radian = direction_to_radian(particle.last_gravity, current_gravity) / air_resistance
+        local sin_radian = sin(radian)
+        local cos_radian = cos(radian)
 
-        local direction_x = math_lib.cos(radian) * direction:x() - direction:y() * math_lib.sin(radian)
-        local direction_y = math_lib.sin(radian) * direction:x() + direction:y() * math_lib.cos(radian)
-        direction = Vector2.new(direction_x, direction_y)
+        local rotated_x = cos_radian * direction_x - direction_y * sin_radian
+        local rotated_y = sin_radian * direction_x + direction_y * cos_radian
 
-        particle.position = vec_add(previous_position, direction)
-        local velocity = vec_mul(particle.velocity, delay)
-        local force = vec_mul(particle.force, delay * delay)
-        particle.position = vec_add(vec_add(particle.position, velocity), force)
+        local delay_sq = delay * delay
+        local position_x = previous_x + rotated_x + particle.velocity:x() * delay + force_x * delay_sq
+        local position_y = previous_y + rotated_y + particle.velocity:y() * delay + force_y * delay_sq
 
-        local new_direction = vec_normalize(vec_sub(particle.position, previous_position))
-        particle.position = vec_add(previous_position, vec_mul(new_direction, particle.radius))
+        local new_direction_x = position_x - previous_x
+        local new_direction_y = position_y - previous_y
+        local length = sqrt(new_direction_x * new_direction_x + new_direction_y * new_direction_y)
+        if length ~= 0 then
+            new_direction_x = new_direction_x / length
+            new_direction_y = new_direction_y / length
+        end
+        position_x = previous_x + new_direction_x * particle.radius
+        position_y = previous_y + new_direction_y * particle.radius
 
-        if math_lib.abs(particle.position:x()) < threshold_value then
-            particle.position = Vector2.new(0, particle.position:y())
+        if abs(position_x) < threshold_value then
+            position_x = 0
         end
 
         if delay ~= 0 then
-            particle.velocity = vec_mul(
-                vec_div(vec_sub(particle.position, particle.last_position), delay),
-                particle.mobility
-            )
+            local velocity = particle.velocity
+            velocity._x = ((position_x - last_x) / delay) * particle.mobility
+            velocity._y = ((position_y - last_y) / delay) * particle.mobility
         end
 
-        particle.force = Vector2.new(0, 0)
+        position._x = position_x
+        position._y = position_y
+        force._x = 0
+        force._y = 0
         particle.last_gravity = current_gravity
         previous_position = particle.position
     end
@@ -219,21 +252,41 @@ function physics.stabilize_physics_particles(strand, total_translation, total_an
     first.position = total_translation
     local current_gravity = vec_normalize(radian_to_direction(degrees_to_radian(total_angle)))
     local previous_position = first.position
+    local current_gravity_x = current_gravity:x()
+    local current_gravity_y = current_gravity:y()
+    local wind_x = wind_direction:x()
+    local wind_y = wind_direction:y()
 
     for p = 2, #strand do
         local particle = strand[p]
-        particle.force = vec_add(vec_mul(current_gravity, particle.acceleration), wind_direction)
-        particle.last_position = particle.position
-        particle.velocity = Vector2.new(0, 0)
+        local force = particle.force
+        local force_x = current_gravity_x * particle.acceleration + wind_x
+        local force_y = current_gravity_y * particle.acceleration + wind_y
+        force._x = force_x
+        force._y = force_y
 
-        local force = vec_mul(vec_normalize(particle.force), particle.radius)
-        particle.position = vec_add(previous_position, force)
+        local position = particle.position
+        particle.last_position._x = position:x()
+        particle.last_position._y = position:y()
+        particle.velocity._x = 0
+        particle.velocity._y = 0
 
-        if math_lib.abs(particle.position:x()) < threshold_value then
-            particle.position = Vector2.new(0, particle.position:y())
+        local length = sqrt(force_x * force_x + force_y * force_y)
+        if length ~= 0 then
+            force_x = force_x / length
+            force_y = force_y / length
+        end
+        local position_x = previous_position:x() + force_x * particle.radius
+        local position_y = previous_position:y() + force_y * particle.radius
+
+        if abs(position_x) < threshold_value then
+            position_x = 0
         end
 
-        particle.force = Vector2.new(0, 0)
+        position._x = position_x
+        position._y = position_y
+        force._x = 0
+        force._y = 0
         particle.last_gravity = current_gravity
         previous_position = particle.position
     end

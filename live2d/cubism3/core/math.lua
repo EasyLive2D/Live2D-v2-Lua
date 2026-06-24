@@ -2,6 +2,10 @@
 -- Ported from Mocari src/core/math.rs
 
 local math_lib = math
+local atan2 = math_lib.atan2
+local cos = math_lib.cos
+local pi = math_lib.pi
+local sin = math_lib.sin
 
 local Vector2 = {}
 
@@ -212,26 +216,26 @@ end
 
 -- Angle utilities
 local function degrees_to_radian(degrees)
-    return (degrees / 180) * math_lib.pi
+    return (degrees / 180) * pi
 end
 
 local function radian_to_degrees(radian)
-    return (radian * 180) / math_lib.pi
+    return (radian * 180) / pi
 end
 
 local function direction_to_radian(from, to)
-    local result = math_lib.atan2(to:y(), to:x()) - math_lib.atan2(from:y(), from:x())
-    while result < -math_lib.pi do
-        result = result + math_lib.pi * 2
+    local result = atan2(to:y(), to:x()) - atan2(from:y(), from:x())
+    while result < -pi do
+        result = result + pi * 2
     end
-    while result > math_lib.pi do
-        result = result - math_lib.pi * 2
+    while result > pi do
+        result = result - pi * 2
     end
     return result
 end
 
 local function radian_to_direction(radian)
-    return Vector2.new(math_lib.sin(radian), math_lib.cos(radian))
+    return Vector2.new(sin(radian), cos(radian))
 end
 
 return {

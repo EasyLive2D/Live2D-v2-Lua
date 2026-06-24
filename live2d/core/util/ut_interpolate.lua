@@ -1,5 +1,6 @@
 local UtSystem = require("live2d.core.util.ut_system")
 local Float32Array = require("live2d.core.type.array").Float32Array
+local floor = math.floor
 
 local UtInterpolate = {}
 
@@ -15,7 +16,7 @@ function UtInterpolate.interpolateInt(mdc, pivotMgr, ret, pivotValue)
         local bj = pivotValue[a3[1]]
         local bi = pivotValue[a3[2]]
         local a9 = ba[1]
-        return math.floor(bj + (bi - bj) * a9 + 0.5)
+        return floor(bj + (bi - bj) * a9 + 0.5)
     elseif a1 == 2 then
         local bj = pivotValue[a3[1]]
         local bi = pivotValue[a3[2]]
@@ -23,9 +24,9 @@ function UtInterpolate.interpolateInt(mdc, pivotMgr, ret, pivotValue)
         local aZ = pivotValue[a3[4]]
         local a9 = ba[1]
         local a8 = ba[2]
-        local br = math.floor(bj + (bi - bj) * a9 + 0.5)
-        local bq = math.floor(a0 + (aZ - a0) * a9 + 0.5)
-        return math.floor(br + (bq - br) * a8 + 0.5)
+        local br = floor(bj + (bi - bj) * a9 + 0.5)
+        local bq = floor(a0 + (aZ - a0) * a9 + 0.5)
+        return floor(br + (bq - br) * a8 + 0.5)
     elseif a1 == 3 then
         local aP = pivotValue[a3[1]]
         local aO = pivotValue[a3[2]]
@@ -38,13 +39,13 @@ function UtInterpolate.interpolateInt(mdc, pivotMgr, ret, pivotValue)
         local a9 = ba[1]
         local a8 = ba[2]
         local a6 = ba[3]
-        local bj = math.floor(aP + (aO - aP) * a9 + 0.5)
-        local bi = math.floor(bn + (bm - bn) * a9 + 0.5)
-        local a0_v = math.floor(aK + (aJ - aK) * a9 + 0.5)
-        local aZ_v = math.floor(bg + (bf - bg) * a9 + 0.5)
-        local br = math.floor(bj + (bi - bj) * a8 + 0.5)
-        local bq = math.floor(a0_v + (aZ_v - a0_v) * a8 + 0.5)
-        return math.floor(br + (bq - br) * a6 + 0.5)
+        local bj = floor(aP + (aO - aP) * a9 + 0.5)
+        local bi = floor(bn + (bm - bn) * a9 + 0.5)
+        local a0_v = floor(aK + (aJ - aK) * a9 + 0.5)
+        local aZ_v = floor(bg + (bf - bg) * a9 + 0.5)
+        local br = floor(bj + (bi - bj) * a8 + 0.5)
+        local bq = floor(a0_v + (aZ_v - a0_v) * a8 + 0.5)
+        return floor(br + (bq - br) * a6 + 0.5)
     elseif a1 == 4 then
         local aT = pivotValue[a3[1]]
         local aS = pivotValue[a3[2]]
@@ -66,21 +67,21 @@ function UtInterpolate.interpolateInt(mdc, pivotMgr, ret, pivotValue)
         local a8 = ba[2]
         local a6 = ba[3]
         local a4 = ba[4]
-        local aP_v = math.floor(aT + (aS - aT) * a9 + 0.5)
-        local aO_v = math.floor(bu + (bt - bu) * a9 + 0.5)
-        local bn_v = math.floor(aN + (aM - aN) * a9 + 0.5)
-        local bm_v = math.floor(bl + (bk - bl) * a9 + 0.5)
-        local aK_v = math.floor(be + (bc - be) * a9 + 0.5)
-        local aJ_v = math.floor(aX + (aW - aX) * a9 + 0.5)
-        local bg_v = math.floor(a7 + (a5 - a7) * a9 + 0.5)
-        local bf_v = math.floor(aR + (aQ - aR) * a9 + 0.5)
-        local bj_v = math.floor(aP_v + (aO_v - aP_v) * a8 + 0.5)
-        local bi_v = math.floor(bn_v + (bm_v - bn_v) * a8 + 0.5)
-        local a0_w = math.floor(aK_v + (aJ_v - aK_v) * a8 + 0.5)
-        local aZ_w = math.floor(bg_v + (bf_v - bg_v) * a8 + 0.5)
-        local br_w = math.floor(bj_v + (bi_v - bj_v) * a6 + 0.5)
-        local bq_w = math.floor(a0_w + (aZ_w - a0_w) * a6 + 0.5)
-        return math.floor(br_w + (bq_w - br_w) * a4 + 0.5)
+        local aP_v = floor(aT + (aS - aT) * a9 + 0.5)
+        local aO_v = floor(bu + (bt - bu) * a9 + 0.5)
+        local bn_v = floor(aN + (aM - aN) * a9 + 0.5)
+        local bm_v = floor(bl + (bk - bl) * a9 + 0.5)
+        local aK_v = floor(be + (bc - be) * a9 + 0.5)
+        local aJ_v = floor(aX + (aW - aX) * a9 + 0.5)
+        local bg_v = floor(a7 + (a5 - a7) * a9 + 0.5)
+        local bf_v = floor(aR + (aQ - aR) * a9 + 0.5)
+        local bj_v = floor(aP_v + (aO_v - aP_v) * a8 + 0.5)
+        local bi_v = floor(bn_v + (bm_v - bn_v) * a8 + 0.5)
+        local a0_w = floor(aK_v + (aJ_v - aK_v) * a8 + 0.5)
+        local aZ_w = floor(bg_v + (bf_v - bg_v) * a8 + 0.5)
+        local br_w = floor(bj_v + (bi_v - bj_v) * a6 + 0.5)
+        local bq_w = floor(a0_w + (aZ_w - a0_w) * a6 + 0.5)
+        return floor(br_w + (bq_w - br_w) * a4 + 0.5)
     else
         local aV = bit.lshift(1, a1)
         local aY = Float32Array(aV)
@@ -93,7 +94,7 @@ function UtInterpolate.interpolateInt(mdc, pivotMgr, ret, pivotValue)
                 else
                     aH = aH * ba[aL]
                 end
-                aI = math.floor(aI / 2)
+                aI = floor(aI / 2)
             end
             aY[bh] = aH
         end
@@ -107,7 +108,7 @@ function UtInterpolate.interpolateInt(mdc, pivotMgr, ret, pivotValue)
         for aU = 1, aV do
             bd = bd + aY[aU] * bs[aU]
         end
-        return math.floor(bd + 0.5)
+        return floor(bd + 0.5)
     end
 end
 
@@ -183,7 +184,7 @@ function UtInterpolate.interpolateFloat(mdc, pivotMgr, ret, pivotValue)
                 else
                     aH = aH * a9[aL]
                 end
-                aI = math.floor(aI / 2)
+                aI = floor(aI / 2)
             end
             aY[bh] = aH
         end
@@ -363,7 +364,7 @@ function UtInterpolate.interpolatePoints(mdc, pivotMgr, retParamOut, numPts, piv
                 else
                     aM = aM * a2[bF]
                 end
-                aH = math.floor(aH / 2)
+                aH = floor(aH / 2)
             end
             bJ[bj] = aM
         end

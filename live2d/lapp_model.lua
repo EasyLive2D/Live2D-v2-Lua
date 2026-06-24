@@ -5,6 +5,7 @@ local L2DExpressionMotion = require("live2d.framework.motion.l2d_expression_moti
 local UtSystem = require("live2d.core.util.ut_system")
 local MatrixManager = require("live2d.matrix_manager")
 local ModelSettingJson = require("live2d.model_setting_json")
+local sin = math.sin
 
 local MotionPriority = require("live2d.lapp_define").MotionPriority
 
@@ -228,12 +229,12 @@ function LAppModel:Update()
     self.live2DModel:addToParamFloat("PARAM_EYE_BALL_Y", self.dragY, 1)
 
     if self.autoBreath then
-        self.live2DModel:addToParamFloat("PARAM_ANGLE_X", 15 * math.sin(t / 6.5345), 0.5)
-        self.live2DModel:addToParamFloat("PARAM_ANGLE_Y", 8 * math.sin(t / 3.5345), 0.5)
-        self.live2DModel:addToParamFloat("PARAM_ANGLE_Z", 10 * math.sin(t / 5.5345), 0.5)
-        self.live2DModel:addToParamFloat("PARAM_BODY_ANGLE_X", 4 * math.sin(t / 15.5345), 0.5)
+        self.live2DModel:addToParamFloat("PARAM_ANGLE_X", 15 * sin(t / 6.5345), 0.5)
+        self.live2DModel:addToParamFloat("PARAM_ANGLE_Y", 8 * sin(t / 3.5345), 0.5)
+        self.live2DModel:addToParamFloat("PARAM_ANGLE_Z", 10 * sin(t / 5.5345), 0.5)
+        self.live2DModel:addToParamFloat("PARAM_BODY_ANGLE_X", 4 * sin(t / 15.5345), 0.5)
         if self._hasBreathParam and not self._suppressAutoBreathParam then
-            self.live2DModel:setParamFloat("PARAM_BREATH", 0.5 + 0.5 * math.sin(t / 3.2345), 1)
+            self.live2DModel:setParamFloat("PARAM_BREATH", 0.5 + 0.5 * sin(t / 3.2345), 1)
         end
     end
 

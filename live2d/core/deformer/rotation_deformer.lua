@@ -3,6 +3,9 @@ local RotationContext = require("live2d.core.deformer.rotation_context")
 local def = require("live2d.core.def")
 local Float32Array = require("live2d.core.type.array").Float32Array
 local UtMath = require("live2d.core.util.ut_math")
+local floor = math.floor
+local sin = math.sin
+local cos = math.cos
 
 local AffineEnt = {}  -- forward declaration
 AffineEnt.__index = AffineEnt
@@ -53,6 +56,19 @@ local function setAffineFields(target, source)
     target.rotationDeg = source.rotationDeg
     target.reflectX = source.reflectX
     target.reflectY = source.reflectY
+end
+
+local function interp4(a9, a8, a6, a4, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16)
+    local bC = v1 + (v2 - v1) * a9
+    local bB = v3 + (v4 - v3) * a9
+    local bz = v5 + (v6 - v5) * a9
+    local by = v7 + (v8 - v7) * a9
+    local bv = v9 + (v10 - v9) * a9
+    local bt = v11 + (v12 - v11) * a9
+    local br = v13 + (v14 - v13) * a9
+    local bq = v15 + (v16 - v15) * a9
+    return (1 - a4) * ((1 - a6) * (bC + (bB - bC) * a8) + a6 * (bz + (by - bz) * a8)) +
+           a4 * ((1 - a6) * (bv + (bt - bv) * a8) + a6 * (br + (bq - br) * a8))
 end
 
 function RotationDeformer:setupInterpolate(mctx, rctx)
@@ -164,23 +180,11 @@ function RotationDeformer:setupInterpolate(mctx, rctx)
         local a8 = ba[2]
         local a6 = ba[3]
         local a4 = ba[4]
-        local function interp4(v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16)
-            local bC = v1 + (v2 - v1) * a9
-            local bB = v3 + (v4 - v3) * a9
-            local bz = v5 + (v6 - v5) * a9
-            local by = v7 + (v8 - v7) * a9
-            local bv = v9 + (v10 - v9) * a9
-            local bt = v11 + (v12 - v11) * a9
-            local br = v13 + (v14 - v13) * a9
-            local bq = v15 + (v16 - v15) * a9
-            return (1 - a4) * ((1 - a6) * (bC + (bB - bC) * a8) + a6 * (bz + (by - bz) * a8)) +
-                   a4 * ((1 - a6) * (bv + (bt - bv) * a8) + a6 * (br + (bq - br) * a8))
-        end
-        rctx.interpolatedAffine.originX = interp4(aT.originX, aS.originX, bE.originX, bD.originX, aN.originX, aM.originX, bp.originX, bo.originX, bh.originX, bg.originX, aY.originX, aW.originX, a7.originX, a5.originX, aR.originX, aQ.originX)
-        rctx.interpolatedAffine.originY = interp4(aT.originY, aS.originY, bE.originY, bD.originY, aN.originY, aM.originY, bp.originY, bo.originY, bh.originY, bg.originY, aY.originY, aW.originY, a7.originY, a5.originY, aR.originY, aQ.originY)
-        rctx.interpolatedAffine.scaleX = interp4(aT.scaleX, aS.scaleX, bE.scaleX, bD.scaleX, aN.scaleX, aM.scaleX, bp.scaleX, bo.scaleX, bh.scaleX, bg.scaleX, aY.scaleX, aW.scaleX, a7.scaleX, a5.scaleX, aR.scaleX, aQ.scaleX)
-        rctx.interpolatedAffine.scaleY = interp4(aT.scaleY, aS.scaleY, bE.scaleY, bD.scaleY, aN.scaleY, aM.scaleY, bp.scaleY, bo.scaleY, bh.scaleY, bg.scaleY, aY.scaleY, aW.scaleY, a7.scaleY, a5.scaleY, aR.scaleY, aQ.scaleY)
-        rctx.interpolatedAffine.rotationDeg = interp4(aT.rotationDeg, aS.rotationDeg, bE.rotationDeg, bD.rotationDeg, aN.rotationDeg, aM.rotationDeg, bp.rotationDeg, bo.rotationDeg, bh.rotationDeg, bg.rotationDeg, aY.rotationDeg, aW.rotationDeg, a7.rotationDeg, a5.rotationDeg, aR.rotationDeg, aQ.rotationDeg)
+        rctx.interpolatedAffine.originX = interp4(a9, a8, a6, a4, aT.originX, aS.originX, bE.originX, bD.originX, aN.originX, aM.originX, bp.originX, bo.originX, bh.originX, bg.originX, aY.originX, aW.originX, a7.originX, a5.originX, aR.originX, aQ.originX)
+        rctx.interpolatedAffine.originY = interp4(a9, a8, a6, a4, aT.originY, aS.originY, bE.originY, bD.originY, aN.originY, aM.originY, bp.originY, bo.originY, bh.originY, bg.originY, aY.originY, aW.originY, a7.originY, a5.originY, aR.originY, aQ.originY)
+        rctx.interpolatedAffine.scaleX = interp4(a9, a8, a6, a4, aT.scaleX, aS.scaleX, bE.scaleX, bD.scaleX, aN.scaleX, aM.scaleX, bp.scaleX, bo.scaleX, bh.scaleX, bg.scaleX, aY.scaleX, aW.scaleX, a7.scaleX, a5.scaleX, aR.scaleX, aQ.scaleX)
+        rctx.interpolatedAffine.scaleY = interp4(a9, a8, a6, a4, aT.scaleY, aS.scaleY, bE.scaleY, bD.scaleY, aN.scaleY, aM.scaleY, bp.scaleY, bo.scaleY, bh.scaleY, bg.scaleY, aY.scaleY, aW.scaleY, a7.scaleY, a5.scaleY, aR.scaleY, aQ.scaleY)
+        rctx.interpolatedAffine.rotationDeg = interp4(a9, a8, a6, a4, aT.rotationDeg, aS.rotationDeg, bE.rotationDeg, bD.rotationDeg, aN.rotationDeg, aM.rotationDeg, bp.rotationDeg, bo.rotationDeg, bh.rotationDeg, bg.rotationDeg, aY.rotationDeg, aW.rotationDeg, a7.rotationDeg, a5.rotationDeg, aR.rotationDeg, aQ.rotationDeg)
     else
         local aV = 2 ^ a2
         local aZ = Float32Array(aV)
@@ -193,7 +197,7 @@ function RotationDeformer:setupInterpolate(mctx, rctx)
                 else
                     aH = aH * ba[aL]
                 end
-                aI = math.floor(aI / 2)
+                aI = floor(aI / 2)
             end
             aZ[bk] = aH
         end
@@ -294,8 +298,8 @@ function RotationDeformer:transformPoints(mc, dc, srcPoints, dstPoints, numPoint
     else
         aU = aH.interpolatedAffine
     end
-    local a0 = math.sin(UtMath.DEG_TO_RAD * aU.rotationDeg)
-    local aP = math.cos(UtMath.DEG_TO_RAD * aU.rotationDeg)
+    local a0 = sin(UtMath.DEG_TO_RAD * aU.rotationDeg)
+    local aP = cos(UtMath.DEG_TO_RAD * aU.rotationDeg)
     local a3 = aH:getTotalScale()
     local aW = aU.reflectX and -1 or 1
     local aV = aU.reflectY and -1 or 1

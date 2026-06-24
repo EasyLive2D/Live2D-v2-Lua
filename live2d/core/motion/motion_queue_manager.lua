@@ -3,6 +3,33 @@ local MotionQueueEntry = require("live2d.core.motion.motion_queue_entry")
 local MotionQueueManager = {}
 MotionQueueManager.__index = MotionQueueManager
 
+local function compactMotions(motions, update_model)
+    local write = 1
+    local updated = false
+    for read = 1, #motions do
+        local ent = motions[read]
+        local keep = false
+        if ent ~= nil then
+            local mtn = ent.motion
+            if mtn ~= nil then
+                if update_model ~= nil then
+                    mtn:updateParam(update_model, ent)
+                    updated = true
+                end
+                keep = not ent:isFinished()
+            end
+        end
+        if keep then
+            motions[write] = ent
+            write = write + 1
+        end
+    end
+    for i = write, #motions do
+        motions[i] = nil
+    end
+    return updated
+end
+
 function MotionQueueManager.new()
     local self = setmetatable({}, MotionQueueManager)
     self.motions = {}
@@ -27,28 +54,7 @@ function MotionQueueManager:startMotion(aJ, aI)
 end
 
 function MotionQueueManager:updateParam(aJ)
-    local updated = false
-    local i = 1
-    while i <= #self.motions do
-        local ent = self.motions[i]
-        if ent == nil then
-            table.remove(self.motions, i)
-        else
-            local mtn = ent.motion
-            if mtn == nil then
-                table.remove(self.motions, i)
-            else
-                mtn:updateParam(aJ, ent)
-                updated = true
-                if ent:isFinished() then
-                    table.remove(self.motions, i)
-                else
-                    i = i + 1
-                end
-            end
-        end
-    end
-    return updated
+    return compactMotions(self.motions, aJ)
 end
 
 function MotionQueueManager:isFinished(nr)
@@ -61,20 +67,11 @@ function MotionQueueManager:isFinished(nr)
         end
         return true
     else
-        local i = 1
-        while i <= #self.motions do
+        compactMotions(self.motions)
+        for i = 1, #self.motions do
             local ent = self.motions[i]
-            if ent == nil then
-                table.remove(self.motions, i)
-            else
-                local aH = ent.motion
-                if aH == nil then
-                    table.remove(self.motions, i)
-                elseif not ent:isFinished() then
-                    return false
-                else
-                    i = i + 1
-                end
+            if ent ~= nil and not ent:isFinished() then
+                return false
             end
         end
         return true
@@ -82,10 +79,7 @@ function MotionQueueManager:isFinished(nr)
 end
 
 function MotionQueueManager:stopAllMotions()
-    local i = 1
-    while i <= #self.motions do
-        table.remove(self.motions, i)
-    end
+    self.motions = {}
 end
 
 return MotionQueueManager

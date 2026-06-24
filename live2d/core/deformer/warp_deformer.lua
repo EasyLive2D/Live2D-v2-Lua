@@ -2,6 +2,7 @@ local Deformer = require("live2d.core.deformer.deformer")
 local WarpContext = require("live2d.core.deformer.warp_context")
 local Float32Array = require("live2d.core.type.array").Float32Array
 local UtInterpolate = require("live2d.core.util.ut_interpolate")
+local floor = math.floor
 
 local WarpDeformer = setmetatable({}, { __index = Deformer })
 WarpDeformer.__index = WarpDeformer
@@ -178,7 +179,7 @@ function WarpDeformer.transformPoints_sdk2(hvs, dst, pointCount, srcOffset, srcS
                             dst[ba + 1] = a2 + (a6 - a2) * (1 - bj) + (aJ - a2) * (1 - bi)
                         end
                     else
-                        local aH = math.floor(a7)
+                        local aH = floor(a7)
                         if aH == col then aH = col - 1 end
                         local bj = 0.5 * (a4 - (-2))
                         local bi = a7 - aH
@@ -239,7 +240,7 @@ function WarpDeformer.transformPoints_sdk2(hvs, dst, pointCount, srcOffset, srcS
                                 dst[ba + 1] = a2 + (a6 - a2) * (1 - bj) + (aJ - a2) * (1 - bi)
                             end
                         else
-                            local aH = math.floor(a7)
+                            local aH = floor(a7)
                             if aH == col then aH = col - 1 end
                             local bj = 0.5 * (a4 - (1))
                             local bi = a7 - aH
@@ -263,7 +264,7 @@ function WarpDeformer.transformPoints_sdk2(hvs, dst, pointCount, srcOffset, srcS
                         end
                     else
                         if aX <= 0 then
-                            local aY = math.floor(bd)
+                            local aY = floor(bd)
                             if aY == row then aY = row - 1 end
                             local bj = bd - aY
                             local bi = 0.5 * (aX - (-2))
@@ -285,7 +286,7 @@ function WarpDeformer.transformPoints_sdk2(hvs, dst, pointCount, srcOffset, srcS
                                 dst[ba + 1] = a2 + (a6 - a2) * (1 - bj) + (aJ - a2) * (1 - bi)
                             end
                         elseif aX >= 1 then
-                            local aY = math.floor(bd)
+                            local aY = floor(bd)
                             if aY == row then aY = row - 1 end
                             local bj = bd - aY
                             local bi = 0.5 * (aX - (1))
@@ -316,9 +317,11 @@ function WarpDeformer.transformPoints_sdk2(hvs, dst, pointCount, srcOffset, srcS
                 dst[ba + 1] = aS + a4 * bk + aX * be
             end
         else
-            local bn = bd - math.floor(bd)
-            local bm = a7 - math.floor(a7)
-            local aV = 2 * (math.floor(bd) + math.floor(a7) * (row + 1))
+            local bd_floor = floor(bd)
+            local a7_floor = floor(a7)
+            local bn = bd - bd_floor
+            local bm = a7 - a7_floor
+            local aV = 2 * (bd_floor + a7_floor * (row + 1))
             if bn + bm < 1 then
                 dst[ba] = grid[aV + 1] * (1 - bn - bm) + grid[aV + 3] * bn + grid[aV + 2 * (row + 1) + 1] * bm
                 dst[ba + 1] = grid[aV + 2] * (1 - bn - bm) + grid[aV + 4] * bn + grid[aV + 2 * (row + 1) + 2] * bm
