@@ -55,6 +55,10 @@ local function require_model(self)
     return self.model
 end
 
+function Renderer:get_model()
+    return self.model
+end
+
 function Renderer:load_model(model_path, width, height, opts)
     if model_path == nil or model_path == "" then
         error("model_path is required", 2)
@@ -246,9 +250,29 @@ function Renderer:set_expression(name)
     return self
 end
 
+function Renderer:reset_expression()
+    require_model(self):ResetExpression()
+    return self
+end
+
+function Renderer:preload_expression(name)
+    require_model(self):PreloadExpression(name)
+    return self
+end
+
 function Renderer:start_motion(name, no, priority)
     priority = priority or MotionPriority.FORCE
     require_model(self):StartMotion(name, tonumber(no) or 0, priority)
+    return self
+end
+
+function Renderer:clear_motions()
+    require_model(self):ClearMotions()
+    return self
+end
+
+function Renderer:preload_motion_group(name)
+    require_model(self):PreloadMotionGroup(name)
     return self
 end
 
