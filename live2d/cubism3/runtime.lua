@@ -168,14 +168,13 @@ function ModelRuntime:set_part_opacity(id, value)
 end
 
 function ModelRuntime:set_part_opacity_by_index(index, value)
-    local slot = self.part_opacity_overrides[index + 1]
-    if slot == nil then return false end
+    if index < 0 or index >= self.parts:part_count() then return false end
     self.part_opacity_overrides[index + 1] = math.max(0, math.min(1, value))
     return true
 end
 
 function ModelRuntime:reset_part_opacities()
-    for i = 1, #self.part_opacity_overrides do
+    for i = 1, self.parts:part_count() do
         self.part_opacity_overrides[i] = nil
     end
 end

@@ -1,4 +1,4 @@
-"""PySide6 + lupa host for the Cubism 3 (MOC3) renderer.
+"""PySide6 + lupa host for the windowless Cubism 3 renderer.
 
 Run from the repository root:
 
@@ -15,46 +15,40 @@ the project depends on LuaJIT FFI.
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from pathlib import Path
+from time import perf_counter
 
-from PySide6.QtCore import QElapsedTimer, Qt, QTimer
+from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QSurfaceFormat
 from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from PySide6.QtWidgets import QApplication, QMessageBox
-from lupa.luajit21 import LuaRuntime, LuaError
+from lupa.luajit21 import LuaError, LuaRuntime
 
 
 ROOT = Path(__file__).resolve().parents[1]
+MODEL_PATH = "resources/Hiyori/Hiyori.model3.json"
 MODEL_DIR = ROOT / "resources" / "Hiyori"
-MODEL_JSON = MODEL_DIR / "Hiyori.model3.json"
 
 
-class Cubism3Widget(QOpenGLWidget):
+class Live2DWidget(QOpenGLWidget):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Live2D Cubism3 Hiyori - PySide6 + lupa")
+        self.setWindowTitle("Live2D Hiyori - PySide6 + lupa")
         self.setMouseTracking(True)
-        self.setMinimumSize(480, 720)
+        self.setMinimumSize(500, 700)
 
         self.lua: LuaRuntime | None = None
-        self.runtime = None
-        self.renderer = None
-        self.textures = None
-        self.motion_players: list[object] = []
-        self.active_motion = None
-        self._motion_index = -1
-
-        self._render_frame = None
-        self._resize_projection = None
-        self._destroy_renderer = None
-        self._set_parameter = None
-
-        self._clock = QElapsedTimer()
-        self._clock.start()
-        self._last_time = 0.0
+        self.embed = None
+        self._load_model = None
+        self._draw = None
+        self._resize = None
+        self._drag = None
+        self._start_motion = None
+        self._dispose = None
+        self._last_time = perf_counter()
+        self._motion_index = 0
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self.update)
@@ -66,202 +60,142 @@ class Cubism3Widget(QOpenGLWidget):
         try:
             self.lua = LuaRuntime(unpack_returned_tuples=True, encoding=None)
             self.lua.execute(b'assert(require("ffi"), "lupa must be built with LuaJIT FFI")')
-            self.lua.execute(b'package.path = package.path .. ";./?.lua;./?/init.lua"')
 
-            self._cache_lua_functions()
-            self.runtime = self._build_runtime()
-            self.renderer = self._new_renderer()
-            self.textures = self._load_texture_paths()
-            self.motion_players = self._load_motion_players()
-            self._resize_projection(self.runtime, self.width(), self.height())
-            self._start_next_motion()
-        except (LuaError, RuntimeError, OSError) as exc:
+            self.embed = self.lua.execute(b'return require("live2d_moc3_embed")')
+            self._load_model = self.lua.eval(
+                b"function(embed, model_path, opts, w, h) "
+                b"local gl = require('live2d.gl_loader'); "
+                b"gl.ensureExtensions(); "
+                b"local renderer = embed.load_model(model_path, opts); "
+                b"renderer:set_gl(gl); "
+                b"gl.glEnable(0x0BE2); "
+                b"if gl.glBlendFunc then gl.glBlendFunc(0x0302, 0x0303) end; "
+                b"return renderer "
+                b"end"
+            )
+            self._draw = self.lua.eval(
+                b"function(embed, w, h, delta) "
+                b"local gl = require('live2d.gl_loader'); "
+                b"gl.glViewport(0, 0, w, h); "
+                b"gl.glClearColor(0.18, 0.20, 0.22, 1.0); "
+                b"gl.glClear(0x00004000 + 0x00000400); "
+                b"embed.update(delta); "
+                b"return embed.render(make_projection(embed, w, h)) "
+                b"end"
+            )
+            self._resize = self.lua.eval(
+                b"function(w, h) "
+                b"local gl = require('live2d.gl_loader'); "
+                b"return gl.glViewport(0, 0, w, h) "
+                b"end"
+            )
+            self._drag = self.lua.eval(
+                b"function(embed, x, y, w, h) "
+                b"local nx = (x / math.max(w, 1)) * 2.0 - 1.0; "
+                b"local ny = 1.0 - (y / math.max(h, 1)) * 2.0; "
+                b"embed.set_parameter('ParamAngleX', nx * 30.0); "
+                b"embed.set_parameter('ParamAngleY', ny * 30.0); "
+                b"embed.set_parameter('ParamBodyAngleX', nx * 10.0); "
+                b"return true "
+                b"end"
+            )
+            self._start_motion = self.lua.eval(
+                b"function(embed, no) return embed.start_motion('Idle', no, 1.0) end"
+            )
+            self._dispose = self.lua.eval(b"function(embed) return embed.dispose() end")
+            self.lua.execute(
+                b"local ffi = require('ffi'); "
+                b"function make_projection(embed, w, h) "
+                b"w = math.max(tonumber(w) or 1, 1); "
+                b"h = math.max(tonumber(h) or 1, 1); "
+                b"local canvas = embed.current():get_runtime().canvas; "
+                b"local model_w = canvas.width / canvas.pixels_per_unit; "
+                b"local model_h = canvas.height / canvas.pixels_per_unit; "
+                b"local scale = math.min(w / model_w, h / model_h) * 0.8; "
+                b"return ffi.new('float[16]', { "
+                b"scale * 2.0 / w, 0, 0, 0, "
+                b"0, scale * 2.0 / h, 0, 0, "
+                b"0, 0, 1, 0, "
+                b"0, 0, 0, 1 }) "
+                b"end"
+            )
+
+            opts = self.lua.table()
+            opts[b"resource_streams"] = _load_resource_streams(self.lua, MODEL_DIR)
+            self._load_model(
+                self.embed,
+                MODEL_PATH.encode("utf-8"),
+                opts,
+                self.width(),
+                self.height(),
+            )
+        except (LuaError, RuntimeError) as exc:
             self._show_error(str(exc))
             raise
 
     def resizeGL(self, width: int, height: int) -> None:
-        if self.runtime is not None and self._resize_projection is not None:
-            self._resize_projection(self.runtime, width, height)
+        if self._resize is not None:
+            self._resize(width, height)
 
     def paintGL(self) -> None:
-        if self.runtime is None or self.renderer is None or self._render_frame is None:
+        if self.embed is None or self._draw is None:
             return
 
-        now = self._clock.elapsed() / 1000.0
-        delta = min(max(now - self._last_time, 0.0), 0.1)
+        now = perf_counter()
+        delta = min(now - self._last_time, 0.1)
         self._last_time = now
-
-        motion_finished = self._render_frame(
-            self.runtime,
-            self.renderer,
-            self.textures,
-            self.active_motion,
-            delta,
-            self.width(),
-            self.height(),
-        )
-        if motion_finished:
-            self._start_next_motion()
+        self._draw(self.embed, self.width(), self.height(), delta)
 
     def mouseMoveEvent(self, event) -> None:  # noqa: N802 - Qt override
-        if self.runtime is not None and self._set_parameter is not None:
+        if self.embed is not None and self._drag is not None:
             pos = event.position()
-            x = (pos.x() / max(self.width(), 1) - 0.5) * 2.0
-            y = (pos.y() / max(self.height(), 1) - 0.5) * -2.0
-            self._set_parameter(self.runtime, b"ParamAngleX", x * 30.0)
-            self._set_parameter(self.runtime, b"ParamAngleY", y * 30.0)
-            self._set_parameter(self.runtime, b"ParamBodyAngleX", x * 10.0)
+            self._drag(self.embed, pos.x(), pos.y(), self.width(), self.height())
         super().mouseMoveEvent(event)
 
     def mousePressEvent(self, event) -> None:  # noqa: N802 - Qt override
         if event.button() == Qt.MouseButton.LeftButton:
-            self._start_next_motion()
+            if self.embed is not None and self._start_motion is not None:
+                self._motion_index = (self._motion_index + 1) % 9
+                self._start_motion(self.embed, self._motion_index)
         super().mousePressEvent(event)
 
     def closeEvent(self, event) -> None:  # noqa: N802 - Qt override
-        if self.renderer is not None and self._destroy_renderer is not None:
-            self._destroy_renderer(self.renderer)
-            self.renderer = None
+        if self.embed is not None and self._dispose is not None:
+            self._dispose(self.embed)
         super().closeEvent(event)
-
-    def _cache_lua_functions(self) -> None:
-        assert self.lua is not None
-        self._build_runtime_from_streams = self.lua.eval(
-            b"function(model_json, moc_bytes, pose_json) "
-            b"local model3 = require('live2d.cubism3.json.model3') "
-            b"local pose3 = require('live2d.cubism3.json.pose3') "
-            b"local moc3 = require('live2d.cubism3.moc3') "
-            b"local Runtime = require('live2d.cubism3.runtime') "
-            b"local model_data = assert(model3.parse(model_json)) "
-            b"local pose_data = pose_json and assert(pose3.parse(pose_json)) or nil "
-            b"local canvas = assert(moc3.canvas.parse(moc_bytes)) "
-            b"local ids = assert(moc3.ids.parse(moc_bytes)) "
-            b"local bindings = assert(moc3.keyform_bindings.parse(moc_bytes)) "
-            b"local parts = assert(moc3.parts.parse(moc_bytes)) "
-            b"local deformers = assert(moc3.deformers.parse(moc_bytes)) "
-            b"local art_meshes = assert(moc3.art_meshes.parse(moc_bytes)) "
-            b"local keyforms = assert(moc3.keyforms.parse(moc_bytes)) "
-            b"local offscreen = assert(moc3.offscreen.parse(moc_bytes)) "
-            b"return assert(Runtime.new(model_data, canvas, art_meshes, keyforms, "
-            b"deformers, bindings, ids, offscreen, parts, pose_data)) "
-            b"end"
-        )
-        self._new_renderer = self.lua.eval(
-            b"function() "
-            b"local gl = require('live2d.gl_loader') "
-            b"gl.ensureExtensions() "
-            b"return require('live2d.cubism3.opengl_renderer').new(gl) "
-            b"end"
-        )
-        self._new_motion_player = self.lua.eval(
-            b"function(motion_json) "
-            b"local motion3 = require('live2d.cubism3.json.motion3') "
-            b"local MotionPlayer = require('live2d.cubism3.motion') "
-            b"return MotionPlayer.new(assert(motion3.parse(motion_json))) "
-            b"end"
-        )
-        self._restart_motion = self.lua.eval(b"function(player) return player:restart() end")
-        self._set_parameter = self.lua.eval(
-            b"function(runtime, id, value) return runtime:set_parameter(id, value) end"
-        )
-        self._resize_projection = self.lua.eval(
-            b"function(runtime, width, height) "
-            b"local ffi = require('ffi') "
-            b"local canvas = runtime.canvas "
-            b"local model_w = canvas.width / canvas.pixels_per_unit "
-            b"local model_h = canvas.height / canvas.pixels_per_unit "
-            b"local scale = math.min(width / model_w, height / model_h) * 0.82 "
-            b"runtime._projection = ffi.new('float[16]', { "
-            b"scale * 2.0 / width, 0, 0, 0, "
-            b"0, scale * 2.0 / height, 0, 0, "
-            b"0, 0, 1, 0, "
-            b"0, -0.10, 0, 1 }) "
-            b"end"
-        )
-        self._render_frame = self.lua.eval(
-            b"function(runtime, renderer, textures, motion, delta, width, height) "
-            b"local gl = require('live2d.gl_loader') "
-            b"gl.glViewport(0, 0, width, height) "
-            b"gl.glEnable(0x0BE2) "
-            b"gl.glClearColor(0.18, 0.20, 0.22, 1.0) "
-            b"gl.glClear(0x00004000) "
-            b"local finished = false "
-            b"if motion then "
-            b"motion:tick(delta) "
-            b"motion:apply(runtime) "
-            b"finished = motion:is_finished() "
-            b"end "
-            b"runtime:apply_pose(delta) "
-            b"runtime:update_meshes() "
-            b"renderer:render_meshes(runtime.meshes, textures, runtime._projection) "
-            b"collectgarbage('step', 200) "
-            b"return finished "
-            b"end"
-        )
-        self._destroy_renderer = self.lua.eval(b"function(renderer) return renderer:destroy() end")
-
-    def _build_runtime(self):
-        model = _read_json(MODEL_JSON)
-        moc_name = model["FileReferences"]["Moc"]
-        pose_name = model["FileReferences"].get("Pose")
-        pose_json = (MODEL_DIR / pose_name).read_bytes() if pose_name else None
-        return self._build_runtime_from_streams(
-            MODEL_JSON.read_bytes(),
-            (MODEL_DIR / moc_name).read_bytes(),
-            pose_json,
-        )
-
-    def _load_texture_paths(self):
-        assert self.lua is not None
-        model = _read_json(MODEL_JSON)
-        texture_paths = self.lua.table()
-        for index, rel_path in enumerate(model["FileReferences"].get("Textures", []), start=1):
-            texture_paths[index] = str(MODEL_DIR / rel_path).encode("utf-8")
-        return texture_paths
-
-    def _load_motion_players(self) -> list[object]:
-        model = _read_json(MODEL_JSON)
-        motions = []
-        for refs in model["FileReferences"].get("Motions", {}).values():
-            for ref in refs:
-                motion_path = MODEL_DIR / ref["File"]
-                motions.append(self._new_motion_player(motion_path.read_bytes()))
-        return motions
-
-    def _start_next_motion(self) -> None:
-        if not self.motion_players:
-            self.active_motion = None
-            return
-
-        self._motion_index = (self._motion_index + 1) % len(self.motion_players)
-        self.active_motion = self.motion_players[self._motion_index]
-        self._restart_motion(self.active_motion)
 
     def _show_error(self, message: str) -> None:
         QMessageBox.critical(
             self,
-            "Cubism3 initialization failed",
-            "Failed to initialize Cubism3 through lupa.\n\n" + message,
+            "Live2D Cubism3 initialization failed",
+            "Failed to initialize Cubism3 Live2D through lupa.\n\n" + message,
         )
 
 
 def main() -> int:
-    if not MODEL_JSON.exists():
-        print(f"Model not found: {MODEL_JSON}", file=sys.stderr)
+    if not (ROOT / MODEL_PATH).exists():
+        print(f"Model not found: {ROOT / MODEL_PATH}", file=sys.stderr)
         return 1
 
     QSurfaceFormat.setDefaultFormat(_make_gl_format())
 
     app = QApplication(sys.argv)
-    widget = Cubism3Widget()
-    widget.resize(480, 720)
+    widget = Live2DWidget()
+    widget.resize(500, 700)
     widget.show()
     return app.exec()
 
 
-def _read_json(path: Path) -> dict:
-    with path.open("r", encoding="utf-8") as file:
-        return json.load(file)
+def _load_resource_streams(lua: LuaRuntime, model_dir: Path):
+    resource_streams = lua.table()
+    for path in model_dir.rglob("*"):
+        if path.is_file() and path.suffix.lower() != ".png":
+            resource_streams[_repo_path(path).encode("utf-8")] = path.read_bytes()
+    return resource_streams
+
+
+def _repo_path(path: Path) -> str:
+    return path.relative_to(ROOT).as_posix()
 
 
 def _make_gl_format() -> QSurfaceFormat:
