@@ -19,11 +19,6 @@ function L2DMatrix44:getArray()
     return self.tr
 end
 
-function L2DMatrix44:setMatrix(tr)
-    if tr == nil or #tr ~= 16 then return end
-    for i = 1, 16 do self.tr[i] = tr[i] end
-end
-
 function L2DMatrix44:getScaleX()
     return self.tr[1]
 end

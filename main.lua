@@ -44,10 +44,7 @@ model.modelMatrix:setCenterPosition(0, 0)
 print("Model loaded.")
 
 local running = true
-local drag = false
 local dragX, dragY = 0, 0
-local offsetX, offsetY = 0, 0
-local scale = 1.0
 local frameCount = 0
 local targetFrameMs = 1000 / 60
 local motionNames = model.modelSetting:getMotionNames() or {}

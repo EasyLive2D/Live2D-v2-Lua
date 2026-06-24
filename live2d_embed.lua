@@ -246,40 +246,15 @@ function Renderer:set_expression(name)
     return self
 end
 
-function Renderer:preload_expression(name)
-    require_model(self):PreloadExpression(name)
-    return self
-end
-
-function Renderer:reset_expression()
-    require_model(self):ResetExpression()
-    return self
-end
-
 function Renderer:start_motion(name, no, priority)
     priority = priority or MotionPriority.FORCE
     require_model(self):StartMotion(name, tonumber(no) or 0, priority)
     return self
 end
 
-function Renderer:preload_motion_group(name)
-    require_model(self):PreloadMotionGroup(name)
-    return self
-end
-
-function Renderer:clear_motions()
-    require_model(self):ClearMotions()
-    return self
-end
-
 function Renderer:hit_test(x, y)
     return require_model(self):HitPart(tonumber(x) or 0, tonumber(y) or 0, true)
 end
-
-function Renderer:get_model()
-    return self.model
-end
-
 
 function M.init()
     init_runtime()

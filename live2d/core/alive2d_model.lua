@@ -144,19 +144,6 @@ function ALive2DModel:getTransformedPoints(aH)
     return nil
 end
 
-function ALive2DModel:getIndexArray(aI)
-    if aI < 0 or aI >= #self.modelContext.drawDataList then
-        return nil
-    end
-    local aH = self.modelContext.drawDataList[aI + 1]
-    if aH ~= nil and aH:getType() == require("live2d.core.draw.idraw_data").TYPE_MESH then
-        if aH.getIndexArray then
-            return aH:getIndexArray()
-        end
-    end
-    return nil
-end
-
 function ALive2DModel.loadModel_exe(model, buf)
     if type(buf) ~= "string" then
         error("param error")

@@ -155,19 +155,6 @@ for _, tex_path in ipairs(textures) do
 end
 
 -- Setup projection matrix (orthographic projection matching canvas)
-local function make_projection(view_width, view_height, canvas_width, canvas_height)
-    -- Scale model to fit view, centered
-    local scale_x = 2.0 / view_width
-    local scale_y = 2.0 / view_height
-    local m = ffi.new("float[16]", {
-        scale_x, 0, 0, 0,
-        0, scale_y, 0, 0,
-        0, 0, 1, 0,
-        0, 0, 0, 1,
-    })
-    return m
-end
-
 -- Compute model scale to fit window
 local model_width = canvas.width / canvas.pixels_per_unit
 local model_height = canvas.height / canvas.pixels_per_unit
@@ -187,8 +174,6 @@ local targetFrameMs = 1000 / 60
 local motionIndex = 1
 local currentMotion = nil
 local lastTime = sdl2.getTicks()
-local dragX, dragY = 0, 0
-local offsetX, offsetY = 0, 0
 
 local function isInsideWindow(x, y)
     return x >= 0 and x < W and y >= 0 and y < H

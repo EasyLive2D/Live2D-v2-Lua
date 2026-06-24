@@ -12,10 +12,6 @@ function L2DModelMatrix.new(w, h)
     return self
 end
 
-function L2DModelMatrix:setPosition(x, y)
-    self:translate(x, y)
-end
-
 function L2DModelMatrix:setCenterPosition(x, y)
     self.ocx = x
     self.ocy = y

@@ -1,5 +1,4 @@
 local Float32Array = require("live2d.core.type.array").Float32Array
-local Array = require("live2d.core.type.array").Array
 
 local DrawParam = {}
 DrawParam.__index = DrawParam

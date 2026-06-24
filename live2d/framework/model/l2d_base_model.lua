@@ -18,14 +18,6 @@ function L2DBaseModel.new()
     self.eyeBlink = nil
     self.physics = nil
     self.pose = nil
-    self.debugMode = false
-    self.initialized = false
-    self.updating = false
-    self.alpha = 1
-    self.accAlpha = 0
-    self.accelX = 0
-    self.accelY = 0
-    self.accelZ = 0
     self.dragX = 0
     self.dragY = 0
     self.startTimeMSec = 0
@@ -33,12 +25,9 @@ function L2DBaseModel.new()
     self.expressionManager = L2DMotionManager.new()
     self.motions = {}
     self.expressions = {}
-    self.isTexLoaded = false
     return self
 end
 
-function L2DBaseModel:setInitialized(v) self.initialized = v end
-function L2DBaseModel:setUpdating(v) self.updating = v end
 function L2DBaseModel:setDrag(x, y) self.dragX = x; self.dragY = y end
 
 function L2DBaseModel:loadModelData(path)
@@ -56,9 +45,6 @@ function L2DBaseModel:loadTexture(no, path)
     local pm = Live2DFramework.getPlatformManager()
     pm:loadTexture(self.live2DModel, no, path)
     L2DBaseModel.texCount = L2DBaseModel.texCount - 1
-    if L2DBaseModel.texCount == 0 then
-        self.isTexLoaded = true
-    end
 end
 
 function L2DBaseModel:loadMotion(name, path)
@@ -90,28 +76,6 @@ function L2DBaseModel:loadPhysics(path)
     local pm = Live2DFramework.getPlatformManager()
     local buf = pm:loadBytes(path)
     self.physics = L2DPhysics.load(buf)
-end
-
-function L2DBaseModel:hitTestSimple(drawID, testX, testY)
-    local draw_index = self.live2DModel:getDrawDataIndex(drawID)
-    if draw_index < 0 then return false end
-    local points = self.live2DModel:getTransformedPoints(draw_index)
-    if points == nil then return false end
-    local left = self.live2DModel:getCanvasWidth()
-    local right = 0
-    local top = self.live2DModel:getCanvasHeight()
-    local bottom = 0
-    for j = 1, #points, 2 do
-        local x = points[j]
-        local y = points[j + 1]
-        if x < left then left = x end
-        if x > right then right = x end
-        if y < top then top = y end
-        if y > bottom then bottom = y end
-    end
-    local tx = self.modelMatrix:invertTransformX(testX)
-    local ty = self.modelMatrix:invertTransformY(testY)
-    return left <= tx and tx <= right and top <= ty and ty <= bottom
 end
 
 return L2DBaseModel

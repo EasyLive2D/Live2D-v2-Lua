@@ -38,8 +38,6 @@ function LAppModel:getPathDir(path)
 end
 
 function LAppModel:LoadModelJson(modelSettingPath)
-    self:setUpdating(true)
-    self:setInitialized(false)
     self.modelHomeDir = self:getPathDir(modelSettingPath)
     self.modelSetting = ModelSettingJson.new()
     self.modelSetting:loadModelSetting(modelSettingPath)
@@ -118,8 +116,6 @@ function LAppModel:LoadModelJson(modelSettingPath)
 
     self.live2DModel:saveParam()
     self.mainMotionManager:stopAllMotions()
-    self:setUpdating(false)
-    self:setInitialized(true)
 end
 
 function LAppModel:_hasParamId(paramId)
