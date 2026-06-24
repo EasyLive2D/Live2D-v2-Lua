@@ -10,14 +10,14 @@ function UtMath.getAngleNotAbs(v1, v2)
 end
 
 function UtMath.getAngleDiff(q1, q2)
-    local t = q1 - q2
-    while t < -math.pi do
-        t = t + 2 * math.pi
+    local angleDiff = q1 - q2
+    while angleDiff < -math.pi do
+        angleDiff = angleDiff + 2 * math.pi
     end
-    while t > math.pi do
-        t = t - 2 * math.pi
+    while angleDiff > math.pi do
+        angleDiff = angleDiff - 2 * math.pi
     end
-    return t
+    return angleDiff
 end
 
 return UtMath

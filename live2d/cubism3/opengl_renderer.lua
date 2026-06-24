@@ -66,12 +66,12 @@ OpenGLRenderer.__index = OpenGLRenderer
 
 local sort_meshes
 local function compare_draw_order(a, b)
-    local ma = sort_meshes[a + 1]
-    local mb = sort_meshes[b + 1]
-    local da = draw_order_from_raw(ma.draw_order)
-    local db = draw_order_from_raw(mb.draw_order)
-    if da ~= db then return da < db end
-    if ma.render_order ~= mb.render_order then return ma.render_order < mb.render_order end
+    local meshA = sort_meshes[a + 1]
+    local meshB = sort_meshes[b + 1]
+    local drawOrderA = draw_order_from_raw(meshA.draw_order)
+    local drawOrderB = draw_order_from_raw(meshB.draw_order)
+    if drawOrderA ~= drawOrderB then return drawOrderA < drawOrderB end
+    if meshA.render_order ~= meshB.render_order then return meshA.render_order < meshB.render_order end
     return a < b
 end
 
@@ -96,38 +96,38 @@ function OpenGLRenderer:init_shader()
     local gl = self.gl
 
     -- Compile vertex shader
-    local vs = gl.glCreateShader(0x8B31) -- GL_VERTEX_SHADER
+    local vertexShader = gl.glCreateShader(0x8B31) -- GL_VERTEX_SHADER
     local src = ffi.new("const char*[1]", ffi.new("const char*", VERTEX_SHADER))
     local len = ffi.new("int[1]", #VERTEX_SHADER)
-    gl.glShaderSource(vs, 1, src, len)
-    gl.glCompileShader(vs)
+    gl.glShaderSource(vertexShader, 1, src, len)
+    gl.glCompileShader(vertexShader)
 
     local status = ffi.new("int[1]", 0)
-    gl.glGetShaderiv(vs, 0x8B81, status) -- GL_COMPILE_STATUS
+    gl.glGetShaderiv(vertexShader, 0x8B81, status) -- GL_COMPILE_STATUS
     if status[0] == 0 then
         local log = ffi.new("char[1024]")
-        gl.glGetShaderInfoLog(vs, 1024, nil, log)
+        gl.glGetShaderInfoLog(vertexShader, 1024, nil, log)
         error("Vertex shader compile failed: " .. ffi.string(log))
     end
 
     -- Compile fragment shader
-    local fs = gl.glCreateShader(0x8B30) -- GL_FRAGMENT_SHADER
+    local fragmentShader = gl.glCreateShader(0x8B30) -- GL_FRAGMENT_SHADER
     src = ffi.new("const char*[1]", ffi.new("const char*", FRAGMENT_SHADER))
     len[0] = #FRAGMENT_SHADER
-    gl.glShaderSource(fs, 1, src, len)
-    gl.glCompileShader(fs)
+    gl.glShaderSource(fragmentShader, 1, src, len)
+    gl.glCompileShader(fragmentShader)
 
-    gl.glGetShaderiv(fs, 0x8B81, status)
+    gl.glGetShaderiv(fragmentShader, 0x8B81, status)
     if status[0] == 0 then
         local log = ffi.new("char[1024]")
-        gl.glGetShaderInfoLog(fs, 1024, nil, log)
+        gl.glGetShaderInfoLog(fragmentShader, 1024, nil, log)
         error("Fragment shader compile failed: " .. ffi.string(log))
     end
 
     -- Link program
     local prog = gl.glCreateProgram()
-    gl.glAttachShader(prog, vs)
-    gl.glAttachShader(prog, fs)
+    gl.glAttachShader(prog, vertexShader)
+    gl.glAttachShader(prog, fragmentShader)
     gl.glLinkProgram(prog)
 
     gl.glGetProgramiv(prog, 0x8B82, status) -- GL_LINK_STATUS
@@ -137,8 +137,8 @@ function OpenGLRenderer:init_shader()
         error("Shader link failed: " .. ffi.string(log))
     end
 
-    gl.glDeleteShader(vs)
-    gl.glDeleteShader(fs)
+    gl.glDeleteShader(vertexShader)
+    gl.glDeleteShader(fragmentShader)
 
     self.shader = prog
     self.u_projection = gl.glGetUniformLocation(prog, "u_projection")
@@ -290,12 +290,12 @@ function OpenGLRenderer:draw_mesh(mesh, textures, projection)
     end
     local vertex_data = self.vertex_data
     for i = 1, #vertices do
-        local v = vertices[i]
+        local vertex = vertices[i]
         local off = (i - 1) * 11
-        vertex_data[off + 0] = v.position[1]
-        vertex_data[off + 1] = v.position[2]
-        vertex_data[off + 2] = v.uv[1]
-        vertex_data[off + 3] = v.uv[2]
+        vertex_data[off + 0] = vertex.position[1]
+        vertex_data[off + 1] = vertex.position[2]
+        vertex_data[off + 2] = vertex.uv[1]
+        vertex_data[off + 3] = vertex.uv[2]
         vertex_data[off + 4] = mesh.opacity
         vertex_data[off + 5] = mesh.multiply_color[1]
         vertex_data[off + 6] = mesh.multiply_color[2]

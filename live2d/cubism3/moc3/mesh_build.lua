@@ -60,17 +60,17 @@ local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, 
     for _, slot in ipairs(slots) do
         local kfs_list = art_mesh_keyforms:art_mesh_keyforms(art_mesh_index)
         if kfs_list and kfs_list[slot.local_index + 1] then
-            local mc = kfs_list[slot.local_index + 1].multiply_color
-            local sc = kfs_list[slot.local_index + 1].screen_color
-            if mc then
-                multiply_color[1] = multiply_color[1] + mc[1] * slot.weight
-                multiply_color[2] = multiply_color[2] + mc[2] * slot.weight
-                multiply_color[3] = multiply_color[3] + mc[3] * slot.weight
+            local multiplyColor = kfs_list[slot.local_index + 1].multiply_color
+            local screenColor = kfs_list[slot.local_index + 1].screen_color
+            if multiplyColor then
+                multiply_color[1] = multiply_color[1] + multiplyColor[1] * slot.weight
+                multiply_color[2] = multiply_color[2] + multiplyColor[2] * slot.weight
+                multiply_color[3] = multiply_color[3] + multiplyColor[3] * slot.weight
             end
-            if sc then
-                screen_color[1] = screen_color[1] + sc[1] * slot.weight
-                screen_color[2] = screen_color[2] + sc[2] * slot.weight
-                screen_color[3] = screen_color[3] + sc[3] * slot.weight
+            if screenColor then
+                screen_color[1] = screen_color[1] + screenColor[1] * slot.weight
+                screen_color[2] = screen_color[2] + screenColor[2] * slot.weight
+                screen_color[3] = screen_color[3] + screenColor[3] * slot.weight
             end
         end
     end
@@ -90,9 +90,9 @@ local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, 
         local kf_pos = art_mesh_keyforms:art_mesh_keyform_positions(art_mesh_index, slot.local_index)
         if not kf_pos or #kf_pos ~= #first_kf then return nil end
         for i = 0, vertex_count - 1 do
-            local pi = i + 1
-            positions_x[pi] = positions_x[pi] + kf_pos[i * 2 + 1] * slot.weight
-            positions_y[pi] = positions_y[pi] + kf_pos[i * 2 + 2] * slot.weight
+            local positionIndex = i + 1
+            positions_x[positionIndex] = positions_x[positionIndex] + kf_pos[i * 2 + 1] * slot.weight
+            positions_y[positionIndex] = positions_y[positionIndex] + kf_pos[i * 2 + 2] * slot.weight
         end
     end
 
@@ -101,10 +101,10 @@ local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, 
         local def = composed[def_parent + 1]
         if def then
             for i = 1, vertex_count do
-                local p = deformers_mod.apply_one(def, Vector2.new(positions_x[i], positions_y[i]))
-                if not p then return nil end
-                positions_x[i] = p:x()
-                positions_y[i] = p:y()
+                local deformedPosition = deformers_mod.apply_one(def, Vector2.new(positions_x[i], positions_y[i]))
+                if not deformedPosition then return nil end
+                positions_x[i] = deformedPosition:x()
+                positions_y[i] = deformedPosition:y()
             end
         end
     end

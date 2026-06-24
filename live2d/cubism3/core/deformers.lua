@@ -58,11 +58,11 @@ function deformers.rotation_deformer_transform_point(point, angle_degrees, scale
 end
 
 -- Bilinear interpolation
-local function bilinear_cell(s, t, c00, c10, c01, c11)
-    local w00 = (1 - s) * (1 - t)
-    local w10 = s * (1 - t)
-    local w01 = (1 - s) * t
-    local w11 = s * t
+local function bilinear_cell(cellFractionS, cellFractionT, c00, c10, c01, c11)
+    local w00 = (1 - cellFractionS) * (1 - cellFractionT)
+    local w10 = cellFractionS * (1 - cellFractionT)
+    local w01 = (1 - cellFractionS) * cellFractionT
+    local w11 = cellFractionS * cellFractionT
     return Vector2.new(
         w00 * c00:x() + w10 * c10:x() + w01 * c01:x() + w11 * c11:x(),
         w00 * c00:y() + w10 * c10:y() + w01 * c01:y() + w11 * c11:y()
@@ -70,18 +70,18 @@ local function bilinear_cell(s, t, c00, c10, c01, c11)
 end
 
 -- Triangle interpolation
-local function triangle_cell(s, t, c00, c10, c01, c11)
-    if s + t <= 1 then
+local function triangle_cell(cellFractionS, cellFractionT, c00, c10, c01, c11)
+    if cellFractionS + cellFractionT <= 1 then
         return Vector2.new(
-            c00:x() + (c10:x() - c00:x()) * s + (c01:x() - c00:x()) * t,
-            c00:y() + (c10:y() - c00:y()) * s + (c01:y() - c00:y()) * t
+            c00:x() + (c10:x() - c00:x()) * cellFractionS + (c01:x() - c00:x()) * cellFractionT,
+            c00:y() + (c10:y() - c00:y()) * cellFractionS + (c01:y() - c00:y()) * cellFractionT
         )
     end
-    local a = 1 - s
-    local b = 1 - t
+    local oneMinusS = 1 - cellFractionS
+    local oneMinusT = 1 - cellFractionT
     return Vector2.new(
-        c11:x() + (c01:x() - c11:x()) * a + (c10:x() - c11:x()) * b,
-        c11:y() + (c01:y() - c11:y()) * a + (c10:y() - c11:y()) * b
+        c11:x() + (c01:x() - c11:x()) * oneMinusS + (c10:x() - c11:x()) * oneMinusT,
+        c11:y() + (c01:y() - c11:y()) * oneMinusS + (c10:y() - c11:y()) * oneMinusT
     )
 end
 
@@ -110,28 +110,28 @@ function deformers.warp_deformer_transform_inside(local_point, grid, cols, rows,
         return nil
     end
 
-    local u = px * cols
-    local v = py * rows
-    local i = math.floor(u)
-    local j = math.floor(v)
-    local s = u - i
-    local t = v - j
+    local gridU = px * cols
+    local gridV = py * rows
+    local cellI = math.floor(gridU)
+    local cellJ = math.floor(gridV)
+    local cellFractionS = gridU - cellI
+    local cellFractionT = gridV - cellJ
 
-    if i >= cols or j >= rows then
+    if cellI >= cols or cellJ >= rows then
         return nil
     end
 
     -- 1-indexed array access
-    local idx = j * stride + i + 1
-    local c00 = grid[idx]
-    local c10 = grid[idx + 1]
-    local c01 = grid[idx + stride]
-    local c11 = grid[idx + stride + 1]
+    local flatIndex = cellJ * stride + cellI + 1
+    local c00 = grid[flatIndex]
+    local c10 = grid[flatIndex + 1]
+    local c01 = grid[flatIndex + stride]
+    local c11 = grid[flatIndex + stride + 1]
 
     if interpolation == deformers.WARP_QUAD then
-        return bilinear_cell(s, t, c00, c10, c01, c11)
+        return bilinear_cell(cellFractionS, cellFractionT, c00, c10, c01, c11)
     else
-        return triangle_cell(s, t, c00, c10, c01, c11)
+        return triangle_cell(cellFractionS, cellFractionT, c00, c10, c01, c11)
     end
 end
 
@@ -146,26 +146,26 @@ function deformers.warp_deformer_transform_target(local_point, grid, cols, rows,
         return nil
     end
 
-    local u = local_point:x() * cols
-    local v = local_point:y() * rows
-    local i = outside_cell_index(u, cols)
-    local j = outside_cell_index(v, rows)
-    if i == nil or j == nil then
+    local gridU = local_point:x() * cols
+    local gridV = local_point:y() * rows
+    local cellI = outside_cell_index(gridU, cols)
+    local cellJ = outside_cell_index(gridV, rows)
+    if cellI == nil or cellJ == nil then
         return nil
     end
-    local s = u - i
-    local t = v - j
+    local cellFractionS = gridU - cellI
+    local cellFractionT = gridV - cellJ
 
-    local idx = j * stride + i + 1
-    local c00 = grid[idx]
-    local c10 = grid[idx + 1]
-    local c01 = grid[idx + stride]
-    local c11 = grid[idx + stride + 1]
+    local flatIndex = cellJ * stride + cellI + 1
+    local c00 = grid[flatIndex]
+    local c10 = grid[flatIndex + 1]
+    local c01 = grid[flatIndex + stride]
+    local c11 = grid[flatIndex + stride + 1]
 
     if interpolation == deformers.WARP_QUAD then
-        return bilinear_cell(s, t, c00, c10, c01, c11)
+        return bilinear_cell(cellFractionS, cellFractionT, c00, c10, c01, c11)
     else
-        return triangle_cell(s, t, c00, c10, c01, c11)
+        return triangle_cell(cellFractionS, cellFractionT, c00, c10, c01, c11)
     end
 end
 
@@ -187,13 +187,13 @@ function deformers.transform_art_mesh_vertices_by_deformers(vertices, transforms
                     transform.flip_y
                 )
             elseif transform.kind == deformers.DEFORMER_WARP then
-                local r = deformers.warp_deformer_transform_target(
+                local transformResult = deformers.warp_deformer_transform_target(
                     out[i], transform.grid, transform.cols, transform.rows, transform.interpolation
                 )
-                if r == nil then
+                if transformResult == nil then
                     return nil
                 end
-                out[i] = r
+                out[i] = transformResult
             end
         end
     end

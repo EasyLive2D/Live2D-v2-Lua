@@ -39,8 +39,8 @@ local function build_moc3_drawable_mesh(art_meshes, keyforms, art_mesh_index, lo
     if not mesh then return nil end
     local kfs = keyforms:art_mesh_keyforms(art_mesh_index)
     if not kfs then return nil end
-    local kf = kfs[local_keyform_index + 1]
-    if not kf then return nil end
+    local keyform = kfs[local_keyform_index + 1]
+    if not keyform then return nil end
     local positions = keyforms:art_mesh_keyform_positions(art_mesh_index, local_keyform_index)
     if not positions then return nil end
     local uvs = art_meshes:art_mesh_uvs(art_mesh_index)
@@ -51,10 +51,10 @@ local function build_moc3_drawable_mesh(art_meshes, keyforms, art_mesh_index, lo
 
     local vertices = {}
     for i = 0, #positions / 2 - 1 do
-        local pi = i * 2 + 1
+        local positionIndex = i * 2 + 1
         vertices[#vertices + 1] = drawable.new_vertex(
-            { positions[pi], positions[pi + 1] },
-            { uvs[pi], uvs[pi + 1] }
+            { positions[positionIndex], positions[positionIndex + 1] },
+            { uvs[positionIndex], uvs[positionIndex + 1] }
         )
     end
 
@@ -75,11 +75,11 @@ local function build_moc3_drawable_mesh(art_meshes, keyforms, art_mesh_index, lo
     return {
         texture_index = mesh.texture_index,
         drawable_flags = mesh.drawable_flags,
-        opacity = kf.opacity,
-        draw_order = kf.draw_order,
+        opacity = keyform.opacity,
+        draw_order = keyform.draw_order,
         render_order = render_order,
-        multiply_color = kf.multiply_color or { 1, 1, 1 },
-        screen_color = kf.screen_color or { 0, 0, 0 },
+        multiply_color = keyform.multiply_color or { 1, 1, 1 },
+        screen_color = keyform.screen_color or { 0, 0, 0 },
         vertices = vertices,
         indices = indices,
         masks = masks,

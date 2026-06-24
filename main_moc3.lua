@@ -35,9 +35,9 @@ gl.glEnable(0x0BC0) -- GL_TEXTURE_2D
 print("Loading Hiyori model3.json...")
 local base = "resources/Hiyori/"
 local model_path = base .. "Hiyori.model3.json"
-local f = assert(io.open(model_path, "r"))
-local model_json = f:read("*all")
-f:close()
+local file = assert(io.open(model_path, "r"))
+local model_json = file:read("*all")
+file:close()
 local model_data, err = model3.parse(model_json)
 if not model_data then
     error("Failed to parse model3.json: " .. tostring(err))
@@ -48,9 +48,9 @@ print("  MOC: " .. model_data.file_references.moc)
 -- Parse .moc3 binary
 local moc_path = base .. model_data.file_references.moc
 print("Loading " .. moc_path .. "...")
-local f = assert(io.open(moc_path, "rb"))
-local moc_bytes = f:read("*all")
-f:close()
+local file = assert(io.open(moc_path, "rb"))
+local moc_bytes = file:read("*all")
+file:close()
 print("  Size: " .. #moc_bytes .. " bytes")
 
 local canvas, err = moc3.canvas.parse(moc_bytes)
@@ -90,9 +90,9 @@ local pose = nil
 if model_data.file_references.pose then
     local pose_path = base .. model_data.file_references.pose
     print("Loading pose: " .. pose_path)
-    local f = assert(io.open(pose_path, "r"))
-    local pose_json = f:read("*all")
-    f:close()
+    local file = assert(io.open(pose_path, "r"))
+    local pose_json = file:read("*all")
+    file:close()
     local pose_data, err = pose3.parse(pose_json)
     if pose_data then
         pose = pose_data
@@ -182,10 +182,10 @@ end
 local function playNextMotion()
     if #motions == 0 then return end
     motionIndex = motionIndex % #motions + 1
-    local m = motions[motionIndex]
-    currentMotion = m.player
+    local motionData = motions[motionIndex]
+    currentMotion = motionData.player
     currentMotion:restart()
-    print("Motion: " .. m.name)
+    print("Motion: " .. motionData.name)
 end
 
 -- Event loop

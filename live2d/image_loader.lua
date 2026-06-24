@@ -56,12 +56,12 @@ if is_win then
         gdiToken = token[0]
     end
 
-    local function createDummyTexture(w, h)
-        local data = ffi.new("uint8_t[?]", w * h * 4)
-        for i = 0, w * h * 4 - 1 do
+    local function createDummyTexture(widthOut, heightOut)
+        local data = ffi.new("uint8_t[?]", widthOut * heightOut * 4)
+        for i = 0, widthOut * heightOut * 4 - 1 do
             data[i] = 0xFF
         end
-        return w, h, data
+        return widthOut, heightOut, data
     end
 
     local M = {}
@@ -191,16 +191,16 @@ else
     local M = {}
 
     local function readBE4(bytes, pos)
-        local a, b, c, d = string.byte(bytes, pos, pos + 3)
-        return a * 0x1000000 + b * 0x10000 + c * 0x100 + d
+        local byte1, byte2, byte3, byte4 = string.byte(bytes, pos, pos + 3)
+        return byte1 * 0x1000000 + byte2 * 0x10000 + byte3 * 0x100 + byte4
     end
 
-    local function createDummyTexture(w, h)
-        local data = ffi.new("uint8_t[?]", w * h * 4)
-        for i = 0, w * h * 4 - 1 do
+    local function createDummyTexture(widthOut, heightOut)
+        local data = ffi.new("uint8_t[?]", widthOut * heightOut * 4)
+        for i = 0, widthOut * heightOut * 4 - 1 do
             data[i] = 0xFF
         end
-        return w, h, data
+        return widthOut, heightOut, data
     end
 
     local function inflateZlib(compressed)
@@ -240,12 +240,12 @@ else
     end
 
     local function paethPredictor(a, b, c)
-        local p = a + b - c
-        local pa = math.abs(p - a)
-        local pb = math.abs(p - b)
-        local pc = math.abs(p - c)
-        if pa <= pb and pa <= pc then return a end
-        if pb <= pc then return b end
+        local predictedValue = a + b - c
+        local distanceFromLeft = math.abs(predictedValue - a)
+        local distanceFromAbove = math.abs(predictedValue - b)
+        local distanceFromAboveLeft = math.abs(predictedValue - c)
+        if distanceFromLeft <= distanceFromAbove and distanceFromLeft <= distanceFromAboveLeft then return a end
+        if distanceFromAbove <= distanceFromAboveLeft then return b end
         return c
     end
 
@@ -290,10 +290,10 @@ else
                 -- Paeth: a = out[x - bpp], b = prevRow[x], c = prevRow[x - bpp]
                 for x = 0, rowBytes - 1 do
                     local filtered = string.byte(raw, pos + 1 + x)
-                    local a = (x >= bytesPerPixel) and out[x - bytesPerPixel] or 0
-                    local b = prevRow[x]
-                    local c = (x >= bytesPerPixel) and prevRow[x - bytesPerPixel] or 0
-                    out[x] = (filtered + paethPredictor(a, b, c)) % 256
+                    local leftPixel = (x >= bytesPerPixel) and out[x - bytesPerPixel] or 0
+                    local abovePixel = prevRow[x]
+                    local aboveLeftPixel = (x >= bytesPerPixel) and prevRow[x - bytesPerPixel] or 0
+                    out[x] = (filtered + paethPredictor(leftPixel, abovePixel, aboveLeftPixel)) % 256
                 end
             else
                 -- Unknown filter: copy raw bytes
@@ -328,12 +328,12 @@ else
             elseif colorType == 0 then
                 local transparentGray = palette._tRNS_gray
                 for x = 0, width - 1 do
-                    local v = out[x]
+                    local grayValue = out[x]
                     local base = dst + x * 4
-                    data[base] = v
-                    data[base + 1] = v
-                    data[base + 2] = v
-                    data[base + 3] = (hasTRNS and v == transparentGray) and 0 or 255
+                    data[base] = grayValue
+                    data[base + 1] = grayValue
+                    data[base + 2] = grayValue
+                    data[base + 3] = (hasTRNS and grayValue == transparentGray) and 0 or 255
                 end
             elseif colorType == 3 then
                 for x = 0, width - 1 do

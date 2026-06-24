@@ -12,12 +12,12 @@ function AMotion.new()
     return self
 end
 
-function AMotion:setFadeIn(aH)
-    self.fadeInMSec = aH
+function AMotion:setFadeIn(fadeInMSec)
+    self.fadeInMSec = fadeInMSec
 end
 
-function AMotion:setFadeOut(aH)
-    self.fadeOutMSec = aH
+function AMotion:setFadeOut(fadeOutMSec)
+    self.fadeOutMSec = fadeOutMSec
 end
 
 function AMotion:getFadeOut()
@@ -32,47 +32,47 @@ function AMotion:getLoopDurationMSec()
     return -1
 end
 
-function AMotion:updateParam(aJ, aN)
-    if not aN.available or aN.finished then
+function AMotion:updateParam(model, motionQueueEntry)
+    if not motionQueueEntry.available or motionQueueEntry.finished then
         return
     end
-    local aL = UtSystem.getUserTimeMSec()
-    if aN.startTimeMSec < 0 then
-        aN.startTimeMSec = aL
-        aN.fadeInStartTimeMSec = aL
-        local aM = self:getDurationMSec()
-        if aN.endTimeMSec < 0 then
-            if aM <= 0 then
-                aN.endTimeMSec = -1
+    local currentTimeMSec = UtSystem.getUserTimeMSec()
+    if motionQueueEntry.startTimeMSec < 0 then
+        motionQueueEntry.startTimeMSec = currentTimeMSec
+        motionQueueEntry.fadeInStartTimeMSec = currentTimeMSec
+        local durationMSec = self:getDurationMSec()
+        if motionQueueEntry.endTimeMSec < 0 then
+            if durationMSec <= 0 then
+                motionQueueEntry.endTimeMSec = -1
             else
-                aN.endTimeMSec = aN.startTimeMSec + aM
+                motionQueueEntry.endTimeMSec = motionQueueEntry.startTimeMSec + durationMSec
             end
         end
     end
-    local aI = self.weight
-    local aH
+    local accumulatedWeight = self.weight
+    local fadeInWeight
     if self.fadeInMSec == 0 then
-        aH = 1
+        fadeInWeight = 1
     else
-        aH = UtMotion.getEasingSine((aL - aN.fadeInStartTimeMSec) / self.fadeInMSec)
+        fadeInWeight = UtMotion.getEasingSine((currentTimeMSec - motionQueueEntry.fadeInStartTimeMSec) / self.fadeInMSec)
     end
-    local aK
-    if self.fadeOutMSec == 0 or aN.endTimeMSec < 0 then
-        aK = 1
+    local fadeOutWeight
+    if self.fadeOutMSec == 0 or motionQueueEntry.endTimeMSec < 0 then
+        fadeOutWeight = 1
     else
-        aK = UtMotion.getEasingSine((aN.endTimeMSec - aL) / self.fadeOutMSec)
+        fadeOutWeight = UtMotion.getEasingSine((motionQueueEntry.endTimeMSec - currentTimeMSec) / self.fadeOutMSec)
     end
-    aI = aI * aH * aK
-    if not (0 <= aI and aI <= 1) then
+    accumulatedWeight = accumulatedWeight * fadeInWeight * fadeOutWeight
+    if not (0 <= accumulatedWeight and accumulatedWeight <= 1) then
         print("### assert!! ###")
     end
-    self:updateParamExe(aJ, aL, aI, aN)
-    if aN.endTimeMSec > 0 and aN.endTimeMSec < aL then
-        aN.finished = true
+    self:updateParamExe(model, currentTimeMSec, accumulatedWeight, motionQueueEntry)
+    if motionQueueEntry.endTimeMSec > 0 and motionQueueEntry.endTimeMSec < currentTimeMSec then
+        motionQueueEntry.finished = true
     end
 end
 
-function AMotion:updateParamExe(aH, aI, aJ, aK)
+function AMotion:updateParamExe(model, currentTimeMSec, weight, motionQueueEntry)
     error("abstract method: updateParamExe() not implemented")
 end
 

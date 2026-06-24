@@ -26,15 +26,15 @@ function IDrawData.new()
     return self
 end
 
-function IDrawData:read(aH)
-    self.id = aH:readObject()
-    self.targetId = aH:readObject()
-    self.pivotMgr = aH:readObject()
-    self.averageDrawOrder = aH:readInt32()
-    self.pivotDrawOrders = aH:readInt32Array()
-    self.pivotOpacities = aH:readFloat32Array()
-    if aH:getFormatVersion() >= def.LIVE2D_FORMAT_VERSION_AVAILABLE then
-        self.clipID = aH:readObject()
+function IDrawData:read(binaryReader)
+    self.id = binaryReader:readObject()
+    self.targetId = binaryReader:readObject()
+    self.pivotMgr = binaryReader:readObject()
+    self.averageDrawOrder = binaryReader:readInt32()
+    self.pivotDrawOrders = binaryReader:readInt32Array()
+    self.pivotOpacities = binaryReader:readFloat32Array()
+    if binaryReader:getFormatVersion() >= def.LIVE2D_FORMAT_VERSION_AVAILABLE then
+        self.clipID = binaryReader:readObject()
         self.clipIDList = IDrawData.convertClipIDForV2_11(self.clipID)
     else
         self.clipIDList = nil
@@ -69,13 +69,13 @@ function IDrawData.convertClipIDForV2_11(s)
     return ls
 end
 
-function IDrawData:setupInterpolate(aI, aH)
-    aH.paramOutside = {false}
-    aH.interpolatedDrawOrder = UtInterpolate.interpolateInt(aI, self.pivotMgr, aH.paramOutside, self.pivotDrawOrders)
-    if not Live2D.L2D_OUTSIDE_PARAM_AVAILABLE and aH.paramOutside[1] then
+function IDrawData:setupInterpolate(modelContext, drawContext)
+    drawContext.paramOutside = {false}
+    drawContext.interpolatedDrawOrder = UtInterpolate.interpolateInt(modelContext, self.pivotMgr, drawContext.paramOutside, self.pivotDrawOrders)
+    if not Live2D.L2D_OUTSIDE_PARAM_AVAILABLE and drawContext.paramOutside[1] then
         return
     end
-    aH.interpolatedOpacity = UtInterpolate.interpolateFloat(aI, self.pivotMgr, aH.paramOutside, self.pivotOpacities)
+    drawContext.interpolatedOpacity = UtInterpolate.interpolateFloat(modelContext, self.pivotMgr, drawContext.paramOutside, self.pivotOpacities)
 end
 
 function IDrawData:setupTransform(mc, dc)

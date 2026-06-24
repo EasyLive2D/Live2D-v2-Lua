@@ -17,8 +17,8 @@ function L2DMotionManager:reserveMotion(priority)
     return true
 end
 
-function L2DMotionManager:setReservePriority(val)
-    self.reservePriority = val
+function L2DMotionManager:setReservePriority(priority)
+    self.reservePriority = priority
 end
 
 function L2DMotionManager:updateParam(model)

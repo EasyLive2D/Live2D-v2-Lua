@@ -142,13 +142,13 @@ function art_meshes.art_mesh_uvs(self, index)
     if start < 0 then return nil end
     local count = mesh.vertex_count
     if count < 0 then return nil end
-    local len = count * 2
-    if start + len > #self.uv_xys then return nil end
-    local result = {}
-    for i = 1, len do
-        result[i] = self.uv_xys[start + i]
+    local positionArrayLength = count * 2
+    if start + positionArrayLength > #self.uv_xys then return nil end
+    local uvs = {}
+    for i = 1, positionArrayLength do
+        uvs[i] = self.uv_xys[start + i]
     end
-    return result
+    return uvs
 end
 
 function art_meshes.art_mesh_position_indices(self, index)
@@ -159,11 +159,11 @@ function art_meshes.art_mesh_position_indices(self, index)
     local count = mesh.position_index_count
     if count < 0 then return nil end
     if start + count > #self.position_indices then return nil end
-    local result = {}
+    local indices = {}
     for i = 1, count do
-        result[i] = self.position_indices[start + i]
+        indices[i] = self.position_indices[start + i]
     end
-    return result
+    return indices
 end
 
 function art_meshes.art_mesh_masks(self, index)

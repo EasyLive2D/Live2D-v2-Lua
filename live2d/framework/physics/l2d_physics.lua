@@ -41,14 +41,14 @@ function L2DPhysics.load(buf)
                 local src = src_list[j]
                 local tid = src["id"]
                 local type_str = src["ptype"]
-                local t
-                if type_str == "x" then t = PhysicsHair.SRC_TO_X
-                elseif type_str == "y" then t = PhysicsHair.SRC_TO_Y
-                elseif type_str == "angle" then t = PhysicsHair.SRC_TO_G_ANGLE
+                local sourceType
+                if type_str == "x" then sourceType = PhysicsHair.SRC_TO_X
+                elseif type_str == "y" then sourceType = PhysicsHair.SRC_TO_Y
+                elseif type_str == "angle" then sourceType = PhysicsHair.SRC_TO_G_ANGLE
                 else error("error") end
                 local scale = tonumber(src["scale"])
                 local weight = tonumber(src["weight"])
-                physics:addSrcParam(t, tid, scale, weight)
+                physics:addSrcParam(sourceType, tid, scale, weight)
             end
         end
 
@@ -58,13 +58,13 @@ function L2DPhysics.load(buf)
                 local target = target_list[j]
                 local tid = target["id"]
                 local type_str = target["ptype"]
-                local t
-                if type_str == "angle" then t = PhysicsHair.TARGET_FROM_ANGLE
-                elseif type_str == "angle_v" then t = PhysicsHair.TARGET_FROM_ANGLE_V
+                local targetType
+                if type_str == "angle" then targetType = PhysicsHair.TARGET_FROM_ANGLE
+                elseif type_str == "angle_v" then targetType = PhysicsHair.TARGET_FROM_ANGLE_V
                 else error("Invalid parameter:PhysicsHair.Target") end
                 local scale = tonumber(target["scale"])
                 local weight = tonumber(target["weight"])
-                physics:addTargetParam(t, tid, scale, weight)
+                physics:addTargetParam(targetType, tid, scale, weight)
             end
         end
         ret.physicsList[#ret.physicsList + 1] = physics

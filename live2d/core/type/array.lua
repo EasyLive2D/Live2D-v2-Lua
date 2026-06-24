@@ -4,11 +4,11 @@ function array.Float32Array(size)
     if type(size) ~= "number" then
         error("invalid param")
     end
-    local t = {}
+    local array = {}
     for i = 1, size do
-        t[i] = 0.0
+        array[i] = 0.0
     end
-    return t
+    return array
 end
 
 function array.Float64Array(size)
@@ -26,11 +26,11 @@ function array.Int32Array(size)
     if type(size) ~= "number" then
         error("invalid param")
     end
-    local t = {}
+    local array = {}
     for i = 1, size do
-        t[i] = 0
+        array[i] = 0
     end
-    return t
+    return array
 end
 
 return array

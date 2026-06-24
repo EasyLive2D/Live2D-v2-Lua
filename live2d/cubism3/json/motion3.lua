@@ -111,56 +111,56 @@ local function cardano_algorithm_for_bezier(a, b, c, d)
         return math.max(0, math.min(1, quadratic_equation(b, c, d)))
     end
 
-    local ba = b / a
-    local ca = c / a
-    local da = d / a
-    local p = (3 * ca - ba * ba) / 3
-    local p3 = p / 3
-    local q = (2 * ba * ba * ba - 9 * ba * ca + 27 * da) / 27
-    local q2 = q / 2
-    local discriminant = q2 * q2 + p3 * p3 * p3
+    local normalizedB = b / a
+    local normalizedC = c / a
+    local normalizedD = d / a
+    local depressedP = (3 * normalizedC - normalizedB * normalizedB) / 3
+    local pOver3 = depressedP / 3
+    local depressedQ = (2 * normalizedB * normalizedB * normalizedB - 9 * normalizedB * normalizedC + 27 * normalizedD) / 27
+    local qOver2 = depressedQ / 2
+    local discriminant = qOver2 * qOver2 + pOver3 * pOver3 * pOver3
 
     if discriminant < 0 then
-        local mp3 = -p / 3
-        local mp33 = mp3 * mp3 * mp3
-        local r = math_lib.sqrt(mp33)
-        local t = -q / (2 * r)
-        local cos_phi = math.max(-1, math.min(1, t))
+        local negativePOver3 = -depressedP / 3
+        local mp3Cubed = negativePOver3 * negativePOver3 * negativePOver3
+        local sqrtMp33 = math_lib.sqrt(mp3Cubed)
+        local cosPhiRaw = -depressedQ / (2 * sqrtMp33)
+        local cos_phi = math.max(-1, math.min(1, cosPhiRaw))
         local phi = math_lib.acos(cos_phi)
-        local crtr = r ^ (1/3)
-        local t1 = 2 * crtr
+        local cubeRootR = sqrtMp33 ^ (1/3)
+        local twoTimesCubeRootR = 2 * cubeRootR
 
-        local root1 = t1 * math_lib.cos(phi / 3) - ba / 3
+        local root1 = twoTimesCubeRootR * math_lib.cos(phi / 3) - normalizedB / 3
         if math_lib.abs(root1 - CENTER) < THRESHOLD then
             return math.max(0, math.min(1, root1))
         end
-        local root2 = t1 * math_lib.cos((phi + 2 * math_lib.pi) / 3) - ba / 3
+        local root2 = twoTimesCubeRootR * math_lib.cos((phi + 2 * math_lib.pi) / 3) - normalizedB / 3
         if math_lib.abs(root2 - CENTER) < THRESHOLD then
             return math.max(0, math.min(1, root2))
         end
-        local root3 = t1 * math_lib.cos((phi + 4 * math_lib.pi) / 3) - ba / 3
+        local root3 = twoTimesCubeRootR * math_lib.cos((phi + 4 * math_lib.pi) / 3) - normalizedB / 3
         return math.max(0, math.min(1, root3))
     end
 
     if discriminant == 0 then
-        local u1
-        if q2 < 0 then
-            u1 = (-q2) ^ (1/3)
+        local cubeRootPositive
+        if qOver2 < 0 then
+            cubeRootPositive = (-qOver2) ^ (1/3)
         else
-            u1 = -(q2 ^ (1/3))
+            cubeRootPositive = -(qOver2 ^ (1/3))
         end
-        local root1 = 2 * u1 - ba / 3
+        local root1 = 2 * cubeRootPositive - normalizedB / 3
         if math_lib.abs(root1 - CENTER) < THRESHOLD then
             return math.max(0, math.min(1, root1))
         end
-        local root2 = -u1 - ba / 3
+        local root2 = -cubeRootPositive - normalizedB / 3
         return math.max(0, math.min(1, root2))
     end
 
-    local sd = math_lib.sqrt(discriminant)
-    local u1 = (sd - q2) ^ (1/3)
-    local v1 = (sd + q2) ^ (1/3)
-    return math.max(0, math.min(1, u1 - v1 - ba / 3))
+    local sqrtDiscriminant = math_lib.sqrt(discriminant)
+    local cubeRoot = (sqrtDiscriminant - qOver2) ^ (1/3)
+    local cubeRootNegative = (sqrtDiscriminant + qOver2) ^ (1/3)
+    return math.max(0, math.min(1, cubeRoot - cubeRootNegative - normalizedB / 3))
 end
 
 -- Bezier time solver
@@ -218,9 +218,9 @@ local function parse_segments(values)
             if cursor + 1 > #values then
                 return nil, "segment point is incomplete"
             end
-            local pt = MotionPoint.new(values[cursor], values[cursor + 1])
+            local motionPoint = MotionPoint.new(values[cursor], values[cursor + 1])
             cursor = cursor + 2
-            return pt
+            return motionPoint
         end
 
         if segment_type == 0 then

@@ -27,21 +27,21 @@ function Live2DModelOpenGL:getDrawParam()
     return self.drawParamGL
 end
 
-function Live2DModelOpenGL:setMatrix(aH)
-    self.drawParamGL:setMatrix(aH)
+function Live2DModelOpenGL:setMatrix(matrix)
+    self.drawParamGL:setMatrix(matrix)
 end
 
-function Live2DModelOpenGL.loadModel(aI)
-    local aH = Live2DModelOpenGL.new()
-    ALive2DModel.loadModel_exe(aH, aI)
-    return aH
+function Live2DModelOpenGL.loadModel(buffer)
+    local model = Live2DModelOpenGL.new()
+    ALive2DModel.loadModel_exe(model, buffer)
+    return model
 end
 
-function Live2DModelOpenGL:setTexture(aI, aH)
+function Live2DModelOpenGL:setTexture(textureNo, textureId)
     if self.drawParamGL == nil then
         error("current gl is none")
     end
-    self.drawParamGL:setTexture(aI, aH)
+    self.drawParamGL:setTexture(textureNo, textureId)
 end
 
 return Live2DModelOpenGL

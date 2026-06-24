@@ -165,9 +165,9 @@ function Live2DGLWrapper.shaderSource(s, src)
 end
 
 function Live2DGLWrapper.getShaderParameter(s, pname)
-    local v = ffi.new("GLint[1]")
-    gl.glGetShaderiv(s, pname, v)
-    return v[0] ~= 0
+    local paramValue = ffi.new("GLint[1]")
+    gl.glGetShaderiv(s, pname, paramValue)
+    return paramValue[0] ~= 0
 end
 
 function Live2DGLWrapper.getShaderInfoLog(s)
@@ -186,9 +186,9 @@ function Live2DGLWrapper.linkProgram(p)
 end
 
 function Live2DGLWrapper.getProgramParameter(p, pname)
-    local v = ffi.new("GLint[1]")
-    gl.glGetProgramiv(p, pname, v)
-    return v[0] ~= 0
+    local paramValue = ffi.new("GLint[1]")
+    gl.glGetProgramiv(p, pname, paramValue)
+    return paramValue[0] ~= 0
 end
 
 function Live2DGLWrapper.getProgramInfoLog(p)
@@ -286,9 +286,9 @@ function Live2DGLWrapper.drawElements(t, size, dt, data)
 end
 
 function Live2DGLWrapper.getParameter(t)
-    local v = ffi.new("GLint[1]")
-    gl.glGetIntegerv(t, v)
-    return v[0]
+    local paramValue = ffi.new("GLint[1]")
+    gl.glGetIntegerv(t, paramValue)
+    return paramValue[0]
 end
 
 function Live2DGLWrapper.viewport(a, b, c, d)
@@ -304,8 +304,8 @@ function Live2DGLWrapper.clear(t)
 end
 
 function Live2DGLWrapper.deleteFramebuffer(t)
-    local fb = ffi.new("GLuint[1]", t)
-    gl.glDeleteFramebuffers(1, fb)
+    local framebufferHandle = ffi.new("GLuint[1]", t)
+    gl.glDeleteFramebuffers(1, framebufferHandle)
 end
 
 function Live2DGLWrapper.deleteShader(s)
@@ -327,8 +327,8 @@ function Live2DGLWrapper.deleteProgram(p)
 end
 
 function Live2DGLWrapper.deleteRenderbuffer(r)
-    local rb = ffi.new("GLuint[1]", r)
-    gl.glDeleteRenderbuffers(1, rb)
+    local renderbufferHandle = ffi.new("GLuint[1]", r)
+    gl.glDeleteRenderbuffers(1, renderbufferHandle)
 end
 
 function Live2DGLWrapper.generateMipmap(t)

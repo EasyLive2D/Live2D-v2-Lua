@@ -41,10 +41,10 @@ function Mesh:read(br)
     self.textureNo = br:readInt32()
     self.pointCount = br:readInt32()
     self.polygonCount = br:readInt32()
-    local obj = br:readObject()
+    local rawIndexArray = br:readObject()
     self.indexArray = Int16Array(self.polygonCount * 3)
     for aJ = self.polygonCount * 3, 1, -1 do
-        self.indexArray[aJ] = obj[aJ]
+        self.indexArray[aJ] = rawIndexArray[aJ]
     end
 
     self.pivotPoints = br:readObject()
@@ -70,43 +70,43 @@ function Mesh:read(br)
     end
 end
 
-function Mesh:init(aL)
+function Mesh:init(modelContext)
     local ctx = MeshContext.new(self)
-    local aI = self.pointCount * def.VERTEX_STEP
-    local aH = self:needTransform()
+    local vertexBufferSize = self.pointCount * def.VERTEX_STEP
+    local needsTransform = self:needTransform()
     if ctx.interpolatedPoints ~= nil then
         ctx.interpolatedPoints = nil
     end
-    ctx.interpolatedPoints = Float32Array(aI)
+    ctx.interpolatedPoints = Float32Array(vertexBufferSize)
     if ctx.transformedPoints ~= nil then
         ctx.transformedPoints = nil
     end
     ctx.transformedPoints = nil
-    if aH then
-        ctx.transformedPoints = Float32Array(aI)
+    if needsTransform then
+        ctx.transformedPoints = Float32Array(vertexBufferSize)
     end
-    local aM = def.VERTEX_TYPE
+    local vertexType = def.VERTEX_TYPE
 
-    if aM == def.VERTEX_TYPE_OFFSET0_STEP2 then
+    if vertexType == def.VERTEX_TYPE_OFFSET0_STEP2 then
         if def.REVERSE_TEXTURE_T then
             for aJ = self.pointCount, 1, -1 do
-                local aO = (aJ - 1) * 2
-                self.uvs[aO + 2] = 1 - self.uvs[aO + 2]
+                local uvOffset = (aJ - 1) * 2
+                self.uvs[uvOffset + 2] = 1 - self.uvs[uvOffset + 2]
             end
         end
-    elseif aM == def.VERTEX_TYPE_OFFSET2_STEP5 then
+    elseif vertexType == def.VERTEX_TYPE_OFFSET2_STEP5 then
         for aJ = self.pointCount, 1, -1 do
-            local aO = (aJ - 1) * 2
-            local aK = (aJ - 1) * def.VERTEX_STEP
-            local aQ = self.uvs[aO + 1]
-            local aP = self.uvs[aO + 2]
-            ctx.interpolatedPoints[aK + 1] = aQ
-            ctx.interpolatedPoints[aK + 2] = aP
-            ctx.interpolatedPoints[aK + 5] = 0
-            if aH then
-                ctx.transformedPoints[aK + 1] = aQ
-                ctx.transformedPoints[aK + 2] = aP
-                ctx.transformedPoints[aK + 5] = 0
+            local uvOffset = (aJ - 1) * 2
+            local vertexOffset = (aJ - 1) * def.VERTEX_STEP
+            local u = self.uvs[uvOffset + 1]
+            local v = self.uvs[uvOffset + 2]
+            ctx.interpolatedPoints[vertexOffset + 1] = u
+            ctx.interpolatedPoints[vertexOffset + 2] = v
+            ctx.interpolatedPoints[vertexOffset + 5] = 0
+            if needsTransform then
+                ctx.transformedPoints[vertexOffset + 1] = u
+                ctx.transformedPoints[vertexOffset + 2] = v
+                ctx.transformedPoints[vertexOffset + 5] = 0
             end
         end
     end
@@ -114,21 +114,21 @@ function Mesh:init(aL)
     return ctx
 end
 
-function Mesh:setupInterpolate(aJ, aH)
-    local aK = aH
-    if self ~= aK:getDrawData() then
+function Mesh:setupInterpolate(modelContext, drawContext)
+    local drawCtx = drawContext
+    if self ~= drawCtx:getDrawData() then
         print("### assert!! ###")
     end
-    if not self.pivotMgr:checkParamUpdated(aJ) then
+    if not self.pivotMgr:checkParamUpdated(modelContext) then
         return
     end
-    IDrawData.setupInterpolate(self, aJ, aK)
-    if aK.paramOutside[1] then
+    IDrawData.setupInterpolate(self, modelContext, drawCtx)
+    if drawCtx.paramOutside[1] then
         return
     end
-    local aI = Mesh.paramOutside
-    aI[1] = false
-    UtInterpolate.interpolatePoints(aJ, self.pivotMgr, aI, self.pointCount, self.pivotPoints, aK.interpolatedPoints,
+    local outsideFlag = Mesh.paramOutside
+    outsideFlag[1] = false
+    UtInterpolate.interpolatePoints(modelContext, self.pivotMgr, outsideFlag, self.pointCount, self.pivotPoints, drawCtx.interpolatedPoints,
                                      def.VERTEX_OFFSET, def.VERTEX_STEP)
 end
 
@@ -150,10 +150,10 @@ function Mesh:setupTransform(mc, dc)
             if dc.tmpDeformerIndex < 0 then
                 print("deformer not found: " .. tostring(target_id))
             else
-                local d = mc:getDeformer(dc.tmpDeformerIndex)
+                local deformer = mc:getDeformer(dc.tmpDeformerIndex)
                 local dctx = mc:getDeformerContext(dc.tmpDeformerIndex)
-                if d ~= nil and not dctx:isOutsideParam() then
-                    d:transformPoints(mc, dctx, dc.interpolatedPoints, dc.transformedPoints, self.pointCount,
+                if deformer ~= nil and not dctx:isOutsideParam() then
+                    deformer:transformPoints(mc, dctx, dc.interpolatedPoints, dc.transformedPoints, self.pointCount,
                                       def.VERTEX_OFFSET, def.VERTEX_STEP)
                     dc.available = true
                 else

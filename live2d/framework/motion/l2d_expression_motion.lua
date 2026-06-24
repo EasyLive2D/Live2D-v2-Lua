@@ -68,11 +68,11 @@ function L2DExpressionMotion.loadJson(buf)
             value = value / default_value
         end
 
-        local item = L2DExpressionParam.new()
-        item.id = param_id
-        item.type = calc_type_int
-        item.value = value
-        ret.paramList[#ret.paramList + 1] = item
+        local expressionParam = L2DExpressionParam.new()
+        expressionParam.id = param_id
+        expressionParam.type = calc_type_int
+        expressionParam.value = value
+        ret.paramList[#ret.paramList + 1] = expressionParam
     end
     return ret
 end

@@ -113,14 +113,14 @@ end
 function keyforms.art_mesh_keyforms(self, mesh_index)
     local start = self.keyform_begin_indices[mesh_index + 1]
     if start == nil or start < 0 then return nil end
-    local len = self.keyform_counts[mesh_index + 1]
-    if len == nil or len < 0 then return nil end
-    if start + len > #self.keyforms then return nil end
-    local result = {}
-    for i = 1, len do
-        result[i] = self.keyforms[start + i]
+    local keyformCount = self.keyform_counts[mesh_index + 1]
+    if keyformCount == nil or keyformCount < 0 then return nil end
+    if start + keyformCount > #self.keyforms then return nil end
+    local keyformData = {}
+    for i = 1, keyformCount do
+        keyformData[i] = self.keyforms[start + i]
     end
-    return result
+    return keyformData
 end
 
 function keyforms.art_mesh_keyform_positions(self, mesh_index, local_keyform_index)
@@ -132,13 +132,13 @@ function keyforms.art_mesh_keyform_positions(self, mesh_index, local_keyform_ind
     if vertex_count == nil or vertex_count < 0 then return nil end
     local start = kf.position_begin_index
     if start == nil or start < 0 then return nil end
-    local len = vertex_count * 2
-    if start + len > #self.position_xys then return nil end
-    local result = {}
-    for i = 1, len do
-        result[i] = self.position_xys[start + i]
+    local positionArrayLength = vertex_count * 2
+    if start + positionArrayLength > #self.position_xys then return nil end
+    local positions = {}
+    for i = 1, positionArrayLength do
+        positions[i] = self.position_xys[start + i]
     end
-    return result
+    return positions
 end
 
 return keyforms

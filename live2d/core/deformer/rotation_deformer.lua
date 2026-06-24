@@ -58,17 +58,17 @@ local function setAffineFields(target, source)
     target.reflectY = source.reflectY
 end
 
-local function interp4(a9, a8, a6, a4, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16)
-    local bC = v1 + (v2 - v1) * a9
-    local bB = v3 + (v4 - v3) * a9
-    local bz = v5 + (v6 - v5) * a9
-    local by = v7 + (v8 - v7) * a9
-    local bv = v9 + (v10 - v9) * a9
-    local bt = v11 + (v12 - v11) * a9
-    local br = v13 + (v14 - v13) * a9
-    local bq = v15 + (v16 - v15) * a9
-    return (1 - a4) * ((1 - a6) * (bC + (bB - bC) * a8) + a6 * (bz + (by - bz) * a8)) +
-           a4 * ((1 - a6) * (bv + (bt - bv) * a8) + a6 * (br + (bq - br) * a8))
+local function interp4(t1, t2, t3, t4, v1, v2, v3, v4, v5, v6, v7, v8, v9, v10, v11, v12, v13, v14, v15, v16)
+    local lerpA = v1 + (v2 - v1) * t1
+    local lerpB = v3 + (v4 - v3) * t1
+    local lerpC = v5 + (v6 - v5) * t1
+    local lerpD = v7 + (v8 - v7) * t1
+    local lerpE = v9 + (v10 - v9) * t1
+    local lerpF = v11 + (v12 - v11) * t1
+    local lerpG = v13 + (v14 - v13) * t1
+    local lerpH = v15 + (v16 - v15) * t1
+    return (1 - t4) * ((1 - t3) * (lerpA + (lerpB - lerpA) * t2) + t3 * (lerpC + (lerpD - lerpC) * t2)) +
+           t4 * ((1 - t3) * (lerpE + (lerpF - lerpE) * t2) + t3 * (lerpG + (lerpH - lerpG) * t2))
 end
 
 function RotationDeformer:setupInterpolate(mctx, rctx)
@@ -81,152 +81,152 @@ function RotationDeformer:setupInterpolate(mctx, rctx)
 
     local success = RotationDeformer.paramOutside
     success[1] = false
-    local a2 = self.pivotManager:calcPivotValues(mctx, success)
+    local pivotDimensionCount = self.pivotManager:calcPivotValues(mctx, success)
     rctx:setOutsideParam(success[1])
     self:interpolateOpacity(mctx, self.pivotManager, rctx, success)
-    local a3 = mctx:getTempPivotTableIndices()
-    local ba = mctx:getTempT()
-    self.pivotManager:calcPivotIndices(a3, ba, a2)
+    local pivotIndices = mctx:getTempPivotTableIndices()
+    local pivotTValues = mctx:getTempT()
+    self.pivotManager:calcPivotIndices(pivotIndices, pivotTValues, pivotDimensionCount)
 
-    if a2 <= 0 then
-        local bn_3 = self.affines[a3[1]]
-        setAffineFields(rctx.interpolatedAffine, bn_3)
-    elseif a2 == 1 then
-        local bn_1 = self.affines[a3[1]]
-        local bl = self.affines[a3[2]]
-        local a9 = ba[1]
-        rctx.interpolatedAffine.originX = bn_1.originX + (bl.originX - bn_1.originX) * a9
-        rctx.interpolatedAffine.originY = bn_1.originY + (bl.originY - bn_1.originY) * a9
-        rctx.interpolatedAffine.scaleX = bn_1.scaleX + (bl.scaleX - bn_1.scaleX) * a9
-        rctx.interpolatedAffine.scaleY = bn_1.scaleY + (bl.scaleY - bn_1.scaleY) * a9
-        rctx.interpolatedAffine.rotationDeg = bn_1.rotationDeg + (bl.rotationDeg - bn_1.rotationDeg) * a9
-    elseif a2 == 2 then
-        local bn_1 = self.affines[a3[1]]
-        local bl = self.affines[a3[2]]
-        local a1 = self.affines[a3[3]]
-        local a0 = self.affines[a3[4]]
-        local a9 = ba[1]
-        local a8 = ba[2]
-        local bC = bn_1.originX + (bl.originX - bn_1.originX) * a9
-        local bB = a1.originX + (a0.originX - a1.originX) * a9
-        rctx.interpolatedAffine.originX = bC + (bB - bC) * a8
-        bC = bn_1.originY + (bl.originY - bn_1.originY) * a9
-        bB = a1.originY + (a0.originY - a1.originY) * a9
-        rctx.interpolatedAffine.originY = bC + (bB - bC) * a8
-        bC = bn_1.scaleX + (bl.scaleX - bn_1.scaleX) * a9
-        bB = a1.scaleX + (a0.scaleX - a1.scaleX) * a9
-        rctx.interpolatedAffine.scaleX = bC + (bB - bC) * a8
-        bC = bn_1.scaleY + (bl.scaleY - bn_1.scaleY) * a9
-        bB = a1.scaleY + (a0.scaleY - a1.scaleY) * a9
-        rctx.interpolatedAffine.scaleY = bC + (bB - bC) * a8
-        bC = bn_1.rotationDeg + (bl.rotationDeg - bn_1.rotationDeg) * a9
-        bB = a1.rotationDeg + (a0.rotationDeg - a1.rotationDeg) * a9
-        rctx.interpolatedAffine.rotationDeg = bC + (bB - bC) * a8
-    elseif a2 == 3 then
-        local aP = self.affines[a3[1]]
-        local aO = self.affines[a3[2]]
-        local bu = self.affines[a3[3]]
-        local bs = self.affines[a3[4]]
-        local aK = self.affines[a3[5]]
-        local aJ = self.affines[a3[6]]
-        local bj = self.affines[a3[7]]
-        local bi = self.affines[a3[8]]
-        local a9 = ba[1]
-        local a8 = ba[2]
-        local a6 = ba[3]
-        local bC = aP.originX + (aO.originX - aP.originX) * a9
-        local bB = bu.originX + (bs.originX - bu.originX) * a9
-        local bz = aK.originX + (aJ.originX - aK.originX) * a9
-        local by = bj.originX + (bi.originX - bj.originX) * a9
-        rctx.interpolatedAffine.originX = (1 - a6) * (bC + (bB - bC) * a8) + a6 * (bz + (by - bz) * a8)
-        bC = aP.originY + (aO.originY - aP.originY) * a9
-        bB = bu.originY + (bs.originY - bu.originY) * a9
-        bz = aK.originY + (aJ.originY - aK.originY) * a9
-        by = bj.originY + (bi.originY - bj.originY) * a9
-        rctx.interpolatedAffine.originY = (1 - a6) * (bC + (bB - bC) * a8) + a6 * (bz + (by - bz) * a8)
-        bC = aP.scaleX + (aO.scaleX - aP.scaleX) * a9
-        bB = bu.scaleX + (bs.scaleX - bu.scaleX) * a9
-        bz = aK.scaleX + (aJ.scaleX - aK.scaleX) * a9
-        by = bj.scaleX + (bi.scaleX - bj.scaleX) * a9
-        rctx.interpolatedAffine.scaleX = (1 - a6) * (bC + (bB - bC) * a8) + a6 * (bz + (by - bz) * a8)
-        bC = aP.scaleY + (aO.scaleY - aP.scaleY) * a9
-        bB = bu.scaleY + (bs.scaleY - bu.scaleY) * a9
-        bz = aK.scaleY + (aJ.scaleY - aK.scaleY) * a9
-        by = bj.scaleY + (bi.scaleY - bj.scaleY) * a9
-        rctx.interpolatedAffine.scaleY = (1 - a6) * (bC + (bB - bC) * a8) + a6 * (bz + (by - bz) * a8)
-        bC = aP.rotationDeg + (aO.rotationDeg - aP.rotationDeg) * a9
-        bB = bu.rotationDeg + (bs.rotationDeg - bu.rotationDeg) * a9
-        bz = aK.rotationDeg + (aJ.rotationDeg - aK.rotationDeg) * a9
-        by = bj.rotationDeg + (bi.rotationDeg - bj.rotationDeg) * a9
-        rctx.interpolatedAffine.rotationDeg = (1 - a6) * (bC + (bB - bC) * a8) + a6 * (bz + (by - bz) * a8)
-    elseif a2 == 4 then
-        local aT = self.affines[a3[1]]
-        local aS = self.affines[a3[2]]
-        local bE = self.affines[a3[3]]
-        local bD = self.affines[a3[4]]
-        local aN = self.affines[a3[5]]
-        local aM = self.affines[a3[6]]
-        local bp = self.affines[a3[7]]
-        local bo = self.affines[a3[8]]
-        local bh = self.affines[a3[9]]
-        local bg = self.affines[a3[10]]
-        local aY = self.affines[a3[11]]
-        local aW = self.affines[a3[12]]
-        local a7 = self.affines[a3[13]]
-        local a5 = self.affines[a3[14]]
-        local aR = self.affines[a3[15]]
-        local aQ = self.affines[a3[16]]
-        local a9 = ba[1]
-        local a8 = ba[2]
-        local a6 = ba[3]
-        local a4 = ba[4]
-        rctx.interpolatedAffine.originX = interp4(a9, a8, a6, a4, aT.originX, aS.originX, bE.originX, bD.originX, aN.originX, aM.originX, bp.originX, bo.originX, bh.originX, bg.originX, aY.originX, aW.originX, a7.originX, a5.originX, aR.originX, aQ.originX)
-        rctx.interpolatedAffine.originY = interp4(a9, a8, a6, a4, aT.originY, aS.originY, bE.originY, bD.originY, aN.originY, aM.originY, bp.originY, bo.originY, bh.originY, bg.originY, aY.originY, aW.originY, a7.originY, a5.originY, aR.originY, aQ.originY)
-        rctx.interpolatedAffine.scaleX = interp4(a9, a8, a6, a4, aT.scaleX, aS.scaleX, bE.scaleX, bD.scaleX, aN.scaleX, aM.scaleX, bp.scaleX, bo.scaleX, bh.scaleX, bg.scaleX, aY.scaleX, aW.scaleX, a7.scaleX, a5.scaleX, aR.scaleX, aQ.scaleX)
-        rctx.interpolatedAffine.scaleY = interp4(a9, a8, a6, a4, aT.scaleY, aS.scaleY, bE.scaleY, bD.scaleY, aN.scaleY, aM.scaleY, bp.scaleY, bo.scaleY, bh.scaleY, bg.scaleY, aY.scaleY, aW.scaleY, a7.scaleY, a5.scaleY, aR.scaleY, aQ.scaleY)
-        rctx.interpolatedAffine.rotationDeg = interp4(a9, a8, a6, a4, aT.rotationDeg, aS.rotationDeg, bE.rotationDeg, bD.rotationDeg, aN.rotationDeg, aM.rotationDeg, bp.rotationDeg, bo.rotationDeg, bh.rotationDeg, bg.rotationDeg, aY.rotationDeg, aW.rotationDeg, a7.rotationDeg, a5.rotationDeg, aR.rotationDeg, aQ.rotationDeg)
+    if pivotDimensionCount <= 0 then
+        local affineEntry = self.affines[pivotIndices[1]]
+        setAffineFields(rctx.interpolatedAffine, affineEntry)
+    elseif pivotDimensionCount == 1 then
+        local affine0 = self.affines[pivotIndices[1]]
+        local affine1 = self.affines[pivotIndices[2]]
+        local t1 = pivotTValues[1]
+        rctx.interpolatedAffine.originX = affine0.originX + (affine1.originX - affine0.originX) * t1
+        rctx.interpolatedAffine.originY = affine0.originY + (affine1.originY - affine0.originY) * t1
+        rctx.interpolatedAffine.scaleX = affine0.scaleX + (affine1.scaleX - affine0.scaleX) * t1
+        rctx.interpolatedAffine.scaleY = affine0.scaleY + (affine1.scaleY - affine0.scaleY) * t1
+        rctx.interpolatedAffine.rotationDeg = affine0.rotationDeg + (affine1.rotationDeg - affine0.rotationDeg) * t1
+    elseif pivotDimensionCount == 2 then
+        local affine0 = self.affines[pivotIndices[1]]
+        local affine1 = self.affines[pivotIndices[2]]
+        local affine2 = self.affines[pivotIndices[3]]
+        local affine3 = self.affines[pivotIndices[4]]
+        local t1 = pivotTValues[1]
+        local t2 = pivotTValues[2]
+        local lerpA = affine0.originX + (affine1.originX - affine0.originX) * t1
+        local lerpB = affine2.originX + (affine3.originX - affine2.originX) * t1
+        rctx.interpolatedAffine.originX = lerpA + (lerpB - lerpA) * t2
+        lerpA = affine0.originY + (affine1.originY - affine0.originY) * t1
+        lerpB = affine2.originY + (affine3.originY - affine2.originY) * t1
+        rctx.interpolatedAffine.originY = lerpA + (lerpB - lerpA) * t2
+        lerpA = affine0.scaleX + (affine1.scaleX - affine0.scaleX) * t1
+        lerpB = affine2.scaleX + (affine3.scaleX - affine2.scaleX) * t1
+        rctx.interpolatedAffine.scaleX = lerpA + (lerpB - lerpA) * t2
+        lerpA = affine0.scaleY + (affine1.scaleY - affine0.scaleY) * t1
+        lerpB = affine2.scaleY + (affine3.scaleY - affine2.scaleY) * t1
+        rctx.interpolatedAffine.scaleY = lerpA + (lerpB - lerpA) * t2
+        lerpA = affine0.rotationDeg + (affine1.rotationDeg - affine0.rotationDeg) * t1
+        lerpB = affine2.rotationDeg + (affine3.rotationDeg - affine2.rotationDeg) * t1
+        rctx.interpolatedAffine.rotationDeg = lerpA + (lerpB - lerpA) * t2
+    elseif pivotDimensionCount == 3 then
+        local affine000 = self.affines[pivotIndices[1]]
+        local affine001 = self.affines[pivotIndices[2]]
+        local affine010 = self.affines[pivotIndices[3]]
+        local affine011 = self.affines[pivotIndices[4]]
+        local affine100 = self.affines[pivotIndices[5]]
+        local affine101 = self.affines[pivotIndices[6]]
+        local affine110 = self.affines[pivotIndices[7]]
+        local affine111 = self.affines[pivotIndices[8]]
+        local t1 = pivotTValues[1]
+        local t2 = pivotTValues[2]
+        local t3 = pivotTValues[3]
+        local lerpA = affine000.originX + (affine001.originX - affine000.originX) * t1
+        local lerpB = affine010.originX + (affine011.originX - affine010.originX) * t1
+        local lerpC = affine100.originX + (affine101.originX - affine100.originX) * t1
+        local lerpD = affine110.originX + (affine111.originX - affine110.originX) * t1
+        rctx.interpolatedAffine.originX = (1 - t3) * (lerpA + (lerpB - lerpA) * t2) + t3 * (lerpC + (lerpD - lerpC) * t2)
+        lerpA = affine000.originY + (affine001.originY - affine000.originY) * t1
+        lerpB = affine010.originY + (affine011.originY - affine010.originY) * t1
+        lerpC = affine100.originY + (affine101.originY - affine100.originY) * t1
+        lerpD = affine110.originY + (affine111.originY - affine110.originY) * t1
+        rctx.interpolatedAffine.originY = (1 - t3) * (lerpA + (lerpB - lerpA) * t2) + t3 * (lerpC + (lerpD - lerpC) * t2)
+        lerpA = affine000.scaleX + (affine001.scaleX - affine000.scaleX) * t1
+        lerpB = affine010.scaleX + (affine011.scaleX - affine010.scaleX) * t1
+        lerpC = affine100.scaleX + (affine101.scaleX - affine100.scaleX) * t1
+        lerpD = affine110.scaleX + (affine111.scaleX - affine110.scaleX) * t1
+        rctx.interpolatedAffine.scaleX = (1 - t3) * (lerpA + (lerpB - lerpA) * t2) + t3 * (lerpC + (lerpD - lerpC) * t2)
+        lerpA = affine000.scaleY + (affine001.scaleY - affine000.scaleY) * t1
+        lerpB = affine010.scaleY + (affine011.scaleY - affine010.scaleY) * t1
+        lerpC = affine100.scaleY + (affine101.scaleY - affine100.scaleY) * t1
+        lerpD = affine110.scaleY + (affine111.scaleY - affine110.scaleY) * t1
+        rctx.interpolatedAffine.scaleY = (1 - t3) * (lerpA + (lerpB - lerpA) * t2) + t3 * (lerpC + (lerpD - lerpC) * t2)
+        lerpA = affine000.rotationDeg + (affine001.rotationDeg - affine000.rotationDeg) * t1
+        lerpB = affine010.rotationDeg + (affine011.rotationDeg - affine010.rotationDeg) * t1
+        lerpC = affine100.rotationDeg + (affine101.rotationDeg - affine100.rotationDeg) * t1
+        lerpD = affine110.rotationDeg + (affine111.rotationDeg - affine110.rotationDeg) * t1
+        rctx.interpolatedAffine.rotationDeg = (1 - t3) * (lerpA + (lerpB - lerpA) * t2) + t3 * (lerpC + (lerpD - lerpC) * t2)
+    elseif pivotDimensionCount == 4 then
+        local affine0000 = self.affines[pivotIndices[1]]
+        local affine0001 = self.affines[pivotIndices[2]]
+        local affine0010 = self.affines[pivotIndices[3]]
+        local affine0011 = self.affines[pivotIndices[4]]
+        local affine0100 = self.affines[pivotIndices[5]]
+        local affine0101 = self.affines[pivotIndices[6]]
+        local affine0110 = self.affines[pivotIndices[7]]
+        local affine0111 = self.affines[pivotIndices[8]]
+        local affine1000 = self.affines[pivotIndices[9]]
+        local affine1001 = self.affines[pivotIndices[10]]
+        local affine1010 = self.affines[pivotIndices[11]]
+        local affine1011 = self.affines[pivotIndices[12]]
+        local affine1100 = self.affines[pivotIndices[13]]
+        local affine1101 = self.affines[pivotIndices[14]]
+        local affine1110 = self.affines[pivotIndices[15]]
+        local affine1111 = self.affines[pivotIndices[16]]
+        local t1 = pivotTValues[1]
+        local t2 = pivotTValues[2]
+        local t3 = pivotTValues[3]
+        local t4 = pivotTValues[4]
+        rctx.interpolatedAffine.originX = interp4(t1, t2, t3, t4, affine0000.originX, affine0001.originX, affine0010.originX, affine0011.originX, affine0100.originX, affine0101.originX, affine0110.originX, affine0111.originX, affine1000.originX, affine1001.originX, affine1010.originX, affine1011.originX, affine1100.originX, affine1101.originX, affine1110.originX, affine1111.originX)
+        rctx.interpolatedAffine.originY = interp4(t1, t2, t3, t4, affine0000.originY, affine0001.originY, affine0010.originY, affine0011.originY, affine0100.originY, affine0101.originY, affine0110.originY, affine0111.originY, affine1000.originY, affine1001.originY, affine1010.originY, affine1011.originY, affine1100.originY, affine1101.originY, affine1110.originY, affine1111.originY)
+        rctx.interpolatedAffine.scaleX = interp4(t1, t2, t3, t4, affine0000.scaleX, affine0001.scaleX, affine0010.scaleX, affine0011.scaleX, affine0100.scaleX, affine0101.scaleX, affine0110.scaleX, affine0111.scaleX, affine1000.scaleX, affine1001.scaleX, affine1010.scaleX, affine1011.scaleX, affine1100.scaleX, affine1101.scaleX, affine1110.scaleX, affine1111.scaleX)
+        rctx.interpolatedAffine.scaleY = interp4(t1, t2, t3, t4, affine0000.scaleY, affine0001.scaleY, affine0010.scaleY, affine0011.scaleY, affine0100.scaleY, affine0101.scaleY, affine0110.scaleY, affine0111.scaleY, affine1000.scaleY, affine1001.scaleY, affine1010.scaleY, affine1011.scaleY, affine1100.scaleY, affine1101.scaleY, affine1110.scaleY, affine1111.scaleY)
+        rctx.interpolatedAffine.rotationDeg = interp4(t1, t2, t3, t4, affine0000.rotationDeg, affine0001.rotationDeg, affine0010.rotationDeg, affine0011.rotationDeg, affine0100.rotationDeg, affine0101.rotationDeg, affine0110.rotationDeg, affine0111.rotationDeg, affine1000.rotationDeg, affine1001.rotationDeg, affine1010.rotationDeg, affine1011.rotationDeg, affine1100.rotationDeg, affine1101.rotationDeg, affine1110.rotationDeg, affine1111.rotationDeg)
     else
-        local aV = 2 ^ a2
-        local aZ = Float32Array(aV)
-        for bk = 1, aV do
-            local aI = bk - 1
-            local aH = 1
-            for aL = 1, a2 do
-                if aI % 2 == 0 then
-                    aH = aH * (1 - ba[aL])
+        local tableSize = 2 ^ pivotDimensionCount
+        local weightTable = Float32Array(tableSize)
+        for bk = 1, tableSize do
+            local bitPattern = bk - 1
+            local weightProduct = 1
+            for dim = 1, pivotDimensionCount do
+                if bitPattern % 2 == 0 then
+                    weightProduct = weightProduct * (1 - pivotTValues[dim])
                 else
-                    aH = aH * ba[aL]
+                    weightProduct = weightProduct * pivotTValues[dim]
                 end
-                aI = floor(aI / 2)
+                bitPattern = floor(bitPattern / 2)
             end
-            aZ[bk] = aH
+            weightTable[bk] = weightProduct
         end
 
-        local bA = {}
-        for aU = 1, aV do
-            bA[aU] = self.affines[a3[aU]]
+        local selectedAffines = {}
+        for aU = 1, tableSize do
+            selectedAffines[aU] = self.affines[pivotIndices[aU]]
         end
 
-        local be = 0
-        local bc = 0
-        local bd = 0
-        local bb = 0
-        local aX = 0
-        for aU = 1, aV do
-            be = be + aZ[aU] * bA[aU].originX
-            bc = bc + aZ[aU] * bA[aU].originY
-            bd = bd + aZ[aU] * bA[aU].scaleX
-            bb = bb + aZ[aU] * bA[aU].scaleY
-            aX = aX + aZ[aU] * bA[aU].rotationDeg
+        local sumOriginX = 0
+        local sumOriginY = 0
+        local sumScaleX = 0
+        local sumScaleY = 0
+        local sumRotation = 0
+        for aU = 1, tableSize do
+            sumOriginX = sumOriginX + weightTable[aU] * selectedAffines[aU].originX
+            sumOriginY = sumOriginY + weightTable[aU] * selectedAffines[aU].originY
+            sumScaleX = sumScaleX + weightTable[aU] * selectedAffines[aU].scaleX
+            sumScaleY = sumScaleY + weightTable[aU] * selectedAffines[aU].scaleY
+            sumRotation = sumRotation + weightTable[aU] * selectedAffines[aU].rotationDeg
         end
-        rctx.interpolatedAffine.originX = be
-        rctx.interpolatedAffine.originY = bc
-        rctx.interpolatedAffine.scaleX = bd
-        rctx.interpolatedAffine.scaleY = bb
-        rctx.interpolatedAffine.rotationDeg = aX
+        rctx.interpolatedAffine.originX = sumOriginX
+        rctx.interpolatedAffine.originY = sumOriginY
+        rctx.interpolatedAffine.scaleX = sumScaleX
+        rctx.interpolatedAffine.scaleY = sumScaleY
+        rctx.interpolatedAffine.rotationDeg = sumRotation
     end
 
-    local bn = self.affines[a3[1]]
+    local bn = self.affines[pivotIndices[1]]
     rctx.interpolatedAffine.reflectX = bn.reflectX
     rctx.interpolatedAffine.reflectY = bn.reflectY
 end
@@ -241,9 +241,9 @@ function RotationDeformer:setupTransform(mctx, rctx)
         rctx:setTotalScale_notForClient(rctx.interpolatedAffine.scaleX)
         rctx:setTotalOpacity(rctx:getInterpolatedOpacity())
     else
-        local aT = self:getTargetId()
+        local targetId = self:getTargetId()
         if rctx.tmpDeformerIndex == Deformer.DEFORMER_INDEX_NOT_INIT then
-            rctx.tmpDeformerIndex = mctx:getDeformerIndex(aT)
+            rctx.tmpDeformerIndex = mctx:getDeformerIndex(targetId)
         end
         if rctx.tmpDeformerIndex < 0 then
             print("deformer is not reachable")
@@ -252,31 +252,31 @@ function RotationDeformer:setupTransform(mctx, rctx)
             local deformer = mctx:getDeformer(rctx.tmpDeformerIndex)
             if deformer ~= nil then
                 local dctx = mctx:getDeformerContext(rctx.tmpDeformerIndex)
-                local aS = RotationDeformer.temp1
-                aS[1] = rctx.interpolatedAffine.originX
-                aS[2] = rctx.interpolatedAffine.originY
-                local aJ = RotationDeformer.temp2
-                aJ[1] = 0
-                aJ[2] = -0.1
-                local aO = dctx:getDeformer():getType()
-                if aO == Deformer.TYPE_ROTATION then
-                    aJ[2] = -10
+                local transformOrigin = RotationDeformer.temp1
+                transformOrigin[1] = rctx.interpolatedAffine.originX
+                transformOrigin[2] = rctx.interpolatedAffine.originY
+                local transformDir = RotationDeformer.temp2
+                transformDir[1] = 0
+                transformDir[2] = -0.1
+                local parentType = dctx:getDeformer():getType()
+                if parentType == Deformer.TYPE_ROTATION then
+                    transformDir[2] = -10
                 else
-                    aJ[2] = -0.1
+                    transformDir[2] = -0.1
                 end
-                local aQ = RotationDeformer.temp3
-                RotationDeformer.getDirectionOnDst(mctx, deformer, dctx, aS, aJ, aQ)
-                local aP = UtMath.getAngleNotAbs(aJ, aQ)
-                deformer:transformPoints(mctx, dctx, aS, aS, 1, 0, 2)
-                rctx.transformedAffine.originX = aS[1]
-                rctx.transformedAffine.originY = aS[2]
+                local transformedDir = RotationDeformer.temp3
+                RotationDeformer.getDirectionOnDst(mctx, deformer, dctx, transformOrigin, transformDir, transformedDir)
+                local rotationAngle = UtMath.getAngleNotAbs(transformDir, transformedDir)
+                deformer:transformPoints(mctx, dctx, transformOrigin, transformOrigin, 1, 0, 2)
+                rctx.transformedAffine.originX = transformOrigin[1]
+                rctx.transformedAffine.originY = transformOrigin[2]
                 rctx.transformedAffine.scaleX = rctx.interpolatedAffine.scaleX
                 rctx.transformedAffine.scaleY = rctx.interpolatedAffine.scaleY
-                rctx.transformedAffine.rotationDeg = rctx.interpolatedAffine.rotationDeg - aP * UtMath.RAD_TO_DEG
-                local aK = dctx:getTotalScale()
-                rctx:setTotalScale_notForClient(aK * rctx.transformedAffine.scaleX)
-                local aN = dctx:getTotalOpacity()
-                rctx:setTotalOpacity(aN * rctx:getInterpolatedOpacity())
+                rctx.transformedAffine.rotationDeg = rctx.interpolatedAffine.rotationDeg - rotationAngle * UtMath.RAD_TO_DEG
+                local parentTotalScale = dctx:getTotalScale()
+                rctx:setTotalScale_notForClient(parentTotalScale * rctx.transformedAffine.scaleX)
+                local parentTotalOpacity = dctx:getTotalOpacity()
+                rctx:setTotalOpacity(parentTotalOpacity * rctx:getInterpolatedOpacity())
                 rctx.transformedAffine.reflectX = rctx.interpolatedAffine.reflectX
                 rctx.transformedAffine.reflectY = rctx.interpolatedAffine.reflectY
                 rctx:setAvailable(dctx:isAvailable())
@@ -291,30 +291,30 @@ function RotationDeformer:transformPoints(mc, dc, srcPoints, dstPoints, numPoint
     if self ~= dc:getDeformer() then
         error("context not match")
     end
-    local aH = dc
-    local aU
-    if aH.transformedAffine ~= nil then
-        aU = aH.transformedAffine
+    local deformerCtx = dc
+    local activeAffine
+    if deformerCtx.transformedAffine ~= nil then
+        activeAffine = deformerCtx.transformedAffine
     else
-        aU = aH.interpolatedAffine
+        activeAffine = deformerCtx.interpolatedAffine
     end
-    local a0 = sin(UtMath.DEG_TO_RAD * aU.rotationDeg)
-    local aP = cos(UtMath.DEG_TO_RAD * aU.rotationDeg)
-    local a3 = aH:getTotalScale()
-    local aW = aU.reflectX and -1 or 1
-    local aV = aU.reflectY and -1 or 1
-    local aS = aP * a3 * aW
-    local aQ = -a0 * a3 * aV
-    local a1 = a0 * a3 * aW
-    local aZ = aP * a3 * aV
-    local aY = aU.originX
-    local aX = aU.originY  -- same as originX in original
-    local aI = numPoint * ptStep
-    for aK = ptOffset + 1, aI, ptStep do
-        local aN = srcPoints[aK]
-        local aM = srcPoints[aK + 1]
-        dstPoints[aK] = aS * aN + aQ * aM + aY
-        dstPoints[aK + 1] = a1 * aN + aZ * aM + aX
+    local sinRotation = sin(UtMath.DEG_TO_RAD * activeAffine.rotationDeg)
+    local cosRotation = cos(UtMath.DEG_TO_RAD * activeAffine.rotationDeg)
+    local totalScale = deformerCtx:getTotalScale()
+    local reflectXSign = activeAffine.reflectX and -1 or 1
+    local reflectYSign = activeAffine.reflectY and -1 or 1
+    local matrix00 = cosRotation * totalScale * reflectXSign
+    local matrix01 = -sinRotation * totalScale * reflectYSign
+    local matrix10 = sinRotation * totalScale * reflectXSign
+    local matrix11 = cosRotation * totalScale * reflectYSign
+    local originX = activeAffine.originX
+    local originY = activeAffine.originY  -- same as originX in original
+    local totalStride = numPoint * ptStep
+    for offset = ptOffset + 1, totalStride, ptStep do
+        local srcX = srcPoints[offset]
+        local srcY = srcPoints[offset + 1]
+        dstPoints[offset] = matrix00 * srcX + matrix01 * srcY + originX
+        dstPoints[offset + 1] = matrix10 * srcX + matrix11 * srcY + originY
     end
 end
 
@@ -322,38 +322,38 @@ function RotationDeformer.getDirectionOnDst(mdc, targetToDst, targetToDstContext
     if targetToDst ~= targetToDstContext:getDeformer() then
         error("context not match")
     end
-    local aO = RotationDeformer.temp4
-    aO[1] = srcOrigin[1]
-    aO[2] = srcOrigin[2]
-    targetToDst:transformPoints(mdc, targetToDstContext, aO, aO, 1, 0, 2)
-    local aL = RotationDeformer.temp5
-    local aS = RotationDeformer.temp6
-    local aN = 10
-    local aJ = 1
-    for aM = 1, aN do
-        aS[1] = srcOrigin[1] + aJ * srcDir[1]
-        aS[2] = srcOrigin[2] + aJ * srcDir[2]
-        targetToDst:transformPoints(mdc, targetToDstContext, aS, aL, 1, 0, 2)
-        aL[1] = aL[1] - aO[1]
-        aL[2] = aL[2] - aO[2]
-        if aL[1] ~= 0 or aL[2] ~= 0 then
-            retDir[1] = aL[1]
-            retDir[2] = aL[2]
+    local transformedOrigin = RotationDeformer.temp4
+    transformedOrigin[1] = srcOrigin[1]
+    transformedOrigin[2] = srcOrigin[2]
+    targetToDst:transformPoints(mdc, targetToDstContext, transformedOrigin, transformedOrigin, 1, 0, 2)
+    local transformedPoint = RotationDeformer.temp5
+    local testPoint = RotationDeformer.temp6
+    local maxAttempts = 10
+    local stepSize = 1
+    for attempt = 1, maxAttempts do
+        testPoint[1] = srcOrigin[1] + stepSize * srcDir[1]
+        testPoint[2] = srcOrigin[2] + stepSize * srcDir[2]
+        targetToDst:transformPoints(mdc, targetToDstContext, testPoint, transformedPoint, 1, 0, 2)
+        transformedPoint[1] = transformedPoint[1] - transformedOrigin[1]
+        transformedPoint[2] = transformedPoint[2] - transformedOrigin[2]
+        if transformedPoint[1] ~= 0 or transformedPoint[2] ~= 0 then
+            retDir[1] = transformedPoint[1]
+            retDir[2] = transformedPoint[2]
             return
         end
-        aS[1] = srcOrigin[1] - aJ * srcDir[1]
-        aS[2] = srcOrigin[2] - aJ * srcDir[2]
-        targetToDst:transformPoints(mdc, targetToDstContext, aS, aL, 1, 0, 2)
-        aL[1] = aL[1] - aO[1]
-        aL[2] = aL[2] - aO[2]
-        if aL[1] ~= 0 or aL[2] ~= 0 then
-            aL[1] = -aL[1]
-            aL[2] = -aL[2]
-            retDir[1] = aL[1]
-            retDir[2] = aL[2]
+        testPoint[1] = srcOrigin[1] - stepSize * srcDir[1]
+        testPoint[2] = srcOrigin[2] - stepSize * srcDir[2]
+        targetToDst:transformPoints(mdc, targetToDstContext, testPoint, transformedPoint, 1, 0, 2)
+        transformedPoint[1] = transformedPoint[1] - transformedOrigin[1]
+        transformedPoint[2] = transformedPoint[2] - transformedOrigin[2]
+        if transformedPoint[1] ~= 0 or transformedPoint[2] ~= 0 then
+            transformedPoint[1] = -transformedPoint[1]
+            transformedPoint[2] = -transformedPoint[2]
+            retDir[1] = transformedPoint[1]
+            retDir[2] = transformedPoint[2]
             return
         end
-        aJ = aJ * 0.1
+        stepSize = stepSize * 0.1
     end
     print("Invalid state")
 end

@@ -37,10 +37,10 @@ end
 -- Big-endian float32 from string at position
 local function be_float32(buf, offset)
     local ib = be_int32(buf, offset)
-    local h = ffi.new("float_holder")
-    local ptr = ffi.cast("int32_t*", h)
+    local floatHolder = ffi.new("float_holder")
+    local ptr = ffi.cast("int32_t*", floatHolder)
     ptr[0] = ib
-    return h.v
+    return floatHolder.v
 end
 
 -- Big-endian double from string at position
@@ -48,21 +48,21 @@ local function be_double(buf, offset)
     local b1, b2, b3, b4, b5, b6, b7, b8 = string.byte(buf, offset + 1, offset + 8)
     local high = bit.bor(bit.lshift(b1, 24), bit.lshift(b2, 16), bit.lshift(b3, 8), b4)
     local low = bit.bor(bit.lshift(b5, 24), bit.lshift(b6, 16), bit.lshift(b7, 8), b8)
-    local h = ffi.new("double_holder")
-    local ptr = ffi.cast("int32_t*", h)
+    local doubleHolder = ffi.new("double_holder")
+    local ptr = ffi.cast("int32_t*", doubleHolder)
     ptr[0] = low
     ptr[1] = high
-    return h.v
+    return doubleHolder.v
 end
 
 -- Big-endian int16 from string at position
 local function be_int16(buf, offset)
     local b1, b2 = string.byte(buf, offset + 1, offset + 2)
-    local u = bit.bor(bit.lshift(b1, 8), b2)
-    if bit.band(u, 32768) ~= 0 then
-        u = u - 65536
+    local unsignedInt16 = bit.bor(bit.lshift(b1, 8), b2)
+    if bit.band(unsignedInt16, 32768) ~= 0 then
+        unsignedInt16 = unsignedInt16 - 65536
     end
-    return u
+    return unsignedInt16
 end
 
 function BinaryReader:readNumber()
@@ -92,8 +92,8 @@ function BinaryReader:getFormatVersion()
     return self.formatVersion
 end
 
-function BinaryReader:setFormatVersion(aH)
-    self.formatVersion = aH
+function BinaryReader:setFormatVersion(version)
+    self.formatVersion = version
 end
 
 function BinaryReader:readType()
@@ -102,133 +102,133 @@ end
 
 function BinaryReader:readDouble()
     self:checkBits()
-    local ret = self.offset
+    local savedOffset = self.offset
     self.offset = self.offset + 8
-    return be_double(self.buf, ret)
+    return be_double(self.buf, savedOffset)
 end
 
 function BinaryReader:readFloat32()
     self:checkBits()
-    local ret = self.offset
+    local savedOffset = self.offset
     self.offset = self.offset + 4
-    return be_float32(self.buf, ret)
+    return be_float32(self.buf, savedOffset)
 end
 
 function BinaryReader:readInt32()
     self:checkBits()
-    local ret = self.offset
+    local savedOffset = self.offset
     self.offset = self.offset + 4
-    return be_int32(self.buf, ret)
+    return be_int32(self.buf, savedOffset)
 end
 
 function BinaryReader:readByte()
     self:checkBits()
-    local ret = self.offset
+    local savedOffset = self.offset
     self.offset = self.offset + 1
-    return string.byte(self.buf, ret + 1)
+    return string.byte(self.buf, savedOffset + 1)
 end
 
 function BinaryReader:readUShort()
     self:checkBits()
-    local ret = self.offset
+    local savedOffset = self.offset
     self.offset = self.offset + 2
-    return be_int16(self.buf, ret)
+    return be_int16(self.buf, savedOffset)
 end
 
 function BinaryReader:readBoolean()
     self:checkBits()
-    local ret = self.offset
+    local savedOffset = self.offset
     self.offset = self.offset + 1
-    return string.byte(self.buf, ret + 1) ~= 0
+    return string.byte(self.buf, savedOffset + 1) ~= 0
 end
 
 function BinaryReader:readUTF8String()
     self:checkBits()
-    local aH = self:readType()
-    local result = string.sub(self.buf, self.offset + 1, self.offset + aH)
-    self.offset = self.offset + aH
+    local stringLength = self:readType()
+    local result = string.sub(self.buf, self.offset + 1, self.offset + stringLength)
+    self.offset = self.offset + stringLength
     return result
 end
 
 function BinaryReader:readInt32Array()
     self:checkBits()
-    local aI = self:readType()
-    local aH = Int32Array(aI)
-    for aJ = 1, aI do
-        aH[aJ] = self:readInt32()
+    local arrayLength = self:readType()
+    local intArray = Int32Array(arrayLength)
+    for i = 1, arrayLength do
+        intArray[i] = self:readInt32()
     end
-    return aH
+    return intArray
 end
 
 function BinaryReader:readFloat32Array()
     self:checkBits()
-    local aI = self:readType()
-    local aH = Float32Array(aI)
-    for aJ = 1, aI do
-        aH[aJ] = self:readFloat32()
+    local arrayLength = self:readType()
+    local floatArray = Float32Array(arrayLength)
+    for i = 1, arrayLength do
+        floatArray[i] = self:readFloat32()
     end
-    return aH
+    return floatArray
 end
 
 function BinaryReader:readFloat64Array()
     self:checkBits()
-    local aI = self:readType()
-    local aH = Float64Array(aI)
-    for aJ = 1, aI do
-        aH[aJ] = self:readDouble()
+    local arrayLength = self:readType()
+    local doubleArray = Float64Array(arrayLength)
+    for i = 1, arrayLength do
+        doubleArray[i] = self:readDouble()
     end
-    return aH
+    return doubleArray
 end
 
-function BinaryReader:readObject(aJ)
+function BinaryReader:readObject(typeHint)
     self:checkBits()
-    if aJ == nil then aJ = -1 end
-    if aJ < 0 then
-        aJ = self:readType()
+    if typeHint == nil then typeHint = -1 end
+    if typeHint < 0 then
+        typeHint = self:readType()
     end
-    if aJ == def.OBJECT_REF then
-        local aH = self:readInt32()
-        if 0 <= aH and aH < self.objectCount then
-            return self.objects[aH + 1]
+    if typeHint == def.OBJECT_REF then
+        local objectReferenceIndex = self:readInt32()
+        if 0 <= objectReferenceIndex and objectReferenceIndex < self.objectCount then
+            return self.objects[objectReferenceIndex + 1]
         else
-            error("_sL _4i @_m0 ref=" .. tostring(aH) .. " len=" .. tostring(self.objectCount))
+            error("_sL _4i @_m0 ref=" .. tostring(objectReferenceIndex) .. " len=" .. tostring(self.objectCount))
         end
     else
-        local aI = self:readKnownTypeObject(aJ)
+        local deserializedObject = self:readKnownTypeObject(typeHint)
         self.objectCount = self.objectCount + 1
-        self.objects[self.objectCount] = aI
-        return aI
+        self.objects[self.objectCount] = deserializedObject
+        return deserializedObject
     end
 end
 
-function BinaryReader:readKnownTypeObject(aN)
-    if aN == 0 then
+function BinaryReader:readKnownTypeObject(objectType)
+    if objectType == 0 then
         return nil
-    elseif aN == 50 or aN == 51 or aN == 134 or aN == 60 then
+    elseif objectType == 50 or objectType == 51 or objectType == 134 or objectType == 60 then
         return Id.getID(self:readUTF8String())
-    elseif aN >= 48 then
-        local aL = Live2DObjectFactory.create(aN)
-        aL:read(self)
-        return aL
-    elseif aN == 1 then
+    elseif objectType >= 48 then
+        local live2dObject = Live2DObjectFactory.create(objectType)
+        live2dObject:read(self)
+        return live2dObject
+    elseif objectType == 1 then
         return self:readUTF8String()
-    elseif aN == 15 then
-        local aH = self:readType()
-        local aI = {}
-        for aJ = 1, aH do
-            aI[aJ] = self:readObject()
+    elseif objectType == 15 then
+        local arrayLength = self:readType()
+        local objectArray = {}
+        for i = 1, arrayLength do
+            objectArray[i] = self:readObject()
         end
-        return aI
-    elseif aN == 23 then
+        return objectArray
+    elseif objectType == 23 then
         error("type not implemented")
-    elseif aN == 16 or aN == 25 then
+    elseif objectType == 16 or objectType == 25 then
         return self:readInt32Array()
-    elseif aN == 26 then
+    elseif objectType == 26 then
         return self:readFloat64Array()
-    elseif aN == 27 then
+    elseif objectType == 27 then
         return self:readFloat32Array()
     end
-    error("type error " .. tostring(aN))
+    error("type error " .. tostring(objectType))
 end
 
 function BinaryReader:readBit()
@@ -238,9 +238,9 @@ function BinaryReader:readBit()
         self.current8Bit = self:readByte()
         self.offset8Bit = 0
     end
-    local ret = bit.band(bit.rshift(self.current8Bit, 7 - self.offset8Bit), 1) == 1
+    local bitValue = bit.band(bit.rshift(self.current8Bit, 7 - self.offset8Bit), 1) == 1
     self.offset8Bit = self.offset8Bit + 1
-    return ret
+    return bitValue
 end
 
 function BinaryReader:checkBits()

@@ -171,8 +171,8 @@ local SDLK_ESCAPE = 27
 local M = {}
 
 function M.init()
-    local result = sdl.SDL_Init(SDL_INIT_VIDEO)
-    if result ~= 0 then
+    local initStatus = sdl.SDL_Init(SDL_INIT_VIDEO)
+    if initStatus ~= 0 then
         error("SDL_Init failed: " .. ffi.string(sdl.SDL_GetError()))
     end
 end
@@ -237,10 +237,10 @@ function M.delay(ms)
 end
 
 function M.getMouseState()
-    local x = ffi.new("int[1]")
-    local y = ffi.new("int[1]")
-    sdl.SDL_GetMouseState(x, y)
-    return x[0], y[0]
+    local mouseX = ffi.new("int[1]")
+    local mouseY = ffi.new("int[1]")
+    sdl.SDL_GetMouseState(mouseX, mouseY)
+    return mouseX[0], mouseY[0]
 end
 
 -- Exports

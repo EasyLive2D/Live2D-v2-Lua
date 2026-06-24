@@ -20,8 +20,8 @@ end
 
 function UtString.strToFloat(s, length, offset, ret)
     local result = 0
-    local _n = 10
-    local _p = false
+    local decimalDivisor = 10
+    local inDecimalPart = false
     local neg = string.sub(s, offset + 1, offset + 1) == "-"
     if neg then
         offset = offset + 1
@@ -30,14 +30,14 @@ function UtString.strToFloat(s, length, offset, ret)
         local c = string.sub(s, offset + 1, offset + 1)
         if c >= "0" and c <= "9" then
             local digit = tonumber(c)
-            if _p then
-                result = result + digit / _n
-                _n = _n * 10
+            if inDecimalPart then
+                result = result + digit / decimalDivisor
+                decimalDivisor = decimalDivisor * 10
             else
                 result = result * 10 + digit
             end
         elseif c == "." then
-            _p = true
+            inDecimalPart = true
         else
             break
         end

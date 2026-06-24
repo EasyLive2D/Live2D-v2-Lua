@@ -107,11 +107,11 @@ function ALive2DModel:setPartsOpacity(index, opacity)
     self.modelContext:setPartsOpacity(index, opacity)
 end
 
-function ALive2DModel:getPartsDataIndex(aH)
-    if type(aH) == "string" then
-        aH = Id.getID(aH)
+function ALive2DModel:getPartsDataIndex(partId)
+    if type(partId) == "string" then
+        partId = Id.getID(partId)
     end
-    return self.modelContext:getPartsDataIndex(aH)
+    return self.modelContext:getPartsDataIndex(partId)
 end
 
 function ALive2DModel:getPartsOpacity(partIndex)
@@ -132,14 +132,14 @@ function ALive2DModel:getDrawDataIndex(drawId)
     return self.modelContext:getDrawDataIndex(Id.getID(drawId))
 end
 
-function ALive2DModel:getDrawData(aH)
-    return self.modelContext:getDrawData(aH)
+function ALive2DModel:getDrawData(drawDataIdOrIndex)
+    return self.modelContext:getDrawData(drawDataIdOrIndex)
 end
 
-function ALive2DModel:getTransformedPoints(aH)
-    local aI = self.modelContext:getDrawContext(aH)
-    if aI.getTransformedPoints then
-        return aI:getTransformedPoints()
+function ALive2DModel:getTransformedPoints(drawDataIndex)
+    local drawCtx = self.modelContext:getDrawContext(drawDataIndex)
+    if drawCtx.getTransformedPoints then
+        return drawCtx:getTransformedPoints()
     end
     return nil
 end
@@ -167,16 +167,16 @@ function ALive2DModel.loadModel_exe(model, buf)
         error("Unsupported version " .. tostring(version))
     end
 
-    local aL = br:readObject()
+    local modelImpl = br:readObject()
     if version >= def.LIVE2D_FORMAT_VERSION_V2_8_TEX_OPTION then
-        local aH = br:readUShort()
-        local aT = br:readUShort()
-        if aH ~= -30584 or aT ~= -30584 then
+        local endMarker1 = br:readUShort()
+        local endMarker2 = br:readUShort()
+        if endMarker1 ~= -30584 or endMarker2 ~= -30584 then
             error("Invalid load EOF")
         end
     end
 
-    model:setModelImpl(aL)
+    model:setModelImpl(modelImpl)
     local model_context = model:getModelContext()
     model_context:setDrawParam(model:getDrawParam())
     model_context:init()

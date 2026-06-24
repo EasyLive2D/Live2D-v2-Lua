@@ -28,61 +28,61 @@ function WarpDeformer:read(br)
 end
 
 function WarpDeformer:init(mc)
-    local aI = WarpContext.new(self)
-    local aJ = (self.row + 1) * (self.col + 1)
-    if aI.interpolatedPoints ~= nil then
-        aI.interpolatedPoints = nil
+    local warpContext = WarpContext.new(self)
+    local gridPointCount = (self.row + 1) * (self.col + 1)
+    if warpContext.interpolatedPoints ~= nil then
+        warpContext.interpolatedPoints = nil
     end
-    aI.interpolatedPoints = Float32Array(aJ * 2)
-    if aI.transformedPoints ~= nil then
-        aI.transformedPoints = nil
+    warpContext.interpolatedPoints = Float32Array(gridPointCount * 2)
+    if warpContext.transformedPoints ~= nil then
+        warpContext.transformedPoints = nil
     end
     if self:needTransform() then
-        aI.transformedPoints = Float32Array(aJ * 2)
+        warpContext.transformedPoints = Float32Array(gridPointCount * 2)
     else
-        aI.transformedPoints = nil
+        warpContext.transformedPoints = nil
     end
-    return aI
+    return warpContext
 end
 
 function WarpDeformer:setupInterpolate(modelContext, deformerContext)
-    local aK = deformerContext
+    local deformerCtx = deformerContext
     if not self.pivotMgr:checkParamUpdated(modelContext) then
         return
     end
-    local aL = self:getPointCount()
-    local aH = WarpDeformer.paramOutSide
-    aH[1] = false
-    UtInterpolate.interpolatePoints(modelContext, self.pivotMgr, aH, aL, self.pivotPoints, aK.interpolatedPoints, 0, 2)
-    deformerContext:setOutsideParam(aH[1])
-    self:interpolateOpacity(modelContext, self.pivotMgr, deformerContext, aH)
+    local pointCount = self:getPointCount()
+    local outsideFlag = WarpDeformer.paramOutSide
+    outsideFlag[1] = false
+    UtInterpolate.interpolatePoints(modelContext, self.pivotMgr, outsideFlag, pointCount, self.pivotPoints, deformerCtx.interpolatedPoints, 0, 2)
+    deformerContext:setOutsideParam(outsideFlag[1])
+    self:interpolateOpacity(modelContext, self.pivotMgr, deformerContext, outsideFlag)
 end
 
 function WarpDeformer:setupTransform(modelContext, deformerContext)
-    local aL = deformerContext
-    aL:setAvailable(true)
+    local deformerCtx = deformerContext
+    deformerCtx:setAvailable(true)
     if not self:needTransform() then
-        aL:setTotalOpacity(aL:getInterpolatedOpacity())
+        deformerCtx:setTotalOpacity(deformerCtx:getInterpolatedOpacity())
     else
-        local aH = self:getTargetId()
-        if aL.tmpDeformerIndex == Deformer.DEFORMER_INDEX_NOT_INIT then
-            aL.tmpDeformerIndex = modelContext:getDeformerIndex(aH)
+        local targetId = self:getTargetId()
+        if deformerCtx.tmpDeformerIndex == Deformer.DEFORMER_INDEX_NOT_INIT then
+            deformerCtx.tmpDeformerIndex = modelContext:getDeformerIndex(targetId)
         end
-        if aL.tmpDeformerIndex < 0 then
+        if deformerCtx.tmpDeformerIndex < 0 then
             print("deformer is not reachable")
-            aL:setAvailable(false)
+            deformerCtx:setAvailable(false)
         else
-            local aN = modelContext:getDeformer(aL.tmpDeformerIndex)
-            local aI = modelContext:getDeformerContext(aL.tmpDeformerIndex)
-            if aN ~= nil and aI:isAvailable() then
-                local aM = aI:getTotalScale()
-                aL:setTotalScale_notForClient(aM)
-                local aO = aI:getTotalOpacity()
-                aL:setTotalOpacity(aO * aL:getInterpolatedOpacity())
-                aN:transformPoints(modelContext, aI, aL.interpolatedPoints, aL.transformedPoints, self:getPointCount(), 0, 2)
-                aL:setAvailable(true)
+            local parentDeformer = modelContext:getDeformer(deformerCtx.tmpDeformerIndex)
+            local parentCtx = modelContext:getDeformerContext(deformerCtx.tmpDeformerIndex)
+            if parentDeformer ~= nil and parentCtx:isAvailable() then
+                local totalScale = parentCtx:getTotalScale()
+                deformerCtx:setTotalScale_notForClient(totalScale)
+                local totalOpacity = parentCtx:getTotalOpacity()
+                deformerCtx:setTotalOpacity(totalOpacity * deformerCtx:getInterpolatedOpacity())
+                parentDeformer:transformPoints(modelContext, parentCtx, deformerCtx.interpolatedPoints, deformerCtx.transformedPoints, self:getPointCount(), 0, 2)
+                deformerCtx:setAvailable(true)
             else
-                aL:setAvailable(false)
+                deformerCtx:setAvailable(false)
             end
         end
     end
@@ -106,206 +106,206 @@ function WarpDeformer:getType()
     return Deformer.TYPE_WARP
 end
 
-function WarpDeformer.transformPoints_sdk2(hvs, dst, pointCount, srcOffset, srcStep, grid, row, col)
-    local aW = pointCount * srcStep
-    local aT = 0
-    local aS = 0
-    local bl = 0
-    local bk = 0
-    local bf = 0
-    local be = 0
-    local aZ = false
-    for ba = srcOffset + 1, aW, srcStep do
-        local a4 = hvs[ba]
-        local aX = hvs[ba + 1]
-        local bd = a4 * row
-        local a7 = aX * col
-        if bd < 0 or a7 < 0 or row <= bd or col <= a7 then
-            local a1 = row + 1
-            if not aZ then
-                aZ = true
-                aT = 0.25 * (grid[((0) + (0) * a1) * 2 + 1] + grid[((row) + (0) * a1) * 2 + 1] +
-                             grid[((0) + (col) * a1) * 2 + 1] + grid[((row) + (col) * a1) * 2 + 1])
-                aS = 0.25 * (grid[((0) + (0) * a1) * 2 + 2] + grid[((row) + (0) * a1) * 2 + 2] +
-                             grid[((0) + (col) * a1) * 2 + 2] + grid[((row) + (col) * a1) * 2 + 2])
-                local aM = grid[((row) + (col) * a1) * 2 + 1] - grid[((0) + (0) * a1) * 2 + 1]
-                local aL = grid[((row) + (col) * a1) * 2 + 2] - grid[((0) + (0) * a1) * 2 + 2]
-                local bh = grid[((row) + (0) * a1) * 2 + 1] - grid[((0) + (col) * a1) * 2 + 1]
-                local bg = grid[((row) + (0) * a1) * 2 + 2] - grid[((0) + (col) * a1) * 2 + 2]
-                bl = (aM + bh) * 0.5
-                bk = (aL + bg) * 0.5
-                bf = (aM - bh) * 0.5
-                be = (aL - bg) * 0.5
-                aT = aT - 0.5 * (bl + bf)
-                aS = aS - 0.5 * (bk + be)
+function WarpDeformer.transformPoints_sdk2(sourceVertices, dst, pointCount, srcOffset, srcStep, grid, row, col)
+    local totalStride = pointCount * srcStep
+    local centerX = 0
+    local centerY = 0
+    local extrapolateScaleX = 0
+    local extrapolateScaleY = 0
+    local extrapolateSkewX = 0
+    local extrapolateSkewY = 0
+    local extrapolationComputed = false
+    for vertexOffset = srcOffset + 1, totalStride, srcStep do
+        local normalizedX = sourceVertices[vertexOffset]
+        local normalizedY = sourceVertices[vertexOffset + 1]
+        local gridRow = normalizedX * row
+        local gridCol = normalizedY * col
+        if gridRow < 0 or gridCol < 0 or row <= gridRow or col <= gridCol then
+            local rowStride = row + 1
+            if not extrapolationComputed then
+                extrapolationComputed = true
+                centerX = 0.25 * (grid[((0) + (0) * rowStride) * 2 + 1] + grid[((row) + (0) * rowStride) * 2 + 1] +
+                             grid[((0) + (col) * rowStride) * 2 + 1] + grid[((row) + (col) * rowStride) * 2 + 1])
+                centerY = 0.25 * (grid[((0) + (0) * rowStride) * 2 + 2] + grid[((row) + (0) * rowStride) * 2 + 2] +
+                             grid[((0) + (col) * rowStride) * 2 + 2] + grid[((row) + (col) * rowStride) * 2 + 2])
+                local diagonalDX = grid[((row) + (col) * rowStride) * 2 + 1] - grid[((0) + (0) * rowStride) * 2 + 1]
+                local diagonalDY = grid[((row) + (col) * rowStride) * 2 + 2] - grid[((0) + (0) * rowStride) * 2 + 2]
+                local antiDiagDX = grid[((row) + (0) * rowStride) * 2 + 1] - grid[((0) + (col) * rowStride) * 2 + 1]
+                local antiDiagDY = grid[((row) + (0) * rowStride) * 2 + 2] - grid[((0) + (col) * rowStride) * 2 + 2]
+                extrapolateScaleX = (diagonalDX + antiDiagDX) * 0.5
+                extrapolateScaleY = (diagonalDY + antiDiagDY) * 0.5
+                extrapolateSkewX = (diagonalDX - antiDiagDX) * 0.5
+                extrapolateSkewY = (diagonalDY - antiDiagDY) * 0.5
+                centerX = centerX - 0.5 * (extrapolateScaleX + extrapolateSkewX)
+                centerY = centerY - 0.5 * (extrapolateScaleY + extrapolateSkewY)
             end
 
-            if (-2 < a4 and a4 < 3) and (-2 < aX and aX < 3) then
-                if a4 <= 0 then
-                    if aX <= 0 then
-                        local a3 = grid[((0) + (0) * a1) * 2 + 1]
-                        local a2 = grid[((0) + (0) * a1) * 2 + 2]
-                        local a8 = aT - 2 * bl
-                        local a6 = aS - 2 * bk
-                        local aK = aT - 2 * bf
-                        local aJ = aS - 2 * be
-                        local aO = aT - 2 * bl - 2 * bf
-                        local aN = aS - 2 * bk - 2 * be
-                        local bj = 0.5 * (a4 - (-2))
-                        local bi = 0.5 * (aX - (-2))
-                        if bj + bi <= 1 then
-                            dst[ba] = aO + (aK - aO) * bj + (a8 - aO) * bi
-                            dst[ba + 1] = aN + (aJ - aN) * bj + (a6 - aN) * bi
+            if (-2 < normalizedX and normalizedX < 3) and (-2 < normalizedY and normalizedY < 3) then
+                if normalizedX <= 0 then
+                    if normalizedY <= 0 then
+                        local gridCornerX = grid[((0) + (0) * rowStride) * 2 + 1]
+                        local gridCornerY = grid[((0) + (0) * rowStride) * 2 + 2]
+                        local extrapPointX1 = centerX - 2 * extrapolateScaleX
+                        local extrapPointY1 = centerY - 2 * extrapolateScaleY
+                        local extrapPointX2 = centerX - 2 * extrapolateSkewX
+                        local extrapPointY2 = centerY - 2 * extrapolateSkewY
+                        local extrapPointX3 = centerX - 2 * extrapolateScaleX - 2 * extrapolateSkewX
+                        local extrapPointY3 = centerY - 2 * extrapolateScaleY - 2 * extrapolateSkewY
+                        local baryU = 0.5 * (normalizedX - (-2))
+                        local baryV = 0.5 * (normalizedY - (-2))
+                        if baryU + baryV <= 1 then
+                            dst[vertexOffset] = extrapPointX3 + (extrapPointX2 - extrapPointX3) * baryU + (extrapPointX1 - extrapPointX3) * baryV
+                            dst[vertexOffset + 1] = extrapPointY3 + (extrapPointY2 - extrapPointY3) * baryU + (extrapPointY1 - extrapPointY3) * baryV
                         else
-                            dst[ba] = a3 + (a8 - a3) * (1 - bj) + (aK - a3) * (1 - bi)
-                            dst[ba + 1] = a2 + (a6 - a2) * (1 - bj) + (aJ - a2) * (1 - bi)
+                            dst[vertexOffset] = gridCornerX + (extrapPointX1 - gridCornerX) * (1 - baryU) + (extrapPointX2 - gridCornerX) * (1 - baryV)
+                            dst[vertexOffset + 1] = gridCornerY + (extrapPointY1 - gridCornerY) * (1 - baryU) + (extrapPointY2 - gridCornerY) * (1 - baryV)
                         end
-                    elseif aX >= 1 then
-                        local aK = grid[((0) + (col) * a1) * 2 + 1]
-                        local aJ = grid[((0) + (col) * a1) * 2 + 2]
-                        local aO = aT - 2 * bl + 1 * bf
-                        local aN = aS - 2 * bk + 1 * be
-                        local a3 = aT + 3 * bf
-                        local a2 = aS + 3 * be
-                        local a8 = aT - 2 * bl + 3 * bf
-                        local a6 = aS - 2 * bk + 3 * be
-                        local bj = 0.5 * (a4 - (-2))
-                        local bi = 0.5 * (aX - (1))
-                        if bj + bi <= 1 then
-                            dst[ba] = aO + (aK - aO) * bj + (a8 - aO) * bi
-                            dst[ba + 1] = aN + (aJ - aN) * bj + (a6 - aN) * bi
+                    elseif normalizedY >= 1 then
+                        local extrapPointX2 = grid[((0) + (col) * rowStride) * 2 + 1]
+                        local extrapPointY2 = grid[((0) + (col) * rowStride) * 2 + 2]
+                        local extrapPointX3 = centerX - 2 * extrapolateScaleX + 1 * extrapolateSkewX
+                        local extrapPointY3 = centerY - 2 * extrapolateScaleY + 1 * extrapolateSkewY
+                        local gridCornerX = centerX + 3 * extrapolateSkewX
+                        local gridCornerY = centerY + 3 * extrapolateSkewY
+                        local extrapPointX1 = centerX - 2 * extrapolateScaleX + 3 * extrapolateSkewX
+                        local extrapPointY1 = centerY - 2 * extrapolateScaleY + 3 * extrapolateSkewY
+                        local baryU = 0.5 * (normalizedX - (-2))
+                        local baryV = 0.5 * (normalizedY - (1))
+                        if baryU + baryV <= 1 then
+                            dst[vertexOffset] = extrapPointX3 + (extrapPointX2 - extrapPointX3) * baryU + (extrapPointX1 - extrapPointX3) * baryV
+                            dst[vertexOffset + 1] = extrapPointY3 + (extrapPointY2 - extrapPointY3) * baryU + (extrapPointY1 - extrapPointY3) * baryV
                         else
-                            dst[ba] = a3 + (a8 - a3) * (1 - bj) + (aK - a3) * (1 - bi)
-                            dst[ba + 1] = a2 + (a6 - a2) * (1 - bj) + (aJ - a2) * (1 - bi)
+                            dst[vertexOffset] = gridCornerX + (extrapPointX1 - gridCornerX) * (1 - baryU) + (extrapPointX2 - gridCornerX) * (1 - baryV)
+                            dst[vertexOffset + 1] = gridCornerY + (extrapPointY1 - gridCornerY) * (1 - baryU) + (extrapPointY2 - gridCornerY) * (1 - baryV)
                         end
                     else
-                        local aH = floor(a7)
+                        local aH = floor(gridCol)
                         if aH == col then aH = col - 1 end
-                        local bj = 0.5 * (a4 - (-2))
-                        local bi = a7 - aH
-                        local bb = aH / col
-                        local a9 = (aH + 1) / col
-                        aK = grid[((0) + (aH) * a1) * 2 + 1]
-                        aJ = grid[((0) + (aH) * a1) * 2 + 2]
-                        a3 = grid[((0) + (aH + 1) * a1) * 2 + 1]
-                        a2 = grid[((0) + (aH + 1) * a1) * 2 + 2]
-                        local aO = aT - 2 * bl + bb * bf
-                        local aN = aS - 2 * bk + bb * be
-                        local a8 = aT - 2 * bl + a9 * bf
-                        local a6 = aS - 2 * bk + a9 * be
-                        if bj + bi <= 1 then
-                            dst[ba] = aO + (aK - aO) * bj + (a8 - aO) * bi
-                            dst[ba + 1] = aN + (aJ - aN) * bj + (a6 - aN) * bi
+                        local baryU = 0.5 * (normalizedX - (-2))
+                        local baryV = gridCol - aH
+                        local colFraction1 = aH / col
+                        local colFraction2 = (aH + 1) / col
+                        extrapPointX2 = grid[((0) + (aH) * rowStride) * 2 + 1]
+                        extrapPointY2 = grid[((0) + (aH) * rowStride) * 2 + 2]
+                        gridCornerX = grid[((0) + (aH + 1) * rowStride) * 2 + 1]
+                        gridCornerY = grid[((0) + (aH + 1) * rowStride) * 2 + 2]
+                        local extrapPointX3 = centerX - 2 * extrapolateScaleX + colFraction1 * extrapolateSkewX
+                        local extrapPointY3 = centerY - 2 * extrapolateScaleY + colFraction1 * extrapolateSkewY
+                        local extrapPointX1 = centerX - 2 * extrapolateScaleX + colFraction2 * extrapolateSkewX
+                        local extrapPointY1 = centerY - 2 * extrapolateScaleY + colFraction2 * extrapolateSkewY
+                        if baryU + baryV <= 1 then
+                            dst[vertexOffset] = extrapPointX3 + (extrapPointX2 - extrapPointX3) * baryU + (extrapPointX1 - extrapPointX3) * baryV
+                            dst[vertexOffset + 1] = extrapPointY3 + (extrapPointY2 - extrapPointY3) * baryU + (extrapPointY1 - extrapPointY3) * baryV
                         else
-                            dst[ba] = a3 + (a8 - a3) * (1 - bj) + (aK - a3) * (1 - bi)
-                            dst[ba + 1] = a2 + (a6 - a2) * (1 - bj) + (aJ - a2) * (1 - bi)
+                            dst[vertexOffset] = gridCornerX + (extrapPointX1 - gridCornerX) * (1 - baryU) + (extrapPointX2 - gridCornerX) * (1 - baryV)
+                            dst[vertexOffset + 1] = gridCornerY + (extrapPointY1 - gridCornerY) * (1 - baryU) + (extrapPointY2 - gridCornerY) * (1 - baryV)
                         end
                     end
                 else
-                    if 1 <= a4 then
-                        if aX <= 0 then
-                            local a8 = grid[((row) + (0) * a1) * 2 + 1]
-                            local a6 = grid[((row) + (0) * a1) * 2 + 2]
-                            local a3 = aT + 3 * bl
-                            local a2 = aS + 3 * bk
-                            local aO = aT + 1 * bl - 2 * bf
-                            local aN = aS + 1 * bk - 2 * be
-                            local aK = aT + 3 * bl - 2 * bf
-                            local aJ = aS + 3 * bk - 2 * be
-                            local bj = 0.5 * (a4 - (1))
-                            local bi = 0.5 * (aX - (-2))
-                            if bj + bi <= 1 then
-                                dst[ba] = aO + (aK - aO) * bj + (a8 - aO) * bi
-                                dst[ba + 1] = aN + (aJ - aN) * bj + (a6 - aN) * bi
+                    if 1 <= normalizedX then
+                        if normalizedY <= 0 then
+                            local extrapPointX1 = grid[((row) + (0) * rowStride) * 2 + 1]
+                            local extrapPointY1 = grid[((row) + (0) * rowStride) * 2 + 2]
+                            local gridCornerX = centerX + 3 * extrapolateScaleX
+                            local gridCornerY = centerY + 3 * extrapolateScaleY
+                            local extrapPointX3 = centerX + 1 * extrapolateScaleX - 2 * extrapolateSkewX
+                            local extrapPointY3 = centerY + 1 * extrapolateScaleY - 2 * extrapolateSkewY
+                            local extrapPointX2 = centerX + 3 * extrapolateScaleX - 2 * extrapolateSkewX
+                            local extrapPointY2 = centerY + 3 * extrapolateScaleY - 2 * extrapolateSkewY
+                            local baryU = 0.5 * (normalizedX - (1))
+                            local baryV = 0.5 * (normalizedY - (-2))
+                            if baryU + baryV <= 1 then
+                                dst[vertexOffset] = extrapPointX3 + (extrapPointX2 - extrapPointX3) * baryU + (extrapPointX1 - extrapPointX3) * baryV
+                                dst[vertexOffset + 1] = extrapPointY3 + (extrapPointY2 - extrapPointY3) * baryU + (extrapPointY1 - extrapPointY3) * baryV
                             else
-                                dst[ba] = a3 + (a8 - a3) * (1 - bj) + (aK - a3) * (1 - bi)
-                                dst[ba + 1] = a2 + (a6 - a2) * (1 - bj) + (aJ - a2) * (1 - bi)
+                                dst[vertexOffset] = gridCornerX + (extrapPointX1 - gridCornerX) * (1 - baryU) + (extrapPointX2 - gridCornerX) * (1 - baryV)
+                                dst[vertexOffset + 1] = gridCornerY + (extrapPointY1 - gridCornerY) * (1 - baryU) + (extrapPointY2 - gridCornerY) * (1 - baryV)
                             end
-                        elseif aX >= 1 then
-                            local aO = grid[((row) + (col) * a1) * 2 + 1]
-                            local aN = grid[((row) + (col) * a1) * 2 + 2]
-                            local aK = aT + 3 * bl + 1 * bf
-                            local aJ = aS + 3 * bk + 1 * be
-                            local a8 = aT + 1 * bl + 3 * bf
-                            local a6 = aS + 1 * bk + 3 * be
-                            local a3 = aT + 3 * bl + 3 * bf
-                            local a2 = aS + 3 * bk + 3 * be
-                            local bj = 0.5 * (a4 - (1))
-                            local bi = 0.5 * (aX - (1))
-                            if bj + bi <= 1 then
-                                dst[ba] = aO + (aK - aO) * bj + (a8 - aO) * bi
-                                dst[ba + 1] = aN + (aJ - aN) * bj + (a6 - aN) * bi
+                        elseif normalizedY >= 1 then
+                            local extrapPointX3 = grid[((row) + (col) * rowStride) * 2 + 1]
+                            local extrapPointY3 = grid[((row) + (col) * rowStride) * 2 + 2]
+                            local extrapPointX2 = centerX + 3 * extrapolateScaleX + 1 * extrapolateSkewX
+                            local extrapPointY2 = centerY + 3 * extrapolateScaleY + 1 * extrapolateSkewY
+                            local extrapPointX1 = centerX + 1 * extrapolateScaleX + 3 * extrapolateSkewX
+                            local extrapPointY1 = centerY + 1 * extrapolateScaleY + 3 * extrapolateSkewY
+                            local gridCornerX = centerX + 3 * extrapolateScaleX + 3 * extrapolateSkewX
+                            local gridCornerY = centerY + 3 * extrapolateScaleY + 3 * extrapolateSkewY
+                            local baryU = 0.5 * (normalizedX - (1))
+                            local baryV = 0.5 * (normalizedY - (1))
+                            if baryU + baryV <= 1 then
+                                dst[vertexOffset] = extrapPointX3 + (extrapPointX2 - extrapPointX3) * baryU + (extrapPointX1 - extrapPointX3) * baryV
+                                dst[vertexOffset + 1] = extrapPointY3 + (extrapPointY2 - extrapPointY3) * baryU + (extrapPointY1 - extrapPointY3) * baryV
                             else
-                                dst[ba] = a3 + (a8 - a3) * (1 - bj) + (aK - a3) * (1 - bi)
-                                dst[ba + 1] = a2 + (a6 - a2) * (1 - bj) + (aJ - a2) * (1 - bi)
+                                dst[vertexOffset] = gridCornerX + (extrapPointX1 - gridCornerX) * (1 - baryU) + (extrapPointX2 - gridCornerX) * (1 - baryV)
+                                dst[vertexOffset + 1] = gridCornerY + (extrapPointY1 - gridCornerY) * (1 - baryU) + (extrapPointY2 - gridCornerY) * (1 - baryV)
                             end
                         else
-                            local aH = floor(a7)
+                            local aH = floor(gridCol)
                             if aH == col then aH = col - 1 end
-                            local bj = 0.5 * (a4 - (1))
-                            local bi = a7 - aH
-                            local bb = aH / col
-                            local a9 = (aH + 1) / col
-                            aO = grid[((row) + (aH) * a1) * 2 + 1]
-                            aN = grid[((row) + (aH) * a1) * 2 + 2]
-                            local a8 = grid[((row) + (aH + 1) * a1) * 2 + 1]
-                            local a6 = grid[((row) + (aH + 1) * a1) * 2 + 2]
-                            aK = aT + 3 * bl + bb * bf
-                            aJ = aS + 3 * bk + bb * be
-                            a3 = aT + 3 * bl + a9 * bf
-                            a2 = aS + 3 * bk + a9 * be
-                            if bj + bi <= 1 then
-                                dst[ba] = aO + (aK - aO) * bj + (a8 - aO) * bi
-                                dst[ba + 1] = aN + (aJ - aN) * bj + (a6 - aN) * bi
+                            local baryU = 0.5 * (normalizedX - (1))
+                            local baryV = gridCol - aH
+                            local colFraction1 = aH / col
+                            local colFraction2 = (aH + 1) / col
+                            extrapPointX3 = grid[((row) + (aH) * rowStride) * 2 + 1]
+                            extrapPointY3 = grid[((row) + (aH) * rowStride) * 2 + 2]
+                            local extrapPointX1 = grid[((row) + (aH + 1) * rowStride) * 2 + 1]
+                            local extrapPointY1 = grid[((row) + (aH + 1) * rowStride) * 2 + 2]
+                            extrapPointX2 = centerX + 3 * extrapolateScaleX + colFraction1 * extrapolateSkewX
+                            extrapPointY2 = centerY + 3 * extrapolateScaleY + colFraction1 * extrapolateSkewY
+                            gridCornerX = centerX + 3 * extrapolateScaleX + colFraction2 * extrapolateSkewX
+                            gridCornerY = centerY + 3 * extrapolateScaleY + colFraction2 * extrapolateSkewY
+                            if baryU + baryV <= 1 then
+                                dst[vertexOffset] = extrapPointX3 + (extrapPointX2 - extrapPointX3) * baryU + (extrapPointX1 - extrapPointX3) * baryV
+                                dst[vertexOffset + 1] = extrapPointY3 + (extrapPointY2 - extrapPointY3) * baryU + (extrapPointY1 - extrapPointY3) * baryV
                             else
-                                dst[ba] = a3 + (a8 - a3) * (1 - bj) + (aK - a3) * (1 - bi)
-                                dst[ba + 1] = a2 + (a6 - a2) * (1 - bj) + (aJ - a2) * (1 - bi)
+                                dst[vertexOffset] = gridCornerX + (extrapPointX1 - gridCornerX) * (1 - baryU) + (extrapPointX2 - gridCornerX) * (1 - baryV)
+                                dst[vertexOffset + 1] = gridCornerY + (extrapPointY1 - gridCornerY) * (1 - baryU) + (extrapPointY2 - gridCornerY) * (1 - baryV)
                             end
                         end
                     else
-                        if aX <= 0 then
-                            local aY = floor(bd)
-                            if aY == row then aY = row - 1 end
-                            local bj = bd - aY
-                            local bi = 0.5 * (aX - (-2))
-                            local bp = aY / row
-                            local bo = (aY + 1) / row
-                            local a8 = grid[((aY) + (0) * a1) * 2 + 1]
-                            local a6 = grid[((aY) + (0) * a1) * 2 + 2]
-                            local a3 = grid[((aY + 1) + (0) * a1) * 2 + 1]
-                            local a2 = grid[((aY + 1) + (0) * a1) * 2 + 2]
-                            local aO = aT + bp * bl - 2 * bf
-                            local aN = aS + bp * bk - 2 * be
-                            local aK = aT + bo * bl - 2 * bf
-                            local aJ = aS + bo * bk - 2 * be
-                            if bj + bi <= 1 then
-                                dst[ba] = aO + (aK - aO) * bj + (a8 - aO) * bi
-                                dst[ba + 1] = aN + (aJ - aN) * bj + (a6 - aN) * bi
+                        if normalizedY <= 0 then
+                            local gridRowInt = floor(gridRow)
+                            if gridRowInt == row then gridRowInt = row - 1 end
+                            local baryU = gridRow - gridRowInt
+                            local baryV = 0.5 * (normalizedY - (-2))
+                            local rowFraction1 = gridRowInt / row
+                            local rowFraction2 = (gridRowInt + 1) / row
+                            local extrapPointX1 = grid[((gridRowInt) + (0) * rowStride) * 2 + 1]
+                            local extrapPointY1 = grid[((gridRowInt) + (0) * rowStride) * 2 + 2]
+                            local gridCornerX = grid[((gridRowInt + 1) + (0) * rowStride) * 2 + 1]
+                            local gridCornerY = grid[((gridRowInt + 1) + (0) * rowStride) * 2 + 2]
+                            local extrapPointX3 = centerX + rowFraction1 * extrapolateScaleX - 2 * extrapolateSkewX
+                            local extrapPointY3 = centerY + rowFraction1 * extrapolateScaleY - 2 * extrapolateSkewY
+                            local extrapPointX2 = centerX + rowFraction2 * extrapolateScaleX - 2 * extrapolateSkewX
+                            local extrapPointY2 = centerY + rowFraction2 * extrapolateScaleY - 2 * extrapolateSkewY
+                            if baryU + baryV <= 1 then
+                                dst[vertexOffset] = extrapPointX3 + (extrapPointX2 - extrapPointX3) * baryU + (extrapPointX1 - extrapPointX3) * baryV
+                                dst[vertexOffset + 1] = extrapPointY3 + (extrapPointY2 - extrapPointY3) * baryU + (extrapPointY1 - extrapPointY3) * baryV
                             else
-                                dst[ba] = a3 + (a8 - a3) * (1 - bj) + (aK - a3) * (1 - bi)
-                                dst[ba + 1] = a2 + (a6 - a2) * (1 - bj) + (aJ - a2) * (1 - bi)
+                                dst[vertexOffset] = gridCornerX + (extrapPointX1 - gridCornerX) * (1 - baryU) + (extrapPointX2 - gridCornerX) * (1 - baryV)
+                                dst[vertexOffset + 1] = gridCornerY + (extrapPointY1 - gridCornerY) * (1 - baryU) + (extrapPointY2 - gridCornerY) * (1 - baryV)
                             end
-                        elseif aX >= 1 then
-                            local aY = floor(bd)
-                            if aY == row then aY = row - 1 end
-                            local bj = bd - aY
-                            local bi = 0.5 * (aX - (1))
-                            local bp = aY / row
-                            local bo = (aY + 1) / row
-                            local aO = grid[((aY) + (col) * a1) * 2 + 1]
-                            local aN = grid[((aY) + (col) * a1) * 2 + 2]
-                            local aK = grid[((aY + 1) + (col) * a1) * 2 + 1]
-                            local aJ = grid[((aY + 1) + (col) * a1) * 2 + 2]
-                            local a8 = aT + bp * bl + 3 * bf
-                            local a6 = aS + bp * bk + 3 * be
-                            local a3 = aT + bo * bl + 3 * bf
-                            local a2 = aS + bo * bk + 3 * be
-                            if bj + bi <= 1 then
-                                dst[ba] = aO + (aK - aO) * bj + (a8 - aO) * bi
-                                dst[ba + 1] = aN + (aJ - aN) * bj + (a6 - aN) * bi
+                        elseif normalizedY >= 1 then
+                            local gridRowInt = floor(gridRow)
+                            if gridRowInt == row then gridRowInt = row - 1 end
+                            local baryU = gridRow - gridRowInt
+                            local baryV = 0.5 * (normalizedY - (1))
+                            local rowFraction1 = gridRowInt / row
+                            local rowFraction2 = (gridRowInt + 1) / row
+                            local extrapPointX3 = grid[((gridRowInt) + (col) * rowStride) * 2 + 1]
+                            local extrapPointY3 = grid[((gridRowInt) + (col) * rowStride) * 2 + 2]
+                            local extrapPointX2 = grid[((gridRowInt + 1) + (col) * rowStride) * 2 + 1]
+                            local extrapPointY2 = grid[((gridRowInt + 1) + (col) * rowStride) * 2 + 2]
+                            local extrapPointX1 = centerX + rowFraction1 * extrapolateScaleX + 3 * extrapolateSkewX
+                            local extrapPointY1 = centerY + rowFraction1 * extrapolateScaleY + 3 * extrapolateSkewY
+                            local gridCornerX = centerX + rowFraction2 * extrapolateScaleX + 3 * extrapolateSkewX
+                            local gridCornerY = centerY + rowFraction2 * extrapolateScaleY + 3 * extrapolateSkewY
+                            if baryU + baryV <= 1 then
+                                dst[vertexOffset] = extrapPointX3 + (extrapPointX2 - extrapPointX3) * baryU + (extrapPointX1 - extrapPointX3) * baryV
+                                dst[vertexOffset + 1] = extrapPointY3 + (extrapPointY2 - extrapPointY3) * baryU + (extrapPointY1 - extrapPointY3) * baryV
                             else
-                                dst[ba] = a3 + (a8 - a3) * (1 - bj) + (aK - a3) * (1 - bi)
-                                dst[ba + 1] = a2 + (a6 - a2) * (1 - bj) + (aJ - a2) * (1 - bi)
+                                dst[vertexOffset] = gridCornerX + (extrapPointX1 - gridCornerX) * (1 - baryU) + (extrapPointX2 - gridCornerX) * (1 - baryV)
+                                dst[vertexOffset + 1] = gridCornerY + (extrapPointY1 - gridCornerY) * (1 - baryU) + (extrapPointY2 - gridCornerY) * (1 - baryV)
                             end
                         else
                             error("error @BDBoxGrid")
@@ -313,21 +313,21 @@ function WarpDeformer.transformPoints_sdk2(hvs, dst, pointCount, srcOffset, srcS
                     end
                 end
             else
-                dst[ba] = aT + a4 * bl + aX * bf
-                dst[ba + 1] = aS + a4 * bk + aX * be
+                dst[vertexOffset] = centerX + normalizedX * extrapolateScaleX + normalizedY * extrapolateSkewX
+                dst[vertexOffset + 1] = centerY + normalizedX * extrapolateScaleY + normalizedY * extrapolateSkewY
             end
         else
-            local bd_floor = floor(bd)
-            local a7_floor = floor(a7)
-            local bn = bd - bd_floor
-            local bm = a7 - a7_floor
-            local aV = 2 * (bd_floor + a7_floor * (row + 1))
-            if bn + bm < 1 then
-                dst[ba] = grid[aV + 1] * (1 - bn - bm) + grid[aV + 3] * bn + grid[aV + 2 * (row + 1) + 1] * bm
-                dst[ba + 1] = grid[aV + 2] * (1 - bn - bm) + grid[aV + 4] * bn + grid[aV + 2 * (row + 1) + 2] * bm
+            local bd_floor = floor(gridRow)
+            local a7_floor = floor(gridCol)
+            local rowFraction = gridRow - bd_floor
+            local colFraction = gridCol - a7_floor
+            local gridBaseIndex = 2 * (bd_floor + a7_floor * (row + 1))
+            if rowFraction + colFraction < 1 then
+                dst[vertexOffset] = grid[gridBaseIndex + 1] * (1 - rowFraction - colFraction) + grid[gridBaseIndex + 3] * rowFraction + grid[gridBaseIndex + 2 * (row + 1) + 1] * colFraction
+                dst[vertexOffset + 1] = grid[gridBaseIndex + 2] * (1 - rowFraction - colFraction) + grid[gridBaseIndex + 4] * rowFraction + grid[gridBaseIndex + 2 * (row + 1) + 2] * colFraction
             else
-                dst[ba] = grid[aV + 2 * (row + 1) + 3] * (bn - 1 + bm) + grid[aV + 2 * (row + 1) + 1] * (1 - bn) + grid[aV + 3] * (1 - bm)
-                dst[ba + 1] = grid[aV + 2 * (row + 1) + 4] * (bn - 1 + bm) + grid[aV + 2 * (row + 1) + 2] * (1 - bn) + grid[aV + 4] * (1 - bm)
+                dst[vertexOffset] = grid[gridBaseIndex + 2 * (row + 1) + 3] * (rowFraction - 1 + colFraction) + grid[gridBaseIndex + 2 * (row + 1) + 1] * (1 - rowFraction) + grid[gridBaseIndex + 3] * (1 - colFraction)
+                dst[vertexOffset + 1] = grid[gridBaseIndex + 2 * (row + 1) + 4] * (rowFraction - 1 + colFraction) + grid[gridBaseIndex + 2 * (row + 1) + 2] * (1 - rowFraction) + grid[gridBaseIndex + 4] * (1 - colFraction)
             end
         end
     end

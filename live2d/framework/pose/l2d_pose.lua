@@ -36,9 +36,9 @@ function L2DPose:initParam(model)
             local parts_index = parts_group[j].partsIndex
             local param_index = parts_group[j].paramIndex
             if parts_index >= 0 then
-                local v = model:getParamFloat(param_index) ~= 0
-                model:setPartsOpacity(parts_index, v and 1.0 or 0.0)
-                model:setParamFloat(param_index, v and 1.0 or 0.0)
+                local isVisible = model:getParamFloat(param_index) ~= 0
+                model:setPartsOpacity(parts_index, isVisible and 1.0 or 0.0)
+                model:setParamFloat(param_index, isVisible and 1.0 or 0.0)
             end
             if parts_group[j].link ~= nil then
                 for k = 1, #parts_group[j].link do
@@ -80,17 +80,17 @@ function L2DPose.normalizePartsOpacityGroup(model, partsGroup, deltaTimeSec)
                 model:setPartsOpacity(parts_index, visible_opacity)
             else
                 local opacity = model:getPartsOpacity(parts_index)
-                local a1
+                local targetOpacity
                 if visible_opacity < phi then
-                    a1 = visible_opacity * (phi - 1) / phi + 1
+                    targetOpacity = visible_opacity * (phi - 1) / phi + 1
                 else
-                    a1 = (1 - visible_opacity) * phi / (1 - phi)
+                    targetOpacity = (1 - visible_opacity) * phi / (1 - phi)
                 end
-                local back_op = (1 - a1) * (1 - visible_opacity)
+                local back_op = (1 - targetOpacity) * (1 - visible_opacity)
                 if back_op > max_back_opacity then
-                    a1 = 1 - max_back_opacity / (1 - visible_opacity)
+                    targetOpacity = 1 - max_back_opacity / (1 - visible_opacity)
                 end
-                opacity = math.min(opacity, a1)
+                opacity = math.min(opacity, targetOpacity)
                 model:setPartsOpacity(parts_index, opacity)
             end
         end

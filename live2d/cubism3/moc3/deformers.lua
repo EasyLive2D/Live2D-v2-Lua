@@ -244,10 +244,10 @@ local function interpolated_rotation(self, rotation_index, bindings, parameter_v
             translation:y() + (self.rotation_keyform_origin_ys[kf_idx + 1] or 0) * slot.weight
         )
         scale = scale + (self.rotation_keyform_scales[kf_idx + 1] or 0) * slot.weight
-        local fx = self.rotation_keyform_reflect_xs[kf_idx + 1] and 1 or 0
-        local fy = self.rotation_keyform_reflect_ys[kf_idx + 1] and 1 or 0
-        flip_x = flip_x + fx * slot.weight
-        flip_y = flip_y + fy * slot.weight
+        local reflectXSign = self.rotation_keyform_reflect_xs[kf_idx + 1] and 1 or 0
+        local reflectYSign = self.rotation_keyform_reflect_ys[kf_idx + 1] and 1 or 0
+        flip_x = flip_x + reflectXSign * slot.weight
+        flip_y = flip_y + reflectYSign * slot.weight
     end
 
     local base_angle = self.rotation_base_angles[rotation_index + 1] or 0
@@ -319,16 +319,16 @@ function deformers.compose(self, bindings, parameter_values)
         -- Helper: apply composed parent to point
         local function apply_parent(p, point)
             if p < 0 then return point end
-            local ci = p + 1
-            if not composed[ci] then return point end
-            return apply_one(composed[ci], point)
+            local childIndex = p + 1
+            if not composed[childIndex] then return point end
+            return apply_one(composed[childIndex], point)
         end
 
         -- Helper: parent scale accum
         local function parent_scale(p)
             if p < 0 then return 1.0 end
-            local ci = p + 1
-            local c = composed[ci]
+            local childIndex = p + 1
+            local c = composed[childIndex]
             if not c then return 1.0 end
             if c.kind == "warp" then return c.scale_accum end
             if c.kind == "rotation" then return c.scale_accum end
@@ -338,8 +338,8 @@ function deformers.compose(self, bindings, parameter_values)
         -- Helper: parent opacity accum
         local function parent_opacity(p)
             if p < 0 then return 1.0 end
-            local ci = p + 1
-            local c = composed[ci]
+            local childIndex = p + 1
+            local c = composed[childIndex]
             if not c then return 1.0 end
             if c.kind == "warp" then return c.opacity_accum end
             if c.kind == "rotation" then return c.opacity_accum end

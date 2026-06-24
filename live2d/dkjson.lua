@@ -2,8 +2,8 @@ local dkjson = {}
 
 local function skip_whitespace(s, i)
     while i <= #s do
-        local c = s:sub(i, i)
-        if c ~= " " and c ~= "\t" and c ~= "\n" and c ~= "\r" then
+        local currentChar = s:sub(i, i)
+        if currentChar ~= " " and currentChar ~= "\t" and currentChar ~= "\n" and currentChar ~= "\r" then
             break
         end
         i = i + 1
@@ -15,27 +15,27 @@ local function parse_string(s, i)
     i = i + 1
     local result = {}
     while i <= #s do
-        local c = s:sub(i, i)
-        if c == '"' then
+        local currentChar = s:sub(i, i)
+        if currentChar == '"' then
             return table.concat(result), i + 1
-        elseif c == '\\' then
+        elseif currentChar == '\\' then
             i = i + 1
-            local c2 = s:sub(i, i)
-            if c2 == 'n' then result[#result + 1] = '\n'
-            elseif c2 == 't' then result[#result + 1] = '\t'
-            elseif c2 == 'r' then result[#result + 1] = '\r'
-            elseif c2 == '\\' then result[#result + 1] = '\\'
-            elseif c2 == '"' then result[#result + 1] = '"'
-            elseif c2 == '/' then result[#result + 1] = '/'
-            elseif c2 == 'u' then
+            local escapeChar = s:sub(i, i)
+            if escapeChar == 'n' then result[#result + 1] = '\n'
+            elseif escapeChar == 't' then result[#result + 1] = '\t'
+            elseif escapeChar == 'r' then result[#result + 1] = '\r'
+            elseif escapeChar == '\\' then result[#result + 1] = '\\'
+            elseif escapeChar == '"' then result[#result + 1] = '"'
+            elseif escapeChar == '/' then result[#result + 1] = '/'
+            elseif escapeChar == 'u' then
                 local hex = s:sub(i + 1, i + 4)
                 result[#result + 1] = string.char(tonumber(hex, 16))
                 i = i + 4
             else
-                result[#result + 1] = c2
+                result[#result + 1] = escapeChar
             end
         else
-            result[#result + 1] = c
+            result[#result + 1] = currentChar
         end
         i = i + 1
     end
@@ -60,18 +60,18 @@ end
 
 local function parse_value(s, i)
     i = skip_whitespace(s, i)
-    local c = s:sub(i, i)
-    if c == '"' then
+    local currentChar = s:sub(i, i)
+    if currentChar == '"' then
         return parse_string(s, i)
-    elseif c == '{' then
+    elseif currentChar == '{' then
         return parse_object(s, i)
-    elseif c == '[' then
+    elseif currentChar == '[' then
         return parse_array(s, i)
-    elseif c == 't' then
+    elseif currentChar == 't' then
         return true, i + 4
-    elseif c == 'f' then
+    elseif currentChar == 'f' then
         return false, i + 5
-    elseif c == 'n' then
+    elseif currentChar == 'n' then
         return nil, i + 4
     else
         return parse_number(s, i)
@@ -80,10 +80,10 @@ end
 
 function parse_object(s, i)
     i = i + 1
-    local obj = {}
+    local parsedObject = {}
     i = skip_whitespace(s, i)
     if s:sub(i, i) == '}' then
-        return obj, i + 1
+        return parsedObject, i + 1
     end
     while true do
         i = skip_whitespace(s, i)
@@ -92,15 +92,15 @@ function parse_object(s, i)
         i = skip_whitespace(s, i)
         if s:sub(i, i) ~= ':' then error("Expected colon") end
         i = i + 1
-        local val
-        val, i = parse_value(s, i)
-        obj[key] = val
+        local parsedValue
+        parsedValue, i = parse_value(s, i)
+        parsedObject[key] = parsedValue
         i = skip_whitespace(s, i)
-        local c = s:sub(i, i)
-        if c == '}' then
-            return obj, i + 1
-        elseif c ~= ',' then
-            error("Expected comma or closing bracket, got " .. c)
+        local currentChar = s:sub(i, i)
+        if currentChar == '}' then
+            return parsedObject, i + 1
+        elseif currentChar ~= ',' then
+            error("Expected comma or closing bracket, got " .. currentChar)
         end
         i = i + 1
     end
@@ -108,22 +108,22 @@ end
 
 function parse_array(s, i)
     i = i + 1
-    local arr = {}
+    local parsedArray = {}
     i = skip_whitespace(s, i)
     if s:sub(i, i) == ']' then
-        return arr, i + 1
+        return parsedArray, i + 1
     end
-    local idx = 1
+    local arrayIndex = 1
     while true do
-        local val
-        val, i = parse_value(s, i)
-        arr[idx] = val
-        idx = idx + 1
+        local parsedValue
+        parsedValue, i = parse_value(s, i)
+        parsedArray[arrayIndex] = parsedValue
+        arrayIndex = arrayIndex + 1
         i = skip_whitespace(s, i)
-        local c = s:sub(i, i)
-        if c == ']' then
-            return arr, i + 1
-        elseif c ~= ',' then
+        local currentChar = s:sub(i, i)
+        if currentChar == ']' then
+            return parsedArray, i + 1
+        elseif currentChar ~= ',' then
             error("Expected comma or closing bracket")
         end
         i = i + 1

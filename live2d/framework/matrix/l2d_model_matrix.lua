@@ -15,9 +15,9 @@ end
 function L2DModelMatrix:setCenterPosition(x, y)
     self.ocx = x
     self.ocy = y
-    local w = self.width * self:getScaleX()
-    local h = self.height * self:getScaleY()
-    self:translate(x - w / 2, y - h / 2)
+    local scaledWidth = self.width * self:getScaleX()
+    local scaledHeight = self.height * self:getScaleY()
+    self:translate(x - scaledWidth / 2, y - scaledHeight / 2)
 end
 
 function L2DModelMatrix:top(y)

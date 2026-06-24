@@ -121,15 +121,15 @@ local function binding_keys(self, binding_index)
     if begin == nil or begin < 0 then
         return nil
     end
-    local len = self.keys_counts[binding_index + 1]
-    if len == nil or len < 0 then
+    local keyCount = self.keys_counts[binding_index + 1]
+    if keyCount == nil or keyCount < 0 then
         return nil
     end
-    local result = {}
-    for i = 0, len - 1 do
-        result[#result + 1] = self.key_values[begin + i + 1]
+    local keyData = {}
+    for i = 0, keyCount - 1 do
+        keyData[#keyData + 1] = self.key_values[begin + i + 1]
     end
-    return result
+    return keyData
 end
 
 -- Get keyform bindings for a band index
@@ -141,15 +141,15 @@ local function band_keyform_bindings(self, band_index)
     if begin == nil or begin < 0 then
         return nil
     end
-    local len = self.band_counts[band_index + 1]
-    if len == nil or len < 0 then
+    local bandCount = self.band_counts[band_index + 1]
+    if bandCount == nil or bandCount < 0 then
         return nil
     end
-    local result = {}
-    for i = 0, len - 1 do
-        result[#result + 1] = self.keyform_binding_indices[begin + i + 1]
+    local bandData = {}
+    for i = 0, bandCount - 1 do
+        bandData[#bandData + 1] = self.keyform_binding_indices[begin + i + 1]
     end
-    return result
+    return bandData
 end
 
 function keyform_bindings.keyform_slots(self, band_index, keyform_count, parameter_values)

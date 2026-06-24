@@ -13,10 +13,10 @@ local ClippingManagerOpenGL = {}
 ClippingManagerOpenGL.__index = ClippingManagerOpenGL
 ClippingManagerOpenGL.CHANNEL_COUNT = 4
 
-function ClippingManagerOpenGL.new(aJ)
+function ClippingManagerOpenGL.new(drawParamGL)
     local self = setmetatable({}, ClippingManagerOpenGL)
     self.clipContextList = {}
-    self.dpGL = aJ
+    self.dpGL = drawParamGL
     self.curFrameNo = 0
     self.firstError_clipInNotUpdate = true
     self.colorBuffer = 0
@@ -28,43 +28,43 @@ function ClippingManagerOpenGL.new(aJ)
     self.tmpMatrixForDraw = ClipMatrix.new()
     self.channelColors = {}
 
-    local aI = TextureInfo.new()
-    aI.r = 0; aI.g = 0; aI.b = 0; aI.a = 1
-    self.channelColors[1] = aI
-    aI = TextureInfo.new()
-    aI.r = 1; aI.g = 0; aI.b = 0; aI.a = 0
-    self.channelColors[2] = aI
-    aI = TextureInfo.new()
-    aI.r = 0; aI.g = 1; aI.b = 0; aI.a = 0
-    self.channelColors[3] = aI
-    aI = TextureInfo.new()
-    aI.r = 0; aI.g = 0; aI.b = 1; aI.a = 0
-    self.channelColors[4] = aI
+    local channelColor = TextureInfo.new()
+    channelColor.r = 0; channelColor.g = 0; channelColor.b = 0; channelColor.a = 1
+    self.channelColors[1] = channelColor
+    channelColor = TextureInfo.new()
+    channelColor.r = 1; channelColor.g = 0; channelColor.b = 0; channelColor.a = 0
+    self.channelColors[2] = channelColor
+    channelColor = TextureInfo.new()
+    channelColor.r = 0; channelColor.g = 1; channelColor.b = 0; channelColor.a = 0
+    self.channelColors[3] = channelColor
+    channelColor = TextureInfo.new()
+    channelColor.r = 0; channelColor.g = 0; channelColor.b = 1; channelColor.a = 0
+    self.channelColors[4] = channelColor
 
-    for aH = 0, 3 do
-        self.dpGL:setChannelFlagAsColor(aH, self.channelColors[aH + 1])
+    for channelIndex = 0, 3 do
+        self.dpGL:setChannelFlagAsColor(channelIndex, self.channelColors[channelIndex + 1])
     end
     self:genMaskRenderTexture()
     return self
 end
 
-function ClippingManagerOpenGL:init(aO, aN, aL)
-    for aM = 1, #aN do
-        local aH = aN[aM]:getClipIDList()
-        if aH ~= nil then
-            local aJ = self:findSameClip(aH)
-            if aJ == nil then
-                aJ = ClipContext.new(self, aO, aH)
-                if aJ.isValid then
-                    self.clipContextList[#self.clipContextList + 1] = aJ
+function ClippingManagerOpenGL:init(modelContext, drawDataList, drawContextList)
+    for drawDataIndex = 1, #drawDataList do
+        local clipIDList = drawDataList[drawDataIndex]:getClipIDList()
+        if clipIDList ~= nil then
+            local existingClip = self:findSameClip(clipIDList)
+            if existingClip == nil then
+                existingClip = ClipContext.new(self, modelContext, clipIDList)
+                if existingClip.isValid then
+                    self.clipContextList[#self.clipContextList + 1] = existingClip
                 end
             end
-            if aJ.isValid then
-                local aI = aN[aM]:getId()
-                local aK = aO:getDrawDataIndex(aI)
-                aJ:addClippedDrawData(aI, aK)
-                local aP = aL[aM]
-                aP.clipBufPre_clipContext = aJ
+            if existingClip.isValid then
+                local drawDataId = drawDataList[drawDataIndex]:getId()
+                local clipDrawDataIndex = modelContext:getDrawDataIndex(drawDataId)
+                existingClip:addClippedDrawData(drawDataId, clipDrawDataIndex)
+                local drawCtx = drawContextList[drawDataIndex]
+                drawCtx.clipBufPre_clipContext = existingClip
             end
         end
     end
@@ -76,182 +76,182 @@ function ClippingManagerOpenGL:genMaskRenderTexture()
     end
 end
 
-function ClippingManagerOpenGL:setupClip(a1, aQ)
-    local aK = 0
-    for aO = 1, #self.clipContextList do
-        local aP = self.clipContextList[aO]
-        self:calcClippedDrawTotalBounds(a1, aP)
-        if aP.isUsing then aK = aK + 1 end
+function ClippingManagerOpenGL:setupClip(modelContext, drawParam)
+    local activeClipCount = 0
+    for clipIndex = 1, #self.clipContextList do
+        local clipCtx = self.clipContextList[clipIndex]
+        self:calcClippedDrawTotalBounds(modelContext, clipCtx)
+        if clipCtx.isUsing then activeClipCount = activeClipCount + 1 end
     end
 
-    if aK > 0 then
+    if activeClipCount > 0 then
         local oldFbo = Live2DGLWrapper.getParameter(Live2DGLWrapper.FRAMEBUFFER_BINDING)
-        local rect = {0, 0, aQ.gl.width, aQ.gl.height}
+        local rect = {0, 0, drawParam.gl.width, drawParam.gl.height}
         Live2DGLWrapper.viewport(0, 0, Live2D.clippingMaskBufferSize, Live2D.clippingMaskBufferSize)
-        self:setupLayoutBounds(aK)
-        if aQ.framebufferObject then
-            Live2DGLWrapper.bindFramebuffer(Live2DGLWrapper.FRAMEBUFFER, aQ.framebufferObject.framebuffer)
+        self:setupLayoutBounds(activeClipCount)
+        if drawParam.framebufferObject then
+            Live2DGLWrapper.bindFramebuffer(Live2DGLWrapper.FRAMEBUFFER, drawParam.framebufferObject.framebuffer)
         end
         Live2DGLWrapper.clearColor(0, 0, 0, 0)
         Live2DGLWrapper.clear(Live2DGLWrapper.COLOR_BUFFER_BIT)
 
-        for aO = 1, #self.clipContextList do
-            local aP = self.clipContextList[aO]
-            local aT = aP.allClippedDrawRect
-            local aV = aP.layoutBounds
-            local aJ = 0.05
-            self.tmpBoundsOnModel:setRect(aT)
-            self.tmpBoundsOnModel:expand(aT.width * aJ, aT.height * aJ)
-            local aZ = aV.width / self.tmpBoundsOnModel.width
-            local aY = aV.height / self.tmpBoundsOnModel.height
+        for clipIndex = 1, #self.clipContextList do
+            local clipCtx = self.clipContextList[clipIndex]
+            local clippedBounds = clipCtx.allClippedDrawRect
+            local layoutBounds = clipCtx.layoutBounds
+            local boundsExpandRatio = 0.05
+            self.tmpBoundsOnModel:setRect(clippedBounds)
+            self.tmpBoundsOnModel:expand(clippedBounds.width * boundsExpandRatio, clippedBounds.height * boundsExpandRatio)
+            local scaleX = layoutBounds.width / self.tmpBoundsOnModel.width
+            local scaleY = layoutBounds.height / self.tmpBoundsOnModel.height
 
             self.tmpMatrix2:identity()
             self.tmpMatrix2:translate(-1, -1, 0)
             self.tmpMatrix2:scale(2, 2, 1)
-            self.tmpMatrix2:translate(aV.x, aV.y, 0)
-            self.tmpMatrix2:scale(aZ, aY, 1)
+            self.tmpMatrix2:translate(layoutBounds.x, layoutBounds.y, 0)
+            self.tmpMatrix2:scale(scaleX, scaleY, 1)
             self.tmpMatrix2:translate(-self.tmpBoundsOnModel.x, -self.tmpBoundsOnModel.y, 0)
             self.tmpMatrixForMask:setMatrix(self.tmpMatrix2.m)
 
             self.tmpMatrix2:identity()
-            self.tmpMatrix2:translate(aV.x, aV.y, 0)
-            self.tmpMatrix2:scale(aZ, aY, 1)
+            self.tmpMatrix2:translate(layoutBounds.x, layoutBounds.y, 0)
+            self.tmpMatrix2:scale(scaleX, scaleY, 1)
             self.tmpMatrix2:translate(-self.tmpBoundsOnModel.x, -self.tmpBoundsOnModel.y, 0)
             self.tmpMatrixForDraw:setMatrix(self.tmpMatrix2.m)
 
-            local aH = self.tmpMatrixForMask:getArray()
-            for aX = 1, 16 do aP.matrixForMask[aX] = aH[aX] end
-            local a0 = self.tmpMatrixForDraw:getArray()
-            for aX = 1, 16 do aP.matrixForDraw[aX] = a0[aX] end
+            local maskMatrixArray = self.tmpMatrixForMask:getArray()
+            for aX = 1, 16 do clipCtx.matrixForMask[aX] = maskMatrixArray[aX] end
+            local drawMatrixArray = self.tmpMatrixForDraw:getArray()
+            for aX = 1, 16 do clipCtx.matrixForDraw[aX] = drawMatrixArray[aX] end
 
-            local aS = #aP.clippingMaskDrawIndexList
-            for aU = 1, aS do
-                local aR = aP.clippingMaskDrawIndexList[aU]
-                local aI = a1:getDrawData(aR)
-                if aI ~= nil then
-                    local aL = a1:getDrawContext(aR)
-                    aQ:setClipBufPre_clipContextForMask(aP)
-                    aI:draw(aQ, a1, aL)
+            local maskDrawCount = #clipCtx.clippingMaskDrawIndexList
+            for maskIndex = 1, maskDrawCount do
+                local drawIndex = clipCtx.clippingMaskDrawIndexList[maskIndex]
+                local drawData = modelContext:getDrawData(drawIndex)
+                if drawData ~= nil then
+                    local drawCtx = modelContext:getDrawContext(drawIndex)
+                    drawParam:setClipBufPre_clipContextForMask(clipCtx)
+                    drawData:draw(drawParam, modelContext, drawCtx)
                 end
             end
         end
 
         Live2DGLWrapper.bindFramebuffer(Live2DGLWrapper.FRAMEBUFFER, oldFbo)
-        aQ:setClipBufPre_clipContextForMask(nil)
+        drawParam:setClipBufPre_clipContextForMask(nil)
         Live2DGLWrapper.viewport(rect[1], rect[2], rect[3], rect[4])
     end
 end
 
-function ClippingManagerOpenGL:findSameClip(aK)
-    for aN = 1, #self.clipContextList do
-        local aO = self.clipContextList[aN]
-        local aH = #aO.clipIDList
-        if aH == #aK then
-            local aI = 0
-            for aM = 1, aH do
-                local aL = aO.clipIDList[aM]
-                for aJ = 1, aH do
-                    if tostring(aK[aJ]) == tostring(aL) then
-                        aI = aI + 1
+function ClippingManagerOpenGL:findSameClip(clipIDs)
+    for clipIndex = 1, #self.clipContextList do
+        local existingClip = self.clipContextList[clipIndex]
+        local idCount = #existingClip.clipIDList
+        if idCount == #clipIDs then
+            local matchCount = 0
+            for outerIndex = 1, idCount do
+                local existingID = existingClip.clipIDList[outerIndex]
+                for innerIndex = 1, idCount do
+                    if tostring(clipIDs[innerIndex]) == tostring(existingID) then
+                        matchCount = matchCount + 1
                         break
                     end
                 end
             end
-            if aI == aH then return aO end
+            if matchCount == idCount then return existingClip end
         end
     end
     return nil
 end
 
-function ClippingManagerOpenGL:calcClippedDrawTotalBounds(a6, aV)
-    local aU = a6.model:getModelImpl():getCanvasWidth()
-    local a5 = a6.model:getModelImpl():getCanvasHeight()
-    local aJ = aU > a5 and aU or a5
-    local aT = aJ
-    local aR = aJ
-    local aS = 0
-    local aP = 0
-    local aL = #aV.clippedDrawContextList
+function ClippingManagerOpenGL:calcClippedDrawTotalBounds(modelContext, clipCtx)
+    local canvasWidth = modelContext.model:getModelImpl():getCanvasWidth()
+    local canvasHeight = modelContext.model:getModelImpl():getCanvasHeight()
+    local maxCanvasDimension = canvasWidth > canvasHeight and canvasWidth or canvasHeight
+    local minX = maxCanvasDimension
+    local minY = maxCanvasDimension
+    local maxX = 0
+    local maxY = 0
+    local clippedCount = #clipCtx.clippedDrawContextList
 
-    for aM = 1, aL do
-        local aW = aV.clippedDrawContextList[aM]
-        local aN = aW.drawDataIndex
-        local aK = a6:getDrawContext(aN)
-        if aK:isAvailable() then
-            local aX = aK:getTransformedPoints()
-            local a4 = #aX
-            local a2 = nil
-            local a1 = nil
-            local a0 = nil
-            local aZ = nil
-            for a3 = def.VERTEX_OFFSET + 1, a4, def.VERTEX_STEP do
-                local x = aX[a3]
-                local y = aX[a3 + 1]
-                if a2 == nil then
-                    a2 = x; a0 = x; a1 = y; aZ = y
+    for drawIndex = 1, clippedCount do
+        local clippedEntry = clipCtx.clippedDrawContextList[drawIndex]
+        local drawDataIdx = clippedEntry.drawDataIndex
+        local drawCtx = modelContext:getDrawContext(drawDataIdx)
+        if drawCtx:isAvailable() then
+            local transformedPoints = drawCtx:getTransformedPoints()
+            local pointCount = #transformedPoints
+            local boundsMinX = nil
+            local boundsMinY = nil
+            local boundsMaxX = nil
+            local boundsMaxY = nil
+            for a3 = def.VERTEX_OFFSET + 1, pointCount, def.VERTEX_STEP do
+                local x = transformedPoints[a3]
+                local y = transformedPoints[a3 + 1]
+                if boundsMinX == nil then
+                    boundsMinX = x; boundsMaxX = x; boundsMinY = y; boundsMaxY = y
                 else
-                    if x < a2 then a2 = x end
-                    if x > a0 then a0 = x end
-                    if y < a1 then a1 = y end
-                    if y > aZ then aZ = y end
+                    if x < boundsMinX then boundsMinX = x end
+                    if x > boundsMaxX then boundsMaxX = x end
+                    if y < boundsMinY then boundsMinY = y end
+                    if y > boundsMaxY then boundsMaxY = y end
                 end
             end
-            if a2 ~= nil then
-                if a2 < aT then aT = a2 end
-                if a1 < aR then aR = a1 end
-                if a0 > aS then aS = a0 end
-                if aZ > aP then aP = aZ end
+            if boundsMinX ~= nil then
+                if boundsMinX < minX then minX = boundsMinX end
+                if boundsMinY < minY then minY = boundsMinY end
+                if boundsMaxX > maxX then maxX = boundsMaxX end
+                if boundsMaxY > maxY then maxY = boundsMaxY end
             end
         end
     end
 
-    if aT == aJ then
-        aV.allClippedDrawRect.x = 0; aV.allClippedDrawRect.y = 0
-        aV.allClippedDrawRect.width = 0; aV.allClippedDrawRect.height = 0
-        aV.isUsing = false
+    if minX == maxCanvasDimension then
+        clipCtx.allClippedDrawRect.x = 0; clipCtx.allClippedDrawRect.y = 0
+        clipCtx.allClippedDrawRect.width = 0; clipCtx.allClippedDrawRect.height = 0
+        clipCtx.isUsing = false
     else
-        aV.allClippedDrawRect.x = aT; aV.allClippedDrawRect.y = aR
-        aV.allClippedDrawRect.width = aS - aT; aV.allClippedDrawRect.height = aP - aR
-        aV.isUsing = true
+        clipCtx.allClippedDrawRect.x = minX; clipCtx.allClippedDrawRect.y = minY
+        clipCtx.allClippedDrawRect.width = maxX - minX; clipCtx.allClippedDrawRect.height = maxY - minY
+        clipCtx.isUsing = true
     end
 end
 
-function ClippingManagerOpenGL:setupLayoutBounds(aQ)
-    local aI = math.floor(aQ / ClippingManagerOpenGL.CHANNEL_COUNT)
-    local aP = aQ % ClippingManagerOpenGL.CHANNEL_COUNT
-    local aH = 1
-    for aJ = 1, ClippingManagerOpenGL.CHANNEL_COUNT do
-        local aM = aI + (aJ <= aP and 1 or 0)
-        if aM == 1 then
-            local aL = self.clipContextList[aH]; aH = aH + 1
-            aL.layoutChannelNo = aJ - 1
-            aL.layoutBounds.x = 0; aL.layoutBounds.y = 0
-            aL.layoutBounds.width = 1; aL.layoutBounds.height = 1
-        elseif aM == 2 then
-            for aO = 1, aM do
-                local aN = (aO - 1) % 2
-                local aL = self.clipContextList[aH]; aH = aH + 1
-                aL.layoutChannelNo = aJ - 1
-                aL.layoutBounds.x = aN * 0.5; aL.layoutBounds.y = 0
-                aL.layoutBounds.width = 0.5; aL.layoutBounds.height = 1
+function ClippingManagerOpenGL:setupLayoutBounds(activeClipCount)
+    local clipsPerChannel = math.floor(activeClipCount / ClippingManagerOpenGL.CHANNEL_COUNT)
+    local extraClips = activeClipCount % ClippingManagerOpenGL.CHANNEL_COUNT
+    local clipIndex = 1
+    for channelIndex = 1, ClippingManagerOpenGL.CHANNEL_COUNT do
+        local clipsInThisChannel = clipsPerChannel + (channelIndex <= extraClips and 1 or 0)
+        if clipsInThisChannel == 1 then
+            local clipCtx = self.clipContextList[clipIndex]; clipIndex = clipIndex + 1
+            clipCtx.layoutChannelNo = channelIndex - 1
+            clipCtx.layoutBounds.x = 0; clipCtx.layoutBounds.y = 0
+            clipCtx.layoutBounds.width = 1; clipCtx.layoutBounds.height = 1
+        elseif clipsInThisChannel == 2 then
+            for rowIndex = 1, clipsInThisChannel do
+                local columnIndex = (rowIndex - 1) % 2
+                local clipCtx = self.clipContextList[clipIndex]; clipIndex = clipIndex + 1
+                clipCtx.layoutChannelNo = channelIndex - 1
+                clipCtx.layoutBounds.x = columnIndex * 0.5; clipCtx.layoutBounds.y = 0
+                clipCtx.layoutBounds.width = 0.5; clipCtx.layoutBounds.height = 1
             end
-        elseif aM <= 4 then
-            for aO = 1, aM do
-                local aN = (aO - 1) % 2
-                local aK = math.floor((aO - 1) / 2)
-                local aL = self.clipContextList[aH]; aH = aH + 1
-                aL.layoutChannelNo = aJ - 1
-                aL.layoutBounds.x = aN * 0.5; aL.layoutBounds.y = aK * 0.5
-                aL.layoutBounds.width = 0.5; aL.layoutBounds.height = 0.5
+        elseif clipsInThisChannel <= 4 then
+            for rowIndex = 1, clipsInThisChannel do
+                local columnIndex = (rowIndex - 1) % 2
+                local rowIndex = math.floor((rowIndex - 1) / 2)
+                local clipCtx = self.clipContextList[clipIndex]; clipIndex = clipIndex + 1
+                clipCtx.layoutChannelNo = channelIndex - 1
+                clipCtx.layoutBounds.x = columnIndex * 0.5; clipCtx.layoutBounds.y = rowIndex * 0.5
+                clipCtx.layoutBounds.width = 0.5; clipCtx.layoutBounds.height = 0.5
             end
-        elseif aM <= 9 then
-            for aO = 1, aM do
-                local aN = (aO - 1) % 3
-                local aK = math.floor((aO - 1) / 3)
-                local aL = self.clipContextList[aH]; aH = aH + 1
-                aL.layoutChannelNo = aJ - 1
-                aL.layoutBounds.x = aN / 3; aL.layoutBounds.y = aK / 3
-                aL.layoutBounds.width = 1 / 3; aL.layoutBounds.height = 1 / 3
+        elseif clipsInThisChannel <= 9 then
+            for rowIndex = 1, clipsInThisChannel do
+                local columnIndex = (rowIndex - 1) % 3
+                local rowIndex = math.floor((rowIndex - 1) / 3)
+                local clipCtx = self.clipContextList[clipIndex]; clipIndex = clipIndex + 1
+                clipCtx.layoutChannelNo = channelIndex - 1
+                clipCtx.layoutBounds.x = columnIndex / 3; clipCtx.layoutBounds.y = rowIndex / 3
+                clipCtx.layoutBounds.width = 1 / 3; clipCtx.layoutBounds.height = 1 / 3
             end
         end
     end

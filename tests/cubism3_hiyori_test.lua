@@ -13,17 +13,17 @@ local draw_order_from_raw = require("live2d.cubism3.core.art_mesh").draw_order_f
 local base = "resources/Hiyori/"
 
 local function read_file(path)
-    local f = assert(io.open(path, "rb"))
-    local data = f:read("*all")
-    f:close()
-    return data
+    local file = assert(io.open(path, "rb"))
+    local fileContent = file:read("*all")
+    file:close()
+    return fileContent
 end
 
 local function read_text(path)
-    local f = assert(io.open(path, "r"))
-    local data = f:read("*all")
-    f:close()
-    return data
+    local file = assert(io.open(path, "r"))
+    local fileContent = file:read("*all")
+    file:close()
+    return fileContent
 end
 
 local passed = 0
@@ -123,10 +123,10 @@ check("meshes updated after param change", (function()
     for i = 1, #meshes do
         if #meshes[i].vertices == #new_meshes[i].vertices then
             for j = 1, #meshes[i].vertices do
-                local dv = meshes[i].vertices[j]
-                local nv = new_meshes[i].vertices[j]
-                if math.abs(dv.position[1] - nv.position[1]) > 0.0001
-                    or math.abs(dv.position[2] - nv.position[2]) > 0.0001 then
+                local drawableVertex = meshes[i].vertices[j]
+                local newVertex = new_meshes[i].vertices[j]
+                if math.abs(drawableVertex.position[1] - newVertex.position[1]) > 0.0001
+                    or math.abs(drawableVertex.position[2] - newVertex.position[2]) > 0.0001 then
                     changed = changed + 1
                     break
                 end
@@ -144,10 +144,10 @@ check("meshes reset to default", (function()
     for i = 1, #meshes do
         if #meshes[i].vertices == #reset_meshes[i].vertices then
             for j = 1, #meshes[i].vertices do
-                local dv = meshes[i].vertices[j]
-                local rv = reset_meshes[i].vertices[j]
-                if math.abs(dv.position[1] - rv.position[1]) > 0.0001
-                    or math.abs(dv.position[2] - rv.position[2]) > 0.0001 then
+                local drawableVertex = meshes[i].vertices[j]
+                local resetVertex = reset_meshes[i].vertices[j]
+                if math.abs(drawableVertex.position[1] - resetVertex.position[1]) > 0.0001
+                    or math.abs(drawableVertex.position[2] - resetVertex.position[2]) > 0.0001 then
                     return true -- positions should reset to match original
                     -- wait, this checks if they DON'T match
                 end
@@ -164,12 +164,12 @@ for i = 1, #meshes do
     draw_order_indices[i] = i - 1
 end
 table.sort(draw_order_indices, function(a, b)
-    local ma = meshes[a + 1]
-    local mb = meshes[b + 1]
-    local da = draw_order_from_raw(ma.draw_order)
-    local db = draw_order_from_raw(mb.draw_order)
-    if da ~= db then return da < db end
-    if ma.render_order ~= mb.render_order then return ma.render_order < mb.render_order end
+    local meshA = meshes[a + 1]
+    local meshB = meshes[b + 1]
+    local drawOrderA = draw_order_from_raw(meshA.draw_order)
+    local drawOrderB = draw_order_from_raw(meshB.draw_order)
+    if drawOrderA ~= drawOrderB then return drawOrderA < drawOrderB end
+    if meshA.render_order ~= meshB.render_order then return meshA.render_order < meshB.render_order end
     return a < b
 end)
 check("draw order has 134 entries", #draw_order_indices == 134)
@@ -177,10 +177,10 @@ check("draw order is sorted", (function()
     for i = 2, #draw_order_indices do
         local prev = meshes[draw_order_indices[i-1] + 1]
         local curr = meshes[draw_order_indices[i] + 1]
-        local dp = draw_order_from_raw(prev.draw_order)
-        local dc = draw_order_from_raw(curr.draw_order)
-        if dp > dc then return false, i end
-        if dp == dc and prev.render_order > curr.render_order then return false, i end
+        local prevDrawOrder = draw_order_from_raw(prev.draw_order)
+        local currDrawOrder = draw_order_from_raw(curr.draw_order)
+        if prevDrawOrder > currDrawOrder then return false, i end
+        if prevDrawOrder == currDrawOrder and prev.render_order > curr.render_order then return false, i end
     end
     return true
 end)())
@@ -189,10 +189,10 @@ end)())
 print("\n-- Blend Modes --")
 local normal = 0; local additive = 0; local multiplicative = 0
 for _, m in ipairs(meshes) do
-    local bm = require("live2d.cubism3.moc3.drawable").blend_mode_from_flags(m.drawable_flags)
-    if bm == "normal" then normal = normal + 1
-    elseif bm == "additive" then additive = additive + 1
-    elseif bm == "multiplicative" then multiplicative = multiplicative + 1 end
+    local blendMode = require("live2d.cubism3.moc3.drawable").blend_mode_from_flags(m.drawable_flags)
+    if blendMode == "normal" then normal = normal + 1
+    elseif blendMode == "additive" then additive = additive + 1
+    elseif blendMode == "multiplicative" then multiplicative = multiplicative + 1 end
 end
 check("normal blends > 0", normal > 0)
 check("additive blends >= 0", additive >= 0)

@@ -64,9 +64,9 @@ function Renderer:load_model(model_path, width, height, opts)
     self:dispose_model()
     self.width = tonumber(width) or self.width
     self.height = tonumber(height) or self.height
-    local pm = get_platform_manager()
-    pm:setResourceStreams(opts.resource_streams or opts.resourceStreams)
-    pm:setTextureStreams(opts.texture_streams or opts.textureStreams)
+    local platformManager = get_platform_manager()
+    platformManager:setResourceStreams(opts.resource_streams or opts.resourceStreams)
+    platformManager:setTextureStreams(opts.texture_streams or opts.textureStreams)
 
     local model = LAppModel.new()
     model.deferExpressions = opts.defer_expressions == true or opts.deferExpressions == true
@@ -88,7 +88,7 @@ function Renderer:load_model(model_path, width, height, opts)
     self.model_path = model_path
     self:resize(self.width, self.height)
     if opts.release_streams_after_load == true or opts.releaseStreamsAfterLoad == true or opts.clear_streams_after_load == true then
-        pm:clearStreams()
+        platformManager:clearStreams()
         collectgarbage("collect")
     end
     return self
@@ -202,9 +202,9 @@ function Renderer:draw(opts)
     model:Update()
     if opts.parameters ~= nil then
         for i = 1, #opts.parameters do
-            local p = opts.parameters[i]
-            if p ~= nil and p.id ~= nil then
-                model:SetParameterValue(p.id, tonumber(p.value) or 0, tonumber(p.weight) or 1.0)
+            local paramEntry = opts.parameters[i]
+            if paramEntry ~= nil and paramEntry.id ~= nil then
+                model:SetParameterValue(paramEntry.id, tonumber(paramEntry.value) or 0, tonumber(paramEntry.weight) or 1.0)
             end
         end
     end

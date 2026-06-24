@@ -10,17 +10,17 @@ local ModelRuntime = require("live2d.cubism3.runtime")
 local base = "resources/Hiyori/"
 
 local function read_file(path)
-    local f = assert(io.open(path, "rb"))
-    local data = f:read("*all")
-    f:close()
-    return data
+    local file = assert(io.open(path, "rb"))
+    local fileContent = file:read("*all")
+    file:close()
+    return fileContent
 end
 
 local function read_text(path)
-    local f = assert(io.open(path, "r"))
-    local data = f:read("*all")
-    f:close()
-    return data
+    local file = assert(io.open(path, "r"))
+    local fileContent = file:read("*all")
+    file:close()
+    return fileContent
 end
 
 local passed = 0
@@ -135,8 +135,8 @@ check("runtime default param", runtime and runtime:parameter_value_by_index(0) ~
 -- Test parameter setting
 if runtime then
     runtime:set_parameter_by_index(0, 0.5)
-    local ok = runtime:update_meshes()
-    check("runtime update after param change", ok == true)
+    local updateSuccess = runtime:update_meshes()
+    check("runtime update after param change", updateSuccess == true)
 end
 
 -- Test keyform slots

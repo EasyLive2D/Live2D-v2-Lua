@@ -30,7 +30,7 @@ function Deformer:readOpacity(br)
     end
 end
 
-function Deformer:init(mc)
+function Deformer:init(modelContext)
     error("abstract method: init() not implemented")
 end
 
@@ -38,11 +38,11 @@ function Deformer:setupInterpolate(modelContext, deformerContext)
     error("abstract method: setupInterpolate() not implemented")
 end
 
-function Deformer:interpolateOpacity(mdc, pivotMgr, bctx, ret)
+function Deformer:interpolateOpacity(modelContext, pivotMgr, deformerContext, ret)
     if self.pivotOpacities == nil then
-        bctx:setInterpolatedOpacity(1)
+        deformerContext:setInterpolatedOpacity(1)
     else
-        bctx:setInterpolatedOpacity(UtInterpolate.interpolateFloat(mdc, pivotMgr, ret, self.pivotOpacities))
+        deformerContext:setInterpolatedOpacity(UtInterpolate.interpolateFloat(modelContext, pivotMgr, ret, self.pivotOpacities))
     end
 end
 

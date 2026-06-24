@@ -37,11 +37,11 @@ local function premultiplyAlpha(w, h, data)
     local src = ffi.cast("const uint8_t*", data)
     for i = 0, pixelCount - 1 do
         local base = i * 4
-        local a = src[base + 3]
-        out[base] = floor((src[base] * a + 127) / 255)
-        out[base + 1] = floor((src[base + 1] * a + 127) / 255)
-        out[base + 2] = floor((src[base + 2] * a + 127) / 255)
-        out[base + 3] = a
+        local alpha = src[base + 3]
+        out[base] = floor((src[base] * alpha + 127) / 255)
+        out[base + 1] = floor((src[base + 1] * alpha + 127) / 255)
+        out[base + 2] = floor((src[base + 2] * alpha + 127) / 255)
+        out[base + 3] = alpha
     end
     return out
 end
@@ -51,10 +51,10 @@ local function premultiplyAlphaInPlace(w, h, data)
     local src = ffi.cast("uint8_t*", data)
     for i = 0, pixelCount - 1 do
         local base = i * 4
-        local a = src[base + 3]
-        src[base] = floor((src[base] * a + 127) / 255)
-        src[base + 1] = floor((src[base + 1] * a + 127) / 255)
-        src[base + 2] = floor((src[base + 2] * a + 127) / 255)
+        local alpha = src[base + 3]
+        src[base] = floor((src[base] * alpha + 127) / 255)
+        src[base + 1] = floor((src[base + 1] * alpha + 127) / 255)
+        src[base + 2] = floor((src[base + 2] * alpha + 127) / 255)
     end
     return src
 end
@@ -67,15 +67,15 @@ local function bleedAndPremultiplyAlpha(w, h, data)
     for y = 0, h - 1 do
         for x = 0, w - 1 do
             local base = (y * w + x) * 4
-            local a = src[base + 3]
-            local sr = src[base]
-            local sg = src[base + 1]
-            local sb = src[base + 2]
-            if a > 0 and a < 255 then
+            local alpha = src[base + 3]
+            local sourceRed = src[base]
+            local sourceGreen = src[base + 1]
+            local sourceBlue = src[base + 2]
+            if alpha > 0 and alpha < 255 then
                 local total = 0
-                local r = 0
-                local g = 0
-                local b = 0
+                local accumulatedRed = 0
+                local accumulatedGreen = 0
+                local accumulatedBlue = 0
                 for oy = -1, 1 do
                     for ox = -1, 1 do
                         if ox ~= 0 or oy ~= 0 then
@@ -83,27 +83,27 @@ local function bleedAndPremultiplyAlpha(w, h, data)
                             local ny = y + oy
                             if nx >= 0 and nx < w and ny >= 0 and ny < h then
                                 local nbase = (ny * w + nx) * 4
-                                local na = src[nbase + 3]
-                                if na > a then
-                                    r = r + src[nbase] * na
-                                    g = g + src[nbase + 1] * na
-                                    b = b + src[nbase + 2] * na
-                                    total = total + na
+                                local neighborAlpha = src[nbase + 3]
+                                if neighborAlpha > alpha then
+                                    accumulatedRed = accumulatedRed + src[nbase] * neighborAlpha
+                                    accumulatedGreen = accumulatedGreen + src[nbase + 1] * neighborAlpha
+                                    accumulatedBlue = accumulatedBlue + src[nbase + 2] * neighborAlpha
+                                    total = total + neighborAlpha
                                 end
                             end
                         end
                     end
                 end
                 if total > 0 then
-                    sr = floor((r + total / 2) / total)
-                    sg = floor((g + total / 2) / total)
-                    sb = floor((b + total / 2) / total)
+                    sourceRed = floor((accumulatedRed + total / 2) / total)
+                    sourceGreen = floor((accumulatedGreen + total / 2) / total)
+                    sourceBlue = floor((accumulatedBlue + total / 2) / total)
                 end
             end
-            out[base] = floor((sr * a + 127) / 255)
-            out[base + 1] = floor((sg * a + 127) / 255)
-            out[base + 2] = floor((sb * a + 127) / 255)
-            out[base + 3] = a
+            out[base] = floor((sourceRed * alpha + 127) / 255)
+            out[base + 1] = floor((sourceGreen * alpha + 127) / 255)
+            out[base + 2] = floor((sourceBlue * alpha + 127) / 255)
+            out[base + 3] = alpha
         end
     end
     return out
@@ -128,15 +128,15 @@ local function bleedAndPremultiplyAlphaInPlace(w, h, data)
     for y = 0, h - 1 do
         for x = 0, w - 1 do
             local cbase = x * 4
-            local a = currRow[cbase + 3]
-            local sr = currRow[cbase]
-            local sg = currRow[cbase + 1]
-            local sb = currRow[cbase + 2]
-            if a > 0 and a < 255 then
+            local alpha = currRow[cbase + 3]
+            local sourceRed = currRow[cbase]
+            local sourceGreen = currRow[cbase + 1]
+            local sourceBlue = currRow[cbase + 2]
+            if alpha > 0 and alpha < 255 then
                 local total = 0
-                local r = 0
-                local g = 0
-                local b = 0
+                local accumulatedRed = 0
+                local accumulatedGreen = 0
+                local accumulatedBlue = 0
                 for oy = -1, 1 do
                     local row = oy == -1 and prevRow or (oy == 0 and currRow or nextRow)
                     local ny = y + oy
@@ -146,12 +146,12 @@ local function bleedAndPremultiplyAlphaInPlace(w, h, data)
                                 local nx = x + ox
                                 if nx >= 0 and nx < w then
                                     local nbase = nx * 4
-                                    local na = row[nbase + 3]
-                                    if na > a then
-                                        r = r + row[nbase] * na
-                                        g = g + row[nbase + 1] * na
-                                        b = b + row[nbase + 2] * na
-                                        total = total + na
+                                    local neighborAlpha = row[nbase + 3]
+                                    if neighborAlpha > alpha then
+                                        accumulatedRed = accumulatedRed + row[nbase] * neighborAlpha
+                                        accumulatedGreen = accumulatedGreen + row[nbase + 1] * neighborAlpha
+                                        accumulatedBlue = accumulatedBlue + row[nbase + 2] * neighborAlpha
+                                        total = total + neighborAlpha
                                     end
                                 end
                             end
@@ -159,17 +159,17 @@ local function bleedAndPremultiplyAlphaInPlace(w, h, data)
                     end
                 end
                 if total > 0 then
-                    sr = floor((r + total / 2) / total)
-                    sg = floor((g + total / 2) / total)
-                    sb = floor((b + total / 2) / total)
+                    sourceRed = floor((accumulatedRed + total / 2) / total)
+                    sourceGreen = floor((accumulatedGreen + total / 2) / total)
+                    sourceBlue = floor((accumulatedBlue + total / 2) / total)
                 end
             end
 
             local base = (y * w + x) * 4
-            src[base] = floor((sr * a + 127) / 255)
-            src[base + 1] = floor((sg * a + 127) / 255)
-            src[base + 2] = floor((sb * a + 127) / 255)
-            src[base + 3] = a
+            src[base] = floor((sourceRed * alpha + 127) / 255)
+            src[base + 1] = floor((sourceGreen * alpha + 127) / 255)
+            src[base + 2] = floor((sourceBlue * alpha + 127) / 255)
+            src[base + 3] = alpha
         end
 
         prevRow, currRow, nextRow = currRow, nextRow, prevRow
@@ -261,8 +261,8 @@ end
 
 function PlatformManager:setResourceStreams(resourceStreams)
     if resourceStreams == nil then return end
-    for k, v in pairs(resourceStreams) do
-        self.resourceStreams[normalizePath(k)] = v
+    for path, data in pairs(resourceStreams) do
+        self.resourceStreams[normalizePath(path)] = data
     end
 end
 
@@ -272,8 +272,8 @@ end
 
 function PlatformManager:setTextureStreams(textureStreams)
     if textureStreams == nil then return end
-    for k, v in pairs(textureStreams) do
-        self.textureStreams[k] = v
+    for key, loader in pairs(textureStreams) do
+        self.textureStreams[key] = loader
     end
 end
 

@@ -40,12 +40,12 @@ function art_mesh.reverse_coordinate_y(vertices)
 end
 
 function art_mesh.draw_order_from_raw(raw)
-    local tr = raw + 0.001
+    local thresholdValue = raw + 0.001
     local i
-    if tr >= 0 then
-        i = math.floor(tr)
+    if thresholdValue >= 0 then
+        i = math.floor(thresholdValue)
     else
-        i = math.ceil(tr)
+        i = math.ceil(thresholdValue)
     end
     return math.max(0, math.min(1000, i))
 end

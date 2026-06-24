@@ -32,12 +32,12 @@ function Id.getID(idStr)
     if type(idStr) ~= "string" then
         error("invalid param", 2)
     end
-    local obj = instances[idStr]
-    if obj == nil then
-        obj = Id.new(idStr)
-        instances[idStr] = obj
+    local cachedId = instances[idStr]
+    if cachedId == nil then
+        cachedId = Id.new(idStr)
+        instances[idStr] = cachedId
     end
-    return obj
+    return cachedId
 end
 
 function Id.releaseStored()

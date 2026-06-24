@@ -49,8 +49,8 @@ end
 -- Helper: write little-endian values to file
 local function writeLE(f, value, bytes)
     for i = 0, bytes - 1 do
-        local b = bit.band(bit.rshift(value, i * 8), 0xFF)
-        f:write(string.char(b))
+        local byteValue = bit.band(bit.rshift(value, i * 8), 0xFF)
+        f:write(string.char(byteValue))
     end
 end
 
@@ -60,22 +60,22 @@ local function saveBMP(path, pixels, w, h)
     local pixelDataSize = rowSize * h
     local fileSize = 54 + pixelDataSize
     
-    local f = io.open(path, "wb")
-    f:write("BM")
-    writeLE(f, fileSize, 4)
-    writeLE(f, 0, 4)       -- reserved
-    writeLE(f, 54, 4)      -- offset to pixel data
-    writeLE(f, 40, 4)      -- header size
-    writeLE(f, w, 4)
-    writeLE(f, h, 4)
-    writeLE(f, 1, 2)       -- planes
-    writeLE(f, 24, 2)      -- bits per pixel
-    writeLE(f, 0, 4)       -- no compression
-    writeLE(f, pixelDataSize, 4)
-    writeLE(f, 2835, 4)    -- 72 DPI horizontal
-    writeLE(f, 2835, 4)    -- 72 DPI vertical
-    writeLE(f, 0, 4)       -- no palette
-    writeLE(f, 0, 4)
+    local file = io.open(path, "wb")
+    file:write("BM")
+    writeLE(file, fileSize, 4)
+    writeLE(file, 0, 4)       -- reserved
+    writeLE(file, 54, 4)      -- offset to pixel data
+    writeLE(file, 40, 4)      -- header size
+    writeLE(file, w, 4)
+    writeLE(file, h, 4)
+    writeLE(file, 1, 2)       -- planes
+    writeLE(file, 24, 2)      -- bits per pixel
+    writeLE(file, 0, 4)       -- no compression
+    writeLE(file, pixelDataSize, 4)
+    writeLE(file, 2835, 4)    -- 72 DPI horizontal
+    writeLE(file, 2835, 4)    -- 72 DPI vertical
+    writeLE(file, 0, 4)       -- no palette
+    writeLE(file, 0, 4)
     
     -- Pixel data (BMP is bottom-up, OpenGL also bottom-up after glReadPixels, so same order)
     -- But OpenGL gives RGBA, BMP expects BGR (no alpha)
@@ -92,9 +92,9 @@ local function saveBMP(path, pixels, w, h)
         for x = w * 3, rowSize - 1 do
             row[x] = 0
         end
-        f:write(ffi.string(row, rowSize))
+        file:write(ffi.string(row, rowSize))
     end
-    f:close()
+    file:close()
 end
 
 -- Render loop
@@ -105,8 +105,8 @@ print(string.format("Rendering %d frames at %.0f FPS...", totalFrames, 1.0/frame
 
 for i = 1, totalFrames do
     -- Advance model state
-    local dt = frameTime * 1000  -- ms
-    model.startTimeMSec = model.startTimeMSec + dt
+    local deltaTimeMSec = frameTime * 1000  -- ms
+    model.startTimeMSec = model.startTimeMSec + deltaTimeMSec
     
     -- Clear and render
     Live2DGLWrapper.clearColor(0.0, 0.0, 0.0, 0.0)

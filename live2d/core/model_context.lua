@@ -50,17 +50,17 @@ function ModelContext.new(model)
 end
 
 function ModelContext:getDrawDataIndex(drawDataId)
-    for aH = #self.drawDataList, 1, -1 do
-        local drawData = self.drawDataList[aH]
+    for i = #self.drawDataList, 1, -1 do
+        local drawData = self.drawDataList[i]
         if drawData ~= nil and tostring(drawData:getId()) == tostring(drawDataId) then
-            return aH - 1
+            return i - 1
         end
     end
     return -1
 end
 
-function ModelContext:getDrawData(aH)
-    if type(aH) == "table" and aH.Id_eq then
+function ModelContext:getDrawData(idOrIndex)
+    if type(idOrIndex) == "table" and idOrIndex.Id_eq then
         if self.tmpDrawDataList == nil then
             self.tmpDrawDataList = {}
             local count = #self.drawDataList
@@ -72,10 +72,10 @@ function ModelContext:getDrawData(aH)
                 end
             end
         end
-        return self.tmpDrawDataList[aH]
+        return self.tmpDrawDataList[idOrIndex]
     else
-        if aH < #self.drawDataList then
-            return self.drawDataList[aH + 1]
+        if idOrIndex < #self.drawDataList then
+            return self.drawDataList[idOrIndex + 1]
         else
             return nil
         end
@@ -100,68 +100,68 @@ function ModelContext:init()
         self:release()
     end
 
-    local aO = self.model:getModelImpl()
-    local parts_data_list = aO:getPartsDataList()
-    local aS = #parts_data_list
-    local aH = {}
-    local a3 = {}
+    local modelImpl = self.model:getModelImpl()
+    local parts_data_list = modelImpl:getPartsDataList()
+    local partsCount = #parts_data_list
+    local deformerList = {}
+    local deformerContextList = {}
 
-    for aV = 1, aS do
-        local a4 = parts_data_list[aV]
-        self.partsDataList[#self.partsDataList + 1] = a4
-        self.partsContextList[#self.partsContextList + 1] = a4:init()
-        local base_data_list = a4:getDeformer()
-        local aR = #base_data_list
+    for partIndex = 1, partsCount do
+        local partData = parts_data_list[partIndex]
+        self.partsDataList[#self.partsDataList + 1] = partData
+        self.partsContextList[#self.partsContextList + 1] = partData:init()
+        local base_data_list = partData:getDeformer()
+        local deformerCount = #base_data_list
 
-        for aU = 1, aR do
-            aH[#aH + 1] = base_data_list[aU]
+        for i = 1, deformerCount do
+            deformerList[#deformerList + 1] = base_data_list[i]
         end
 
-        for aU = 1, aR do
-            local aM = base_data_list[aU]:init(self)
-            aM:setPartsIndex(aV - 1)
-            a3[#a3 + 1] = aM
+        for i = 1, deformerCount do
+            local deformerContext = base_data_list[i]:init(self)
+            deformerContext:setPartsIndex(partIndex - 1)
+            deformerContextList[#deformerContextList + 1] = deformerContext
         end
 
-        local a1 = a4:getDrawData()
-        local aP = #a1
-        for aU = 1, aP do
-            local aZ = a1[aU]
-            local a0 = aZ:init(self)
-            a0.partsIndex = aV - 1
-            self.drawDataList[#self.drawDataList + 1] = aZ
-            self.drawContextList[#self.drawContextList + 1] = a0
+        local drawDataList = partData:getDrawData()
+        local drawDataCount = #drawDataList
+        for i = 1, drawDataCount do
+            local drawData = drawDataList[i]
+            local drawContext = drawData:init(self)
+            drawContext.partsIndex = partIndex - 1
+            self.drawDataList[#self.drawDataList + 1] = drawData
+            self.drawContextList[#self.drawContextList + 1] = drawContext
         end
     end
 
-    local aY = #aH
-    local aN = Id.DST_BASE_ID()
+    local totalDeformerCount = #deformerList
+    local baseTargetId = Id.DST_BASE_ID()
     while true do
-        local aX = false
-        for aV = 1, aY do
-            local aL = aH[aV]
-            if aL ~= nil then
-                local a2 = aL:getTargetId()
-                if a2 == nil or a2 == aN or self:getDeformerIndex(a2) >= 0 then
-                    self.deformerList[#self.deformerList + 1] = aL
-                    self.deformerContextList[#self.deformerContextList + 1] = a3[aV]
-                    aH[aV] = nil
-                    aX = true
+        local foundNew = false
+        for partIndex = 1, totalDeformerCount do
+            local deformer = deformerList[partIndex]
+            if deformer ~= nil then
+                local targetId = deformer:getTargetId()
+                if targetId == nil or targetId == baseTargetId or self:getDeformerIndex(targetId) >= 0 then
+                    self.deformerList[#self.deformerList + 1] = deformer
+                    self.deformerContextList[#self.deformerContextList + 1] = deformerContextList[partIndex]
+                    deformerList[partIndex] = nil
+                    foundNew = true
                 end
             end
         end
-        if not aX then break end
+        if not foundNew then break end
     end
 
-    local aI = aO:getParamDefSet()
-    if aI ~= nil then
-        local aJ = aI:getParamDefFloatList()
-        if aJ ~= nil then
-            local aW = #aJ
-            for aV = 1, aW do
-                local aQ = aJ[aV]
-                if aQ ~= nil then
-                    self:extendAndAddParam(aQ:getParamID(), aQ:getDefaultValue(), aQ:getMinValue(), aQ:getMaxValue())
+    local paramDefSet = modelImpl:getParamDefSet()
+    if paramDefSet ~= nil then
+        local paramDefList = paramDefSet:getParamDefFloatList()
+        if paramDefList ~= nil then
+            local paramCount = #paramDefList
+            for partIndex = 1, paramCount do
+                local paramDef = paramDefList[partIndex]
+                if paramDef ~= nil then
+                    self:extendAndAddParam(paramDef:getParamID(), paramDef:getDefaultValue(), paramDef:getMinValue(), paramDef:getMaxValue())
                 end
             end
         end
@@ -173,62 +173,62 @@ function ModelContext:init()
 end
 
 function ModelContext:update()
-    local aK = #self.paramValues
-    for i = 1, aK do
+    local paramCount = #self.paramValues
+    for i = 1, paramCount do
         if self.paramValues[i] ~= self.lastParamValues[i] then
             self.updatedParamFlags[i] = ModelContext.PARAM_UPDATED
             self.lastParamValues[i] = self.paramValues[i]
         end
     end
 
-    local aX = false
-    local aQ = #self.deformerList
-    local aN = #self.drawDataList
-    local aS = IDrawData.getTotalMinOrder()
-    local aZ = IDrawData.getTotalMaxOrder()
-    local aU = aZ - aS + 1
+    local result = false
+    local deformerCount = #self.deformerList
+    local drawDataCount = #self.drawDataList
+    local minDrawOrder = IDrawData.getTotalMinOrder()
+    local maxDrawOrder = IDrawData.getTotalMaxOrder()
+    local orderRange = maxDrawOrder - minDrawOrder + 1
 
-    if self.orderList_firstDrawIndex == nil or #self.orderList_firstDrawIndex < aU then
-        self.orderList_firstDrawIndex = Int16Array(aU)
-        self.orderList_lastDrawIndex = Int16Array(aU)
+    if self.orderList_firstDrawIndex == nil or #self.orderList_firstDrawIndex < orderRange then
+        self.orderList_firstDrawIndex = Int16Array(orderRange)
+        self.orderList_lastDrawIndex = Int16Array(orderRange)
     end
 
-    for i = 1, aU do
+    for i = 1, orderRange do
         self.orderList_firstDrawIndex[i] = ModelContext.NOT_USED_ORDER
         self.orderList_lastDrawIndex[i] = ModelContext.NOT_USED_ORDER
     end
 
-    if self.nextList_drawIndex == nil or #self.nextList_drawIndex < aN then
-        self.nextList_drawIndex = Int16Array(aN)
+    if self.nextList_drawIndex == nil or #self.nextList_drawIndex < drawDataCount then
+        self.nextList_drawIndex = Int16Array(drawDataCount)
     end
 
-    for i = 1, aN do
+    for i = 1, drawDataCount do
         self.nextList_drawIndex[i] = ModelContext.NO_NEXT
     end
 
-    for aV = 1, aQ do
-        local aJ = self.deformerList[aV]
-        local aH = self.deformerContextList[aV]
-        aJ:setupInterpolate(self, aH)
-        aJ:setupTransform(self, aH)
+    for i = 1, deformerCount do
+        local deformer = self.deformerList[i]
+        local deformerCtx = self.deformerContextList[i]
+        deformer:setupInterpolate(self, deformerCtx)
+        deformer:setupTransform(self, deformerCtx)
     end
 
-    for aO = 1, aN do
-        local aM = self.drawDataList[aO]
-        local aI = self.drawContextList[aO]
-        aM:setupInterpolate(self, aI)
-        if aI:isParamOutside() then
+    for i = 1, drawDataCount do
+        local drawData = self.drawDataList[i]
+        local drawCtx = self.drawContextList[i]
+        drawData:setupInterpolate(self, drawCtx)
+        if drawCtx:isParamOutside() then
             -- continue
         else
-            aM:setupTransform(self, aI)
-            local aT = math.floor(IDrawData.getDrawOrder(aI) - aS + 1)
-            local aP = self.orderList_lastDrawIndex[aT]
-            if aP == ModelContext.NOT_USED_ORDER then
-                self.orderList_firstDrawIndex[aT] = aO - 1
+            drawData:setupTransform(self, drawCtx)
+            local orderSlot = math.floor(IDrawData.getDrawOrder(drawCtx) - minDrawOrder + 1)
+            local lastDrawIdx = self.orderList_lastDrawIndex[orderSlot]
+            if lastDrawIdx == ModelContext.NOT_USED_ORDER then
+                self.orderList_firstDrawIndex[orderSlot] = i - 1
             else
-                self.nextList_drawIndex[aP + 1] = aO - 1
+                self.nextList_drawIndex[lastDrawIdx + 1] = i - 1
             end
-            self.orderList_lastDrawIndex[aT] = aO - 1
+            self.orderList_lastDrawIndex[orderSlot] = i - 1
         end
     end
 
@@ -237,42 +237,42 @@ function ModelContext:update()
     end
 
     self.needSetup = false
-    return aX
+    return result
 end
 
-function ModelContext:preDraw(aH)
-    aH:setupDraw()
+function ModelContext:preDraw(drawParam)
+    drawParam:setupDraw()
     if self.clipManager ~= nil then
-        self.clipManager:setupClip(self, aH)
+        self.clipManager:setupClip(self, drawParam)
     end
 end
 
-function ModelContext:draw(aM)
+function ModelContext:draw(drawParam)
     if self.orderList_firstDrawIndex == nil then
         print("call Ri_.update() before Ri_.draw()")
         return
     end
 
-    local aP = #self.orderList_firstDrawIndex
-    aM:setupDraw()
+    local orderCount = #self.orderList_firstDrawIndex
+    drawParam:setupDraw()
 
-    for aK = 1, aP do
-        local aN = self.orderList_firstDrawIndex[aK]
-        if aN ~= ModelContext.NOT_USED_ORDER then
+    for orderIndex = 1, orderCount do
+        local drawIndex = self.orderList_firstDrawIndex[orderIndex]
+        if drawIndex ~= ModelContext.NOT_USED_ORDER then
             while true do
-                local aH = self.drawDataList[aN + 1]
-                local aI = self.drawContextList[aN + 1]
-                if aI:isAvailable() then
-                    local aJ = aI.partsIndex
-                    local aL = self.partsContextList[aJ + 1]
-                    aI.partsOpacity = aL:getPartsOpacity()
-                    aH:draw(aM, self, aI)
+                local drawData = self.drawDataList[drawIndex + 1]
+                local drawCtx = self.drawContextList[drawIndex + 1]
+                if drawCtx:isAvailable() then
+                    local partIdx = drawCtx.partsIndex
+                    local partsCtx = self.partsContextList[partIdx + 1]
+                    drawCtx.partsOpacity = partsCtx:getPartsOpacity()
+                    drawData:draw(drawParam, self, drawCtx)
                 end
-                local aO = self.nextList_drawIndex[aN + 1]
-                if aO <= aN or aO == ModelContext.NO_NEXT then
+                local nextDrawIdx = self.nextList_drawIndex[drawIndex + 1]
+                if nextDrawIdx <= drawIndex or nextDrawIdx == ModelContext.NO_NEXT then
                     break
                 end
-                aN = aO
+                drawIndex = nextDrawIdx
             end
         end
     end
@@ -287,10 +287,10 @@ function ModelContext:getParamIndex(paramId)
     return self:extendAndAddParam(paramId, 0, ModelContext.PARAM_FLOAT_MIN, ModelContext.PARAM_FLOAT_MAX)
 end
 
-function ModelContext:getDeformerIndex(aH)
-    for aI = #self.deformerList, 1, -1 do
-        if self.deformerList[aI] ~= nil and self.deformerList[aI]:getId() == aH then
-            return aI - 1
+function ModelContext:getDeformerIndex(deformerId)
+    for i = #self.deformerList, 1, -1 do
+        if self.deformerList[i] ~= nil and self.deformerList[i]:getId() == deformerId then
+            return i - 1
         end
     end
     return -1
@@ -303,19 +303,19 @@ function ModelContext:extendAndAddParam(param_id, default_val, max_val, min_val)
     self.paramMinValues[#self.paramMinValues + 1] = max_val
     self.paramMaxValues[#self.paramMaxValues + 1] = min_val
     self.updatedParamFlags[#self.updatedParamFlags + 1] = ModelContext.DEFAULT_PARAM_UPDATE_FLAG
-    local ret = self.nextParamPos
+    local paramPosition = self.nextParamPos
     self.nextParamPos = self.nextParamPos + 1
-    return ret
+    return paramPosition
 end
 
-function ModelContext:setParamFloat(aH, aI)
-    if aI < self.paramMinValues[aH + 1] then
-        aI = self.paramMinValues[aH + 1]
+function ModelContext:setParamFloat(paramIndex, value)
+    if value < self.paramMinValues[paramIndex + 1] then
+        value = self.paramMinValues[paramIndex + 1]
     end
-    if aI > self.paramMaxValues[aH + 1] then
-        aI = self.paramMaxValues[aH + 1]
+    if value > self.paramMaxValues[paramIndex + 1] then
+        value = self.paramMaxValues[paramIndex + 1]
     end
-    self.paramValues[aH + 1] = aI
+    self.paramValues[paramIndex + 1] = value
 end
 
 function ModelContext:loadParam()
@@ -355,55 +355,55 @@ function ModelContext:getTempT()
     return self.tempTArray
 end
 
-function ModelContext:getDeformer(aH)
-    return self.deformerList[aH + 1]
+function ModelContext:getDeformer(deformerIndex)
+    return self.deformerList[deformerIndex + 1]
 end
 
-function ModelContext:getParamFloat(aH)
-    return self.paramValues[aH + 1]
+function ModelContext:getParamFloat(paramIndex)
+    return self.paramValues[paramIndex + 1]
 end
 
-function ModelContext:getParamMax(aH)
-    return self.paramMaxValues[aH + 1]
+function ModelContext:getParamMax(paramIndex)
+    return self.paramMaxValues[paramIndex + 1]
 end
 
-function ModelContext:getParamMin(aH)
-    return self.paramMinValues[aH + 1]
+function ModelContext:getParamMin(paramIndex)
+    return self.paramMinValues[paramIndex + 1]
 end
 
-function ModelContext:setPartsOpacity(aJ, aH)
-    local aI = self.partsContextList[aJ + 1]
-    aI:setPartsOpacity(aH)
+function ModelContext:setPartsOpacity(partIndex, opacity)
+    local partsCtx = self.partsContextList[partIndex + 1]
+    partsCtx:setPartsOpacity(opacity)
 end
 
-function ModelContext:getPartsOpacity(aI)
-    local aH = self.partsContextList[aI + 1]
-    return aH:getPartsOpacity()
+function ModelContext:getPartsOpacity(partIndex)
+    local partsCtx = self.partsContextList[partIndex + 1]
+    return partsCtx:getPartsOpacity()
 end
 
-function ModelContext:getPartsDataIndex(aI)
-    for aH = #self.partsDataList, 1, -1 do
-        if self.partsDataList[aH] ~= nil and self.partsDataList[aH]:getId() == aI then
-            return aH - 1
+function ModelContext:getPartsDataIndex(partId)
+    for i = #self.partsDataList, 1, -1 do
+        if self.partsDataList[i] ~= nil and self.partsDataList[i]:getId() == partId then
+            return i - 1
         end
     end
     return -1
 end
 
-function ModelContext:getDeformerContext(aH)
-    return self.deformerContextList[aH + 1]
+function ModelContext:getDeformerContext(deformerIndex)
+    return self.deformerContextList[deformerIndex + 1]
 end
 
-function ModelContext:getDrawContext(aH)
-    return self.drawContextList[aH + 1]
+function ModelContext:getDrawContext(drawIndex)
+    return self.drawContextList[drawIndex + 1]
 end
 
-function ModelContext:getPartsContext(aH)
-    return self.partsContextList[aH + 1]
+function ModelContext:getPartsContext(partIndex)
+    return self.partsContextList[partIndex + 1]
 end
 
-function ModelContext:setDrawParam(aH)
-    self.dpGL = aH
+function ModelContext:setDrawParam(drawParam)
+    self.dpGL = drawParam
 end
 
 return ModelContext
