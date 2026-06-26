@@ -37,6 +37,18 @@ local KEYFORM_POSITION_XYS_SLOT = 71
 -- Deformer kind
 local DEFORMER_WARP = 0
 local DEFORMER_ROTATION = 1
+local ROTATION_DERIVATIVE_STEP = 0.1
+
+local function wrap_angle(angle)
+    local two_pi = 2.0 * math.pi
+    while angle < -math.pi do
+        angle = angle + two_pi
+    end
+    while angle > math.pi do
+        angle = angle - two_pi
+    end
+    return angle
+end
 
 function deformers.parse(bytes)
     local hdr, err = header.parse(bytes)
@@ -374,12 +386,14 @@ function deformers.compose(self, bindings, parameter_values)
             if not rotation then return nil end
             local origin = apply_parent(parent, rotation.translation)
             if not origin then return nil end
-            local stepped = apply_parent(parent, Vector2.new(
-                rotation.translation:x() + 0.1,
-                rotation.translation:y()
+            local probe_y = apply_parent(parent, Vector2.new(
+                rotation.translation:x(),
+                rotation.translation:y() + ROTATION_DERIVATIVE_STEP
             ))
-            if not stepped then return nil end
-            local parent_angle_rad = math.atan2(stepped:y() - origin:y(), stepped:x() - origin:x())
+            if not probe_y then return nil end
+            local parent_angle_rad = wrap_angle(
+                math.atan2(probe_y:y() - origin:y(), probe_y:x() - origin:x()) - math.pi / 2.0
+            )
             local parent_angle_deg = parent_angle_rad * 180 / math.pi
             local scale_accum = parent_scale(parent)
             local opacity = interpolated_rotation_opacity(self, specific, bindings, parameter_values)

@@ -147,6 +147,46 @@ check("keyform slots default", slots ~= nil and #slots > 0)
 local composed = defs:compose(bindings, bindings.parameter_default_values)
 check("deformer compose", composed ~= nil and #composed > 0)
 
+-- Regression: nested rotation deformers must derive parent angle from the local +Y axis.
+-- A reflected parent has a flipped +X axis, but its rotational direction is still read from +Y.
+local test_defs = setmetatable({
+    parent_deformer_indices = { -1, 0 },
+    deformer_kinds = { 1, 1 },
+    specific_indices = { 0, 1 },
+    warp_keyform_binding_band_indices = {},
+    warp_keyform_begin_indices = {},
+    warp_keyform_counts = {},
+    warp_vertex_counts = {},
+    warp_rows = {},
+    warp_cols = {},
+    warp_keyform_opacities = {},
+    rotation_keyform_binding_band_indices = { -1, -1 },
+    rotation_keyform_begin_indices = { 0, 1 },
+    rotation_keyform_counts = { 1, 1 },
+    rotation_base_angles = { 0, 0 },
+    warp_keyform_position_begin_indices = {},
+    rotation_keyform_angles = { 0, 10 },
+    rotation_keyform_origin_xs = { 0, 0 },
+    rotation_keyform_origin_ys = { 0, 0 },
+    rotation_keyform_scales = { 1, 1 },
+    rotation_keyform_reflect_xs = { true, false },
+    rotation_keyform_reflect_ys = { false, false },
+    rotation_keyform_opacities = { 1, 1 },
+    keyform_position_xys = {},
+}, { __index = moc3.deformers })
+local test_bindings = {
+    keyform_slots = function()
+        return { { local_index = 0, weight = 0.5 } }
+    end,
+}
+local reflected_parent_composed = test_defs:compose(test_bindings, {})
+local child_rotation = reflected_parent_composed and reflected_parent_composed[2]
+check(
+    "rotation parent angle uses plus-y probe",
+    child_rotation and math.abs(child_rotation.angle_degrees - 5) < 0.0001,
+    child_rotation and ("child angle was " .. tostring(child_rotation.angle_degrees)) or "compose failed"
+)
+
 print("\n=== Results: " .. passed .. "/" .. total .. " passed ===")
 if passed == total then
     print("ALL TESTS PASSED!")
