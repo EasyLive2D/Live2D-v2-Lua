@@ -12,8 +12,6 @@ local motion3 = require("live2d.cubism3.json.motion3")
 local pose3 = require("live2d.cubism3.json.pose3")
 local ModelRuntime = require("live2d.cubism3.runtime")
 local MotionPlayer = require("live2d.cubism3.motion")
-local L2DExpressionMotion = require("live2d.framework.motion.l2d_expression_motion")
-local UtMotion = require("live2d.core.util.ut_motion")
 
 local M = {}
 local Renderer = {}
@@ -61,31 +59,6 @@ local function assert_parsed(name, value, err)
         error("failed to parse " .. name .. ": " .. tostring(err), 3)
     end
     return value
-end
-
-local function expression_model_adapter(runtime, base_values)
-    return {
-        addToParamFloat = function(_, id, value, weight)
-            local base = base_values[id]
-            if base ~= nil then
-                runtime:set_parameter(id, base + (value or 0) * (weight or 1))
-            end
-        end,
-        multParamFloat = function(_, id, value, weight)
-            local base = base_values[id]
-            if base ~= nil then
-                weight = weight or 1
-                runtime:set_parameter(id, base * (1 + ((value or 1) - 1) * weight))
-            end
-        end,
-        setParamFloat = function(_, id, value, weight)
-            local base = base_values[id]
-            if base ~= nil then
-                weight = weight or 1
-                runtime:set_parameter(id, base * (1 - weight) + (value or 0) * weight)
-            end
-        end,
-    }
 end
 
 local function require_runtime(self)
@@ -180,8 +153,6 @@ function Renderer:load_model(model_path, opts)
     self.textures = references.textures or {}
     self.motion_cache = {}
     self.active_motions = {}
-    self.expression_cache = {}
-    self.active_expression = nil
     return self
 end
 
@@ -288,44 +259,6 @@ function Renderer:clear_motions()
     return self
 end
 
-function Renderer:load_expression(name)
-    local references = self.model_data and self.model_data.file_references
-    local expressions = references and references.expressions or {}
-    for _, expression in ipairs(expressions) do
-        if expression.name == name then
-            local expression_path = join_path(self.base_path, expression.file)
-            if self.expression_cache[expression_path] == nil then
-                self.expression_cache[expression_path] = L2DExpressionMotion.loadJson(self:read_resource(expression_path))
-            end
-            return self.expression_cache[expression_path]
-        end
-    end
-    error("unknown expression: " .. tostring(name), 2)
-end
-
-function Renderer:set_expression(name)
-    local runtime = require_runtime(self)
-    local motion = self:load_expression(name)
-    local base_values = {}
-    for _, param in ipairs(motion.paramList) do
-        local current = runtime:parameter_value(param.id)
-        if current ~= nil then
-            base_values[param.id] = current
-        end
-    end
-    self.active_expression = {
-        motion = motion,
-        elapsed_seconds = 0,
-        adapter = expression_model_adapter(runtime, base_values),
-    }
-    return self
-end
-
-function Renderer:clear_expression()
-    self.active_expression = nil
-    return self
-end
-
 function Renderer:update(delta_seconds)
     local runtime = require_runtime(self)
     delta_seconds = tonumber(delta_seconds) or 0
@@ -338,17 +271,6 @@ function Renderer:update(delta_seconds)
         end
     end
     self.active_motions = kept
-    if self.active_expression ~= nil then
-        local expression = self.active_expression
-        expression.elapsed_seconds = expression.elapsed_seconds + delta_seconds
-        local fade_in_msec = expression.motion.fadeInMSec or 1000
-        local weight = 1
-        if fade_in_msec > 0 then
-            weight = UtMotion.getEasingSine((expression.elapsed_seconds * 1000) / fade_in_msec)
-        end
-        if weight > 1 then weight = 1 end
-        expression.motion:updateParamExe(expression.adapter, expression.elapsed_seconds * 1000, weight, nil)
-    end
     runtime:apply_pose(delta_seconds)
     runtime:update_meshes()
     return self
@@ -380,8 +302,6 @@ function Renderer:dispose()
     self.textures = {}
     self.motion_cache = {}
     self.active_motions = {}
-    self.expression_cache = {}
-    self.active_expression = nil
     self.gl_renderer = nil
     collectgarbage("collect")
     return true
@@ -394,8 +314,6 @@ function M.new(opts)
         textures = {},
         motion_cache = {},
         active_motions = {},
-        expression_cache = {},
-        active_expression = nil,
         gl = opts.gl,
     }, Renderer)
     renderer:set_resource_streams(opts.resource_streams or opts.resourceStreams or {})
@@ -438,16 +356,6 @@ end
 function M.clear_motions()
     if current_renderer == nil then error("no current renderer", 2) end
     return current_renderer:clear_motions()
-end
-
-function M.set_expression(name)
-    if current_renderer == nil then error("no current renderer", 2) end
-    return current_renderer:set_expression(name)
-end
-
-function M.clear_expression()
-    if current_renderer == nil then error("no current renderer", 2) end
-    return current_renderer:clear_expression()
 end
 
 function M.render(projection, texture_paths)
