@@ -4,6 +4,7 @@ package.path = package.path .. ";./?.lua;./?/init.lua"
 local embed = require("live2d_moc3_embed")
 
 local base = "resources/Hiyori/"
+local rana_base = "resources/Rana/"
 
 local function read_file(path)
     local file = assert(io.open(path, "rb"))
@@ -37,6 +38,7 @@ check("renderer exports update", type(renderer.update) == "function")
 check("renderer exports get_meshes", type(renderer.get_meshes) == "function")
 check("renderer exports set_parameter", type(renderer.set_parameter) == "function")
 check("renderer exports start_motion", type(renderer.start_motion) == "function")
+check("renderer exports set_expression", type(renderer.set_expression) == "function")
 
 renderer:set_resource_stream(base .. "Hiyori.model3.json", read_file(base .. "Hiyori.model3.json"))
 renderer:set_resource_stream(base .. "Hiyori.moc3", read_file(base .. "Hiyori.moc3"))
@@ -65,6 +67,24 @@ check("clear motions", renderer:clear_motions() == renderer)
 
 local textures = renderer:get_textures()
 check("texture references", textures and #textures == 2)
+
+local rana = embed.new({
+    resource_streams = {
+        [rana_base .. "adv_live2d_rana_003_live_01.model3.json"] = read_file(rana_base .. "adv_live2d_rana_003_live_01.model3.json"),
+        [rana_base .. "adv_live2d_rana_003_live_01.moc3"] = read_file(rana_base .. "adv_live2d_rana_003_live_01.moc3"),
+        [rana_base .. "expressions/exp_smile01.exp3.json"] = read_file(rana_base .. "expressions/exp_smile01.exp3.json"),
+    },
+})
+rana:load_model(rana_base .. "adv_live2d_rana_003_live_01.model3.json")
+local smile_default = rana:get_parameter("Paramsmile01")
+local brow_default = rana:get_parameter("ParamBrowLY")
+rana:set_expression("exp_smile01")
+rana:update(1.0)
+local smile_applied = rana:get_parameter("Paramsmile01")
+local brow_applied = rana:get_parameter("ParamBrowLY")
+rana:update(1.0)
+check("Rana expression changes parameter", smile_default ~= nil and smile_applied > smile_default)
+check("Rana expression does not accumulate", brow_default ~= nil and brow_applied > brow_default and rana:get_parameter("ParamBrowLY") == brow_applied)
 
 local singleton = embed.load_model(base .. "Hiyori.model3.json", {
     resource_streams = {

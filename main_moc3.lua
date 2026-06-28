@@ -33,8 +33,8 @@ gl.glEnable(0x0BC0) -- GL_TEXTURE_2D
 
 -- Load model3.json
 print("Loading Hiyori model3.json...")
-local base = "resources/Hiyori/"
-local model_path = base .. "Hiyori.model3.json"
+local base = "resources/Rana/"
+local model_path = base .. "adv_live2d_rana_003_live_01.model3.json"
 local file = assert(io.open(model_path, "r"))
 local model_json = file:read("*all")
 file:close()

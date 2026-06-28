@@ -50,6 +50,12 @@ check("model3 pose", model_data and model_data.file_references.pose ~= nil)
 check("model3 groups", model_data and #model_data.groups == 2)
 check("model3 motions", model_data and next(model_data.file_references.motions) ~= nil)
 
+local rana_model_json = read_text(rana_base .. "adv_live2d_rana_003_live_01.model3.json")
+local rana_model_data, rana_model_err = model3.parse(rana_model_json)
+check("rana model3 parse", rana_model_data ~= nil, rana_model_err)
+check("rana model3 expressions", rana_model_data and #rana_model_data.file_references.expressions == 19)
+check("rana model3 expression file", rana_model_data and rana_model_data.file_references.expressions[1].file == "expressions/exp_smile04.exp3.json")
+
 -- Test MOC3 parsing
 print("\n-- MOC3 Binary Parsing --")
 local moc_bytes = read_file(base .. "Hiyori.moc3")
