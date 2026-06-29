@@ -76,6 +76,16 @@ local function mesh(masks)
     }
 end
 
+local function bound_textures(calls)
+    local textures = {}
+    for _, call in ipairs(calls) do
+        if call.name == "glBindTexture" and call.args[1] == 0x0DE1 then
+            textures[#textures + 1] = call.args[2]
+        end
+    end
+    return textures
+end
+
 local gl = new_fake_gl()
 local renderer = setmetatable({
     gl = gl,
@@ -106,6 +116,34 @@ check("masked drawable tests stencil equality",
     has_call(gl.calls, "glStencilFunc", function(args) return args[1] == 0x0202 end))
 check("stencil is disabled after masked draw",
     has_call(gl.calls, "glDisable", function(args) return args[1] == 0x0B90 end))
+
+local order_gl = new_fake_gl()
+local order_renderer = setmetatable({
+    gl = order_gl,
+    shader = 1,
+    vbo = 2,
+    ibo = 3,
+    u_projection = 4,
+    u_texture = 5,
+    textures = {},
+    ensure_texture = function(_, texture_path) return texture_path end,
+}, { __index = OpenGLRenderer })
+
+local first = mesh({})
+first.texture_index = 0
+first.draw_order = 0
+first.render_order = 1
+
+local second = mesh({})
+second.texture_index = 1
+second.draw_order = 100
+second.render_order = 0
+
+order_renderer:render_meshes({ first, second }, { "first", "second" }, projection)
+local texture_order = bound_textures(order_gl.calls)
+check("expanded total-rank render order controls draw order",
+    texture_order[1] == "second" and texture_order[2] == "first",
+    string.format("got %s then %s", tostring(texture_order[1]), tostring(texture_order[2])))
 
 print(string.format("\n=== Results: %d/%d passed ===", passed, total))
 if passed == total then

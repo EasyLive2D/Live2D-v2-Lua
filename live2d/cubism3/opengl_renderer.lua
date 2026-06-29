@@ -65,9 +65,33 @@ local OpenGLRenderer = {}
 OpenGLRenderer.__index = OpenGLRenderer
 
 local sort_meshes
+local sort_by_render_order = false
+
+local function render_orders_are_total_rank(meshes)
+    local count = #meshes
+    if count == 0 then return false end
+
+    local seen = {}
+    local identity = true
+    for index, mesh in ipairs(meshes) do
+        local rank = mesh.render_order
+        if type(rank) ~= "number" or rank < 0 or rank >= count or rank ~= math.floor(rank) then
+            return false
+        end
+        if seen[rank + 1] then return false end
+        seen[rank + 1] = true
+        identity = identity and rank == index - 1
+    end
+    return not identity
+end
+
 local function compare_draw_order(a, b)
     local meshA = sort_meshes[a + 1]
     local meshB = sort_meshes[b + 1]
+    if sort_by_render_order then
+        if meshA.render_order ~= meshB.render_order then return meshA.render_order < meshB.render_order end
+        return a < b
+    end
     local drawOrderA = draw_order_from_raw(meshA.draw_order)
     local drawOrderB = draw_order_from_raw(meshB.draw_order)
     if drawOrderA ~= drawOrderB then return drawOrderA < drawOrderB end
@@ -220,8 +244,10 @@ function OpenGLRenderer:render_meshes(meshes, textures, projection)
         draw_order_indices[i] = nil
     end
     sort_meshes = meshes
+    sort_by_render_order = render_orders_are_total_rank(meshes)
     table.sort(draw_order_indices, compare_draw_order)
     sort_meshes = nil
+    sort_by_render_order = false
 
     -- Upload and draw each mesh
     for _, idx in ipairs(draw_order_indices) do
