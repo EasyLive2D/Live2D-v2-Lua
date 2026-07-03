@@ -1,4 +1,4 @@
--- main_moc3.lua - Live2D Cubism 3 Interactive Viewer (Hiyori)
+-- main_moc3.lua - Live2D Cubism 3 Interactive Viewer (Rana)
 package.path = package.path .. ";./?.lua;./?/init.lua"
 io.stdout:setvbuf("no")
 
@@ -11,7 +11,7 @@ local sdl2 = require("live2d.sdl2")
 sdl2.enableDPIAwareness()
 sdl2.init()
 local W, H = 800, 900
-local win = sdl2.createWindow("Live2D Cubism3 - Hiyori", W, H, true)
+local win = sdl2.createWindow("Live2D Cubism3 - Rana", W, H, true)
 local ctx = sdl2.createGLContext(win)
 sdl2.makeCurrent(win, ctx)
 sdl2.setSwapInterval(1)
@@ -33,9 +33,9 @@ gl.glEnable(0x0BE2) -- GL_BLEND
 gl.glEnable(0x0BC0) -- GL_TEXTURE_2D
 
 -- Load model3.json
-print("Loading Hiyori model3.json...")
-local base = "resources/Hiyori/"
-local model_path = base .. "Hiyori.model3.json"
+print("Loading Rana model3.json...")
+local base = "resources/Rana/"
+local model_path = base .. "adv_live2d_rana_003_live_01.model3.json"
 local file = assert(io.open(model_path, "r"))
 local model_json = file:read("*all")
 file:close()

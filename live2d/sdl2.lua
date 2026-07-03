@@ -2,6 +2,7 @@
 -- Minimal wrapper for window creation, OpenGL context, and event handling
 
 local ffi = require("ffi")
+local is_win = ffi.os == "Windows"
 
 ffi.cdef[[
     // SDL types
@@ -99,6 +100,7 @@ ffi.cdef[[
     int SDL_GL_MakeCurrent(SDL_Window *window, SDL_GLContext context);
     int SDL_GL_SetSwapInterval(int interval);
     void SDL_GL_SwapWindow(SDL_Window *window);
+    void SDL_GL_GetDrawableSize(SDL_Window *window, int *w, int *h);
     
     int SDL_PollEvent(SDL_Event *event);
     uint32_t SDL_GetTicks(void);
@@ -107,7 +109,16 @@ ffi.cdef[[
     uint32_t SDL_GetMouseState(int *x, int *y);
 ]]
 
+if is_win then
+    ffi.cdef[[
+        typedef void *DPI_AWARENESS_CONTEXT;
+        int SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT value);
+        int SetProcessDPIAware(void);
+    ]]
+end
+
 local sdl
+local user32
 
 -- Try common SDL2 library names across platforms. macOS Homebrew on Apple
 -- Silicon installs to /opt/homebrew/lib, which is NOT in dyld's default
@@ -140,6 +151,10 @@ if sdl == nil then
     error("Cannot load SDL2 library. Tried: " .. table.concat(sdl_names, ", "))
 end
 
+if is_win then
+    pcall(function() user32 = ffi.load("user32") end)
+end
+
 -- Init flags
 local SDL_INIT_VIDEO = 0x00000020
 
@@ -147,6 +162,7 @@ local SDL_INIT_VIDEO = 0x00000020
 local SDL_WINDOW_OPENGL = 0x00000002
 local SDL_WINDOW_SHOWN = 0x00000004
 local SDL_WINDOW_RESIZABLE = 0x00000020
+local SDL_WINDOW_ALLOW_HIGHDPI = 0x00002000
 
 -- GL attributes
 local SDL_GL_CONTEXT_MAJOR_VERSION = 17
@@ -170,6 +186,21 @@ local SDLK_ESCAPE = 27
 
 local M = {}
 
+function M.enableDPIAwareness()
+    if not is_win or not user32 then return false end
+
+    local ok, enabled = pcall(function()
+        -- DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2
+        return user32.SetProcessDpiAwarenessContext(ffi.cast("DPI_AWARENESS_CONTEXT", -4)) ~= 0
+    end)
+    if ok and enabled then return true end
+
+    ok, enabled = pcall(function()
+        return user32.SetProcessDPIAware() ~= 0
+    end)
+    return ok and enabled or false
+end
+
 function M.init()
     local initStatus = sdl.SDL_Init(SDL_INIT_VIDEO)
     if initStatus ~= 0 then
@@ -181,9 +212,12 @@ function M.quit()
     sdl.SDL_Quit()
 end
 
-function M.createWindow(title, width, height)
+function M.createWindow(title, width, height, allowHighDPI)
     sdl.SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8)
     local flags = bit.bor(SDL_WINDOW_OPENGL, SDL_WINDOW_SHOWN, SDL_WINDOW_RESIZABLE)
+    if allowHighDPI then
+        flags = bit.bor(flags, SDL_WINDOW_ALLOW_HIGHDPI)
+    end
     local win = sdl.SDL_CreateWindow(title, 0x1FFF0000, 0x1FFF0000, width, height, flags)
     if win == nil then
         error("SDL_CreateWindow failed: " .. ffi.string(sdl.SDL_GetError()))
@@ -241,6 +275,13 @@ function M.getMouseState()
     local mouseY = ffi.new("int[1]")
     sdl.SDL_GetMouseState(mouseX, mouseY)
     return mouseX[0], mouseY[0]
+end
+
+function M.getDrawableSize(win)
+    local width = ffi.new("int[1]")
+    local height = ffi.new("int[1]")
+    sdl.SDL_GL_GetDrawableSize(win, width, height)
+    return tonumber(width[0]), tonumber(height[0])
 end
 
 -- Exports
