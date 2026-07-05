@@ -103,6 +103,11 @@ function Renderer:set_offset(x, y)
     return self:resize(self.width, self.height)
 end
 
+function Renderer:set_scale(scale)
+    self.scale = tonumber(scale) or 1
+    return self:resize(self.width, self.height)
+end
+
 function Renderer:set_parameter(param_id, value, _weight)
     if self.renderer == nil then return self end
     local id = parameter_id(param_id)
