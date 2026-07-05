@@ -135,13 +135,14 @@ function Renderer:load_model(model_path, opts)
     local bindings = assert_parsed("moc3 keyform bindings", moc3.keyform_bindings.parse(moc_bytes))
     local ids = assert_parsed("moc3 ids", moc3.ids.parse(moc_bytes))
     local offscreen = assert_parsed("moc3 offscreen", moc3.offscreen.parse(moc_bytes))
+    local glues = assert_parsed("moc3 glues", moc3.glues.parse(moc_bytes))
     local parts = assert_parsed("moc3 parts", moc3.parts.parse(moc_bytes))
     local draw_order_groups, draw_order_groups_err = moc3.draw_order_groups.parse(moc_bytes)
     if draw_order_groups_err ~= nil then
         error("failed to parse moc3 draw order groups: " .. tostring(draw_order_groups_err), 2)
     end
 
-    local runtime = ModelRuntime.new(model_data, canvas, art_meshes, keyforms, deformers, bindings, ids, offscreen, parts, draw_order_groups, pose_data)
+    local runtime = ModelRuntime.new(model_data, canvas, art_meshes, keyforms, deformers, bindings, ids, offscreen, glues, parts, draw_order_groups, pose_data)
     if runtime == nil then
         error("failed to create Cubism3 runtime", 2)
     end

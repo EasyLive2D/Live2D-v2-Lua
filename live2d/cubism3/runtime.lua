@@ -52,7 +52,7 @@ local function initial_pose_opacities(groups, part_count)
     return opacities
 end
 
-function ModelRuntime.new(model, canvas, art_meshes, art_mesh_keyforms, deformers, bindings, ids, offscreen, parts, draw_order_groups, pose)
+function ModelRuntime.new(model, canvas, art_meshes, art_mesh_keyforms, deformers, bindings, ids, offscreen, glues, parts, draw_order_groups, pose)
     if draw_order_groups ~= nil and draw_order_groups.drawable_count_value == nil then
         pose = draw_order_groups
         draw_order_groups = nil
@@ -107,6 +107,7 @@ function ModelRuntime.new(model, canvas, art_meshes, art_mesh_keyforms, deformer
         bindings = bindings,
         ids = ids,
         offscreen = offscreen,
+        glues = glues,
         parts = parts,
         draw_order_groups = draw_order_groups,
         parameter_index = parameter_index,
@@ -273,6 +274,9 @@ function ModelRuntime:update_meshes()
         drawable_part_opacities
     )
     if not meshes then
+        return nil
+    end
+    if not self.glues:apply(meshes, self.bindings, self.parameter_values) then
         return nil
     end
     self.meshes = meshes

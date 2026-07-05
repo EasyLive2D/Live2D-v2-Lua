@@ -6,6 +6,8 @@ local model3 = require("live2d.cubism3.json.model3")
 local motion3 = require("live2d.cubism3.json.motion3")
 local pose3 = require("live2d.cubism3.json.pose3")
 local ModelRuntime = require("live2d.cubism3.runtime")
+local Vector2 = require("live2d.cubism3.core.math").Vector2
+local core_deformers = require("live2d.cubism3.core.deformers")
 
 local base = "resources/Hiyori/"
 local rana_base = "resources/Rana/"
@@ -69,6 +71,7 @@ check("counts parts", cnts and cnts.parts == 24)
 check("counts parameters", cnts and cnts.parameters == 70)
 check("counts art_meshes", cnts and cnts.art_meshes == 134)
 check("counts warp_deformers", cnts and cnts.warp_deformers >= 0)
+check("counts glues", cnts and cnts.glue == 26 and cnts.glue_info == 470 and cnts.glue_keyforms == 26)
 
 local ids, err = moc3.ids.parse(moc_bytes)
 check("ids parse", ids ~= nil, err)
@@ -107,6 +110,53 @@ check("deformers kind count", defs and #defs.deformer_kinds > 0)
 local offscr, err = moc3.offscreen.parse(moc_bytes)
 check("offscreen parse", offscr ~= nil, err)
 
+local glues, glues_err
+if moc3.glues then
+    glues, glues_err = moc3.glues.parse(moc_bytes)
+else
+    glues_err = "moc3.glues module is not exported"
+end
+check("glues parse", glues ~= nil, glues_err)
+check("glues count", glues and glues:len() == 26)
+
+local synthetic_glue, synthetic_glue_err
+if moc3.glues and moc3.glues.from_parts then
+    synthetic_glue, synthetic_glue_err = moc3.glues.from_parts(
+        { -1 }, -- binding_indices
+        { 0 },  -- keyform_begin_indices
+        { 1 },  -- keyform_counts
+        { 0 },  -- art_mesh_indices_a
+        { 1 },  -- art_mesh_indices_b
+        { 0 },  -- info_begin_indices
+        { 2 },  -- info_counts
+        { 0.25, 0.5 },
+        { 0, 0 },
+        { 1.0 }
+    )
+else
+    synthetic_glue_err = "moc3.glues.from_parts is not exported"
+end
+
+local glue_meshes = {
+    { vertices = { { position = { 0, 0 }, uv = { 0, 0 } } } },
+    { vertices = { { position = { 10, 0 }, uv = { 0, 0 } } } },
+}
+local glue_apply_ok = false
+if synthetic_glue then
+    glue_apply_ok = synthetic_glue:apply(glue_meshes, {
+        keyform_slots = function(_, band_index, keyform_count)
+            if band_index == -1 and keyform_count == 1 then
+                return { { local_index = 0, weight = 1.0 } }
+            end
+            return nil
+        end,
+    }, {})
+end
+check("glues apply paired vertex positions", glue_apply_ok
+    and math.abs(glue_meshes[1].vertices[1].position[1] - 2.5) < 0.0001
+    and math.abs(glue_meshes[2].vertices[1].position[1] - 5.0) < 0.0001,
+    synthetic_glue_err)
+
 -- Test pose
 print("\n-- Pose3 --")
 local pose_json = read_text(base .. "Hiyori.pose3.json")
@@ -135,6 +185,15 @@ local rana_cnts, err = moc3.counts.parse(rana_moc_bytes)
 check("rana counts parse", rana_cnts ~= nil, err)
 check("rana has draw order groups", rana_cnts and rana_cnts.draw_order_groups == 9)
 check("rana has draw order group objects", rana_cnts and rana_cnts.draw_order_group_objects == 319)
+
+local rana_glues, rana_glues_err
+if moc3.glues then
+    rana_glues, rana_glues_err = moc3.glues.parse(rana_moc_bytes)
+else
+    rana_glues_err = "moc3.glues module is not exported"
+end
+check("rana glues parse", rana_glues ~= nil, rana_glues_err)
+check("rana glues count", rana_glues and rana_glues:len() == 5)
 
 local rana_art_meshes, err = moc3.art_meshes.parse(rana_moc_bytes)
 check("rana art meshes parse", rana_art_meshes ~= nil, err)
@@ -176,10 +235,13 @@ end
 
 -- Test ModelRuntime construction
 print("\n-- ModelRuntime --")
-local runtime = ModelRuntime.new(
-    model_data, canvas, art_meshes, kfs, defs, bindings,
-    ids, offscr, parts, pose
-)
+local runtime = nil
+if glues then
+    runtime = ModelRuntime.new(
+        model_data, canvas, art_meshes, kfs, defs, bindings,
+        ids, offscr, glues, parts, pose
+    )
+end
 check("runtime create", runtime ~= nil)
 check("runtime meshes", runtime and #runtime.meshes == 134)
 check("runtime default param", runtime and runtime:parameter_value_by_index(0) ~= nil)
@@ -194,6 +256,37 @@ end
 -- Test keyform slots
 local slots = bindings:keyform_slots(0, 1, bindings.parameter_default_values)
 check("keyform slots default", slots ~= nil and #slots > 0)
+
+local single_keyform_bindings = setmetatable({
+    binding_parameter_indices = {},
+    keyform_binding_indices = { 0 },
+    band_begin_indices = { 0 },
+    band_counts = { 1 },
+    keys_begin_indices = { 0 },
+    keys_counts = { 2 },
+    key_values = { 0, 1 },
+}, { __index = moc3.keyform_bindings })
+local single_slots = single_keyform_bindings:keyform_slots(0, 1, {})
+check("single keyform slots bypass unresolved binding", single_slots and #single_slots == 1
+    and single_slots[1].local_index == 0 and math.abs(single_slots[1].weight - 1.0) < 0.0001)
+
+local non_affine_grid = {
+    Vector2.new(0.0, 0.0),
+    Vector2.new(10.0, 0.0),
+    Vector2.new(0.0, 10.0),
+    Vector2.new(20.0, 30.0),
+}
+local extrapolated = core_deformers.warp_deformer_transform_target(
+    Vector2.new(1.25, 0.5),
+    non_affine_grid,
+    1,
+    1,
+    core_deformers.WARP_QUAD
+)
+check("warp extrapolates non-affine grid via corner basis", extrapolated
+    and math.abs(extrapolated:x() - 19.0625) < 0.0001
+    and math.abs(extrapolated:y() - 18.125) < 0.0001,
+    extrapolated and string.format("got %.4f, %.4f", extrapolated:x(), extrapolated:y()) or "no result")
 
 -- Test deformer composition
 local composed = defs:compose(bindings, bindings.parameter_default_values)
@@ -274,6 +367,44 @@ check(
     "rotation reflect interpolation uses floor sentinel",
     half_reflect_composed and half_reflect_composed[1] and half_reflect_composed[1].flip_x == false,
     half_reflect_composed and ("flip_x was " .. tostring(half_reflect_composed[1].flip_x)) or "compose failed"
+)
+
+local warp_parent_probe_defs = setmetatable({
+    parent_deformer_indices = { -1, 0 },
+    deformer_kinds = { 0, 1 },
+    specific_indices = { 0, 0 },
+    warp_keyform_binding_band_indices = { -1 },
+    warp_keyform_begin_indices = { 0 },
+    warp_keyform_counts = { 1 },
+    warp_vertex_counts = { 4 },
+    warp_rows = { 1 },
+    warp_cols = { 1 },
+    warp_keyform_opacities = { 1 },
+    warp_keyform_position_begin_indices = { 0 },
+    rotation_keyform_binding_band_indices = { -1 },
+    rotation_keyform_begin_indices = { 0 },
+    rotation_keyform_counts = { 1 },
+    rotation_base_angles = { 0 },
+    keyform_position_xys = {
+        0, 0,
+        10, 0,
+        0, 0,
+        10, 10,
+    },
+    rotation_keyform_angles = { 0 },
+    rotation_keyform_origin_xs = { 0 },
+    rotation_keyform_origin_ys = { 0 },
+    rotation_keyform_scales = { 1 },
+    rotation_keyform_reflect_xs = { false },
+    rotation_keyform_reflect_ys = { false },
+    rotation_keyform_opacities = { 1 },
+}, { __index = moc3.deformers })
+local warp_parent_probe_composed = warp_parent_probe_defs:compose(test_bindings, {})
+local warp_parent_child = warp_parent_probe_composed and warp_parent_probe_composed[2]
+check(
+    "rotation parent probe falls back when forward derivative collapses",
+    warp_parent_child and math.abs(warp_parent_child.angle_degrees) < 0.0001,
+    warp_parent_child and ("child angle was " .. tostring(warp_parent_child.angle_degrees)) or "compose failed"
 )
 
 print("\n=== Results: " .. passed .. "/" .. total .. " passed ===")

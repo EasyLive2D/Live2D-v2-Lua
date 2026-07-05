@@ -37,7 +37,9 @@ local KEYFORM_POSITION_XYS_SLOT = 71
 -- Deformer kind
 local DEFORMER_WARP = 0
 local DEFORMER_ROTATION = 1
-local ROTATION_DERIVATIVE_STEP = 0.1
+local ROTATION_PROBE_ITERATIONS = 10
+local ROTATION_PROBE_STEP_WARP_PARENT = -0.1
+local ROTATION_PROBE_STEP_ROTATION_PARENT = -10.0
 
 local function wrap_angle(angle)
     local two_pi = 2.0 * math.pi
@@ -386,13 +388,47 @@ function deformers.compose(self, bindings, parameter_values)
             if not rotation then return nil end
             local origin = apply_parent(parent, rotation.translation)
             if not origin then return nil end
-            local probe_y = apply_parent(parent, Vector2.new(
-                rotation.translation:x(),
-                rotation.translation:y() + ROTATION_DERIVATIVE_STEP
-            ))
-            if not probe_y then return nil end
+            local step = ROTATION_PROBE_STEP_WARP_PARENT
+            local parent_deformer = parent >= 0 and composed[parent + 1] or nil
+            if parent_deformer and parent_deformer.kind == "rotation" then
+                step = ROTATION_PROBE_STEP_ROTATION_PARENT
+            end
+
+            local direction = Vector2.new(0, 0)
+            local scale = 1.0
+            for _ = 1, ROTATION_PROBE_ITERATIONS do
+                local offset = step * scale
+                local forward = apply_parent(parent, Vector2.new(
+                    rotation.translation:x(),
+                    rotation.translation:y() + offset
+                ))
+                if not forward then return nil end
+
+                local dx = forward:x() - origin:x()
+                local dy = forward:y() - origin:y()
+                if dx ~= 0 or dy ~= 0 then
+                    direction = Vector2.new(dx, dy)
+                    break
+                end
+
+                local backward = apply_parent(parent, Vector2.new(
+                    rotation.translation:x(),
+                    rotation.translation:y() - offset
+                ))
+                if not backward then return nil end
+
+                dx = backward:x() - origin:x()
+                dy = backward:y() - origin:y()
+                if dx ~= 0 or dy ~= 0 then
+                    direction = Vector2.new(-dx, -dy)
+                    break
+                end
+
+                scale = scale * 0.1
+            end
+
             local parent_angle_rad = wrap_angle(
-                math.atan2(probe_y:y() - origin:y(), probe_y:x() - origin:x()) - math.pi / 2.0
+                math.atan2(direction:y(), direction:x()) - math.atan2(step, 0.0)
             )
             local parent_angle_deg = parent_angle_rad * 180 / math.pi
             local scale_accum = parent_scale(parent)

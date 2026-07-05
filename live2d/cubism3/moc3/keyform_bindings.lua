@@ -157,6 +157,10 @@ function keyform_bindings.keyform_slots(self, band_index, keyform_count, paramet
         return nil
     end
 
+    if keyform_count == 1 then
+        return { { local_index = 0, weight = 1.0 } }
+    end
+
     if band_index < 0 then
         return { { local_index = 0, weight = 1 } }
     end

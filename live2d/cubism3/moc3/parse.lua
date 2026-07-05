@@ -41,6 +41,15 @@ local function read_i16(bytes, offset, endianness)
     return u
 end
 
+-- Read u16 from bytes at offset
+local function read_u16(bytes, offset, endianness)
+    local b1, b2 = string.byte(bytes, offset + 1, offset + 2)
+    if endianness == header.LITTLE then
+        return b1 + blshift(b2, 8)
+    end
+    return b2 + blshift(b1, 8)
+end
+
 -- Read f32 from bytes at offset
 local function read_f32(bytes, offset, endianness)
     local u = read_u32(bytes, offset, endianness)
@@ -97,6 +106,11 @@ end
 function parse.read_i16_section(bytes, offsets, slot, count)
     local endianness = offsets.endianness
     return parse.read_section(bytes, offsets, slot, count, 2, function(b, o) return read_i16(b, o, endianness) end)
+end
+
+function parse.read_u16_section(bytes, offsets, slot, count)
+    local endianness = offsets.endianness
+    return parse.read_section(bytes, offsets, slot, count, 2, function(b, o) return read_u16(b, o, endianness) end)
 end
 
 function parse.read_f32_section(bytes, offsets, slot, count)

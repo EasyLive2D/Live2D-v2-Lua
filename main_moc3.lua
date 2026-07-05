@@ -86,6 +86,10 @@ local offscreen, err = moc3.offscreen.parse(moc_bytes)
 if not offscreen then error("Offscreen parse: " .. tostring(err)) end
 print("  Offscreen count: " .. #offscreen.offscreen_owner_part_indices)
 
+local glues, err = moc3.glues.parse(moc_bytes)
+if not glues then error("Glues parse: " .. tostring(err)) end
+print("  Glues: " .. glues:len())
+
 -- Load pose
 local pose = nil
 if model_data.file_references.pose then
@@ -108,7 +112,7 @@ print("Creating ModelRuntime...")
 local draw_order_groups = moc3.draw_order_groups.parse(moc_bytes)
 local runtime = ModelRuntime.new(
     model_data, canvas, art_meshes, keyforms, deformers, bindings,
-    ids, offscreen, parts, draw_order_groups, pose
+    ids, offscreen, glues, parts, draw_order_groups, pose
 )
 if not runtime then
     error("Failed to create ModelRuntime")

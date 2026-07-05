@@ -55,10 +55,11 @@ local deformers = moc3.deformers.parse(moc_bytes)
 local art_meshes = moc3.art_meshes.parse(moc_bytes)
 local keyforms = moc3.keyforms.parse(moc_bytes)
 local offscreen = moc3.offscreen.parse(moc_bytes)
+local glues = moc3.glues.parse(moc_bytes)
 
 local pose_data = pose3.parse(read_text(base .. "Hiyori.pose3.json"))
 
-local runtime = ModelRuntime.new(model_data, canvas, art_meshes, keyforms, deformers, bindings, ids, offscreen, parts, pose_data)
+local runtime = ModelRuntime.new(model_data, canvas, art_meshes, keyforms, deformers, bindings, ids, offscreen, glues, parts, pose_data)
 assert(runtime, "ModelRuntime creation failed")
 
 -- Test: Default pose meshes
