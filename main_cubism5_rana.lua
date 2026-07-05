@@ -14,7 +14,9 @@ local W, H = 800, 900
 local win = sdl2.createWindow("Live2D Cubism3 - Rana", W, H, true)
 local ctx = sdl2.createGLContext(win)
 sdl2.makeCurrent(win, ctx)
-sdl2.setSwapInterval(1)
+local targetFps = tonumber(os.getenv("LIVE2D_TARGET_FPS")) or 180
+local vsync = tonumber(os.getenv("LIVE2D_VSYNC") or "0") or 0
+sdl2.setSwapInterval(vsync)
 
 local gl = require("live2d.gl_loader")
 gl.ensureExtensions()
@@ -220,7 +222,7 @@ print("\n=== Starting render loop ===")
 
 local running = true
 local frameCount = 0
-local targetFrameMs = 1000 / 60
+local targetFrameMs = targetFps > 0 and (1000 / targetFps) or 0
 local motionIndex = 0
 local currentMotion = nil
 local lastTime = sdl2.getTicks()
@@ -317,7 +319,7 @@ while running do
     collectgarbage("step", 200)
 
     local elapsed = sdl2.getTicks() - frameStart
-    if elapsed < targetFrameMs then
+    if targetFrameMs > 0 and elapsed < targetFrameMs then
         sdl2.delay(math.floor(targetFrameMs - elapsed))
     end
 end

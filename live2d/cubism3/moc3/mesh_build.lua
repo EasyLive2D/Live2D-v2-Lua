@@ -97,9 +97,9 @@ local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, 
     -- Interpolate opacity
     local opacity = 0.0
     for _, slot in ipairs(slots) do
-        local kfs_list = art_mesh_keyforms:art_mesh_keyforms(art_mesh_index)
-        if kfs_list and kfs_list[slot.local_index + 1] then
-            opacity = opacity + kfs_list[slot.local_index + 1].opacity * slot.weight
+        local kf = kfs[slot.local_index + 1]
+        if kf then
+            opacity = opacity + kf.opacity * slot.weight
         end
     end
 
@@ -117,9 +117,9 @@ local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, 
     -- Interpolate draw order
     local draw_order = 0.0
     for _, slot in ipairs(slots) do
-        local kfs_list = art_mesh_keyforms:art_mesh_keyforms(art_mesh_index)
-        if kfs_list and kfs_list[slot.local_index + 1] then
-            draw_order = draw_order + kfs_list[slot.local_index + 1].draw_order * slot.weight
+        local kf = kfs[slot.local_index + 1]
+        if kf then
+            draw_order = draw_order + kf.draw_order * slot.weight
         end
     end
 
@@ -130,10 +130,10 @@ local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, 
     multiply_color[1], multiply_color[2], multiply_color[3] = 0, 0, 0
     screen_color[1], screen_color[2], screen_color[3] = 0, 0, 0
     for _, slot in ipairs(slots) do
-        local kfs_list = art_mesh_keyforms:art_mesh_keyforms(art_mesh_index)
-        if kfs_list and kfs_list[slot.local_index + 1] then
-            local multiplyColor = kfs_list[slot.local_index + 1].multiply_color
-            local screenColor = kfs_list[slot.local_index + 1].screen_color
+        local kf = kfs[slot.local_index + 1]
+        if kf then
+            local multiplyColor = kf.multiply_color
+            local screenColor = kf.screen_color
             if multiplyColor then
                 multiply_color[1] = multiply_color[1] + multiplyColor[1] * slot.weight
                 multiply_color[2] = multiply_color[2] + multiplyColor[2] * slot.weight

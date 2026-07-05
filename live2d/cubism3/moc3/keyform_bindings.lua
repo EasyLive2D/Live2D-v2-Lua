@@ -5,9 +5,8 @@ local header = require("live2d.cubism3.moc3.header")
 local offsets = require("live2d.cubism3.moc3.offsets")
 local counts = require("live2d.cubism3.moc3.counts")
 local parse = require("live2d.cubism3.moc3.parse")
-local keyforms_core = require("live2d.cubism3.core.keyforms")
-
 local keyform_bindings = {}
+local SINGLE_SLOT = { { local_index = 0, weight = 1.0 } }
 
 local PARAMETER_MAX_VALUES_SLOT = 51
 local PARAMETER_MIN_VALUES_SLOT = 52
@@ -112,11 +111,18 @@ function keyform_bindings.parse(bytes)
         keys_begin_indices = keys_begin_indices,
         keys_counts = keys_counts,
         key_values = key_values,
+        _binding_keys_cache = {},
+        _band_bindings_cache = {},
+        _band_runtime_cache = {},
     }, { __index = keyform_bindings })
 end
 
 -- Get binding keys for a binding index
 local function binding_keys(self, binding_index)
+    local cache = self._binding_keys_cache
+    local cached = cache and cache[binding_index + 1]
+    if cached then return cached end
+
     local begin = self.keys_begin_indices[binding_index + 1]
     if begin == nil or begin < 0 then
         return nil
@@ -129,6 +135,7 @@ local function binding_keys(self, binding_index)
     for i = 0, keyCount - 1 do
         keyData[#keyData + 1] = self.key_values[begin + i + 1]
     end
+    if cache then cache[binding_index + 1] = keyData end
     return keyData
 end
 
@@ -137,6 +144,10 @@ local function band_keyform_bindings(self, band_index)
     if band_index < 0 then
         return nil
     end
+    local cache = self._band_bindings_cache
+    local cached = cache and cache[band_index + 1]
+    if cached then return cached end
+
     local begin = self.band_begin_indices[band_index + 1]
     if begin == nil or begin < 0 then
         return nil
@@ -149,7 +160,64 @@ local function band_keyform_bindings(self, band_index)
     for i = 0, bandCount - 1 do
         bandData[#bandData + 1] = self.keyform_binding_indices[begin + i + 1]
     end
+    if cache then cache[band_index + 1] = bandData end
     return bandData
+end
+
+local function compute_axis_interval(keys, value)
+    local key_count = #keys
+    if key_count == 0 then return nil end
+    if value <= keys[1] then return 0, 0 end
+    local last_index = key_count - 1
+    if value >= keys[key_count] then return last_index, 0 end
+    for i = 0, last_index - 1 do
+        local left = keys[i + 1]
+        local right = keys[i + 2]
+        if left <= value and value <= right then
+            return i, (value - left) / (right - left)
+        end
+    end
+    return last_index, 0
+end
+
+local function band_metadata(self, band_index)
+    local cache = self._band_runtime_cache
+    local cached = cache and cache[band_index + 1]
+    if cached then return cached end
+
+    local bindings = band_keyform_bindings(self, band_index)
+    if not bindings or #bindings == 0 then return nil end
+
+    local meta = { axes = {}, values = nil, slots = nil }
+    local stride = 1
+    for _, binding_idx in ipairs(bindings) do
+        if binding_idx < 0 then return nil end
+        local keys = binding_keys(self, binding_idx)
+        if not keys then return nil end
+        local param_idx = self.binding_parameter_indices[binding_idx + 1]
+        if param_idx == nil then return nil end
+        meta.axes[#meta.axes + 1] = {
+            keys = keys,
+            param_index = param_idx,
+            stride = stride,
+        }
+        stride = stride * #keys
+        if not stride then return nil end
+    end
+
+    if cache then cache[band_index + 1] = meta end
+    return meta
+end
+
+local function cached_slots_valid(meta, parameter_values)
+    local cached_values = meta.values
+    if not cached_values then return false end
+    for i, axis in ipairs(meta.axes) do
+        if cached_values[i] ~= (parameter_values[axis.param_index + 1] or 0) then
+            return false
+        end
+    end
+    return true
 end
 
 function keyform_bindings.keyform_slots(self, band_index, keyform_count, parameter_values)
@@ -158,67 +226,76 @@ function keyform_bindings.keyform_slots(self, band_index, keyform_count, paramet
     end
 
     if keyform_count == 1 then
-        return { { local_index = 0, weight = 1.0 } }
+        return SINGLE_SLOT
     end
 
     if band_index < 0 then
-        return { { local_index = 0, weight = 1 } }
+        return SINGLE_SLOT
     end
 
-    local bindings = band_keyform_bindings(self, band_index)
-    if not bindings or #bindings == 0 then
-        return { { local_index = 0, weight = 1 } }
+    local meta = band_metadata(self, band_index)
+    if not meta or #meta.axes == 0 then
+        return SINGLE_SLOT
     end
 
-    local axes = {}
-    local stride = 1
-    for _, binding_idx in ipairs(bindings) do
-        if binding_idx < 0 then
-            return nil
-        end
-        local keys = binding_keys(self, binding_idx)
-        if not keys then
-            return nil
-        end
-        local param_idx = self.binding_parameter_indices[binding_idx + 1]
-        if param_idx == nil then
-            return nil
-        end
-        local param_value = parameter_values[param_idx + 1] or 0
-        local interval = keyforms_core.compute_keyform_axis_interval(keys, param_value)
-        if not interval then
-            return nil
-        end
-        local active_index = interval.left_index
-        if interval.t ~= 0 then
-            active_index = active_index + 1
-        end
-        if active_index >= #keys then
-            return nil
-        end
-        axes[#axes + 1] = keyforms_core.new_keyform_axis(
-            interval.left_index,
-            interval.t,
-            stride
-        )
-        stride = stride * #keys
-        if not stride then
-            return nil
-        end
+    if meta.keyform_count == keyform_count and cached_slots_valid(meta, parameter_values) then
+        return meta.slots
     end
 
-    local slots = keyforms_core.expand_keyform_runtime_slots(axes)
-    local result = {}
-    for _, slot in ipairs(slots) do
-        if slot.flat_index < keyform_count then
-            result[#result + 1] = {
-                local_index = slot.flat_index,
-                weight = slot.weight,
-            }
+    local axes = meta.axes
+    local values = meta.values or {}
+    local active_count = 0
+    for axis_index, axis in ipairs(axes) do
+        local param_value = parameter_values[axis.param_index + 1] or 0
+        values[axis_index] = param_value
+        local left_index, t = compute_axis_interval(axis.keys, param_value)
+        if left_index == nil then return nil end
+        local active_index = left_index
+        if t ~= 0 then active_index = active_index + 1 end
+        if active_index >= #axis.keys then return nil end
+        axis.left_index = left_index
+        axis.t = t
+        if t ~= 0 then active_count = active_count + 1 end
+    end
+
+    local slot_count = 1
+    for _ = 1, active_count do slot_count = slot_count * 2 end
+    local result = meta.slots or {}
+    for mask = 0, slot_count - 1 do
+        local flat_index = 0
+        local weight = 1
+        local bit = 1
+        for _, axis in ipairs(axes) do
+            local t = axis.t
+            if t == 0 then
+                flat_index = flat_index + axis.left_index * axis.stride
+            else
+                if math.floor(mask / bit) % 2 ~= 0 then
+                    flat_index = flat_index + (axis.left_index + 1) * axis.stride
+                    weight = weight * t
+                else
+                    flat_index = flat_index + axis.left_index * axis.stride
+                    weight = weight * (1 - t)
+                end
+                bit = bit * 2
+            end
+        end
+        if flat_index >= keyform_count then return nil end
+        local slot_index = mask + 1
+        local slot = result[slot_index]
+        if slot then
+            slot.local_index = flat_index
+            slot.weight = weight
         else
-            return nil -- All flat_indices must be < keyform_count
+            result[slot_index] = { local_index = flat_index, weight = weight }
         end
     end
+    for i = slot_count + 1, #result do
+        result[i] = nil
+    end
+    meta.keyform_count = keyform_count
+    meta.values = values
+    meta.slots = result
     return result
 end
 
