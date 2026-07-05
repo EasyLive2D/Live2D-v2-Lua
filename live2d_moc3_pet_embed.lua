@@ -43,7 +43,7 @@ local function new_projection(width, height, runtime, offset_x, offset_y, scale_
         model_width = math.max(math.abs((tonumber(canvas.width) or 0) / canvas.pixels_per_unit), 0.001)
         model_height = math.max(math.abs((tonumber(canvas.height) or 0) / canvas.pixels_per_unit), 0.001)
     end
-    local scale = math.min(width / model_width, height / model_height) * 0.82 * (tonumber(scale_override) or 1.0)
+    local scale = math.min(width / model_width, height / model_height) * (tonumber(scale_override) or 1.0)
     return ffi.new("float[16]", {
         scale * 2.0 / width, 0, 0, 0,
         0, scale * 2.0 / height, 0, 0,
