@@ -2,12 +2,11 @@
 -- Ported from Mocari src/moc3/mesh_build.rs
 
 local Vector2 = require("live2d.cubism3.core.math").Vector2
-local drawable = require("live2d.cubism3.moc3.drawable")
 local deformers_mod = require("live2d.cubism3.moc3.deformers")
 
-local new_vertex = drawable.new_vertex
-
 local mesh_build = {}
+local IDENTITY_MULTIPLY = { 1, 1, 1 }
+local ZERO_SCREEN = { 0, 0, 0 }
 
 local function static_drawable_mesh(art_meshes, art_mesh_index, vertex_count)
     local cache = art_meshes._static_drawable_meshes
@@ -52,30 +51,32 @@ local function clamp01(value)
 end
 
 local function combine_multiply_color(local_color, parent_color)
-    return {
-        clamp01((local_color[1] or 1) * (parent_color[1] or 1)),
-        clamp01((local_color[2] or 1) * (parent_color[2] or 1)),
-        clamp01((local_color[3] or 1) * (parent_color[3] or 1)),
-    }
+    local_color[1] = clamp01((local_color[1] or 1) * (parent_color[1] or 1))
+    local_color[2] = clamp01((local_color[2] or 1) * (parent_color[2] or 1))
+    local_color[3] = clamp01((local_color[3] or 1) * (parent_color[3] or 1))
+    return local_color
 end
 
 local function combine_screen_color(local_color, parent_color)
     local r = (local_color[1] or 0) + (parent_color[1] or 0) - (local_color[1] or 0) * (parent_color[1] or 0)
     local g = (local_color[2] or 0) + (parent_color[2] or 0) - (local_color[2] or 0) * (parent_color[2] or 0)
     local b = (local_color[3] or 0) + (parent_color[3] or 0) - (local_color[3] or 0) * (parent_color[3] or 0)
-    return { clamp01(r), clamp01(g), clamp01(b) }
+    local_color[1] = clamp01(r)
+    local_color[2] = clamp01(g)
+    local_color[3] = clamp01(b)
+    return local_color
 end
 
 local function parent_deformer_colors(composed, parent_index)
     if not composed or parent_index == nil or parent_index < 0 then
-        return { 1, 1, 1 }, { 0, 0, 0 }
+        return IDENTITY_MULTIPLY, ZERO_SCREEN
     end
     local def = composed[parent_index + 1]
-    if not def then return { 1, 1, 1 }, { 0, 0, 0 } end
-    return def.multiply_color or { 1, 1, 1 }, def.screen_color or { 0, 0, 0 }
+    if not def then return IDENTITY_MULTIPLY, ZERO_SCREEN end
+    return def.multiply_color or IDENTITY_MULTIPLY, def.screen_color or ZERO_SCREEN
 end
 
-local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, composed, bindings, parameter_values, art_mesh_index)
+local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, composed, bindings, parameter_values, art_mesh_index, out_mesh)
     local kfs = art_mesh_keyforms:art_mesh_keyforms(art_mesh_index)
     if not kfs then return nil end
     local band_index = art_meshes:art_mesh_keyform_binding_band_index(art_mesh_index)
@@ -117,8 +118,11 @@ local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, 
     end
 
     -- Interpolate colors
-    local multiply_color = { 0, 0, 0 }
-    local screen_color = { 0, 0, 0 }
+    out_mesh = out_mesh or {}
+    local multiply_color = out_mesh.multiply_color or { 0, 0, 0 }
+    local screen_color = out_mesh.screen_color or { 0, 0, 0 }
+    multiply_color[1], multiply_color[2], multiply_color[3] = 0, 0, 0
+    screen_color[1], screen_color[2], screen_color[3] = 0, 0, 0
     for _, slot in ipairs(slots) do
         local kfs_list = art_mesh_keyforms:art_mesh_keyforms(art_mesh_index)
         if kfs_list and kfs_list[slot.local_index + 1] then
@@ -146,8 +150,10 @@ local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, 
     local vertex_count = #first_kf / 2
     local static_mesh = static_drawable_mesh(art_meshes, art_mesh_index, vertex_count)
     if not static_mesh then return nil end
-    local positions_x = {}
-    local positions_y = {}
+    local positions_x = static_mesh.positions_x or {}
+    local positions_y = static_mesh.positions_y or {}
+    static_mesh.positions_x = positions_x
+    static_mesh.positions_y = positions_y
     for i = 1, vertex_count do
         positions_x[i] = 0
         positions_y[i] = 0
@@ -177,50 +183,60 @@ local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, 
     end
 
     -- Build final vertices: position from deformer, UV from cached static mesh, flip Y
-    local final_vertices = {}
+    local final_vertices = out_mesh.vertices or {}
     local uvs = static_mesh.uvs
     for i = 1, vertex_count do
         local uvIndex = (i - 1) * 2 + 1
-        final_vertices[i] = new_vertex(
-            { positions_x[i], -positions_y[i] },
-            { uvs[uvIndex], uvs[uvIndex + 1] }
-        )
+        local vertex = final_vertices[i]
+        if vertex then
+            local position = vertex.position
+            position[1] = positions_x[i]
+            position[2] = -positions_y[i]
+        else
+            vertex = {
+                position = { positions_x[i], -positions_y[i] },
+                uv = { uvs[uvIndex], uvs[uvIndex + 1] },
+            }
+            final_vertices[i] = vertex
+        end
     end
 
-    return {
-        texture_index = static_mesh.texture_index,
-        drawable_flags = static_mesh.drawable_flags,
-        opacity = opacity,
-        draw_order = draw_order,
-        render_order = static_mesh.render_order,
-        multiply_color = multiply_color,
-        screen_color = screen_color,
-        vertices = final_vertices,
-        indices = static_mesh.indices,
-        masks = static_mesh.masks,
-    }
+    out_mesh.texture_index = static_mesh.texture_index
+    out_mesh.drawable_flags = static_mesh.drawable_flags
+    out_mesh.opacity = opacity
+    out_mesh.draw_order = draw_order
+    out_mesh.render_order = static_mesh.render_order
+    out_mesh.multiply_color = multiply_color
+    out_mesh.screen_color = screen_color
+    out_mesh.vertices = final_vertices
+    out_mesh.indices = static_mesh.indices
+    out_mesh.masks = static_mesh.masks
+    return out_mesh
 end
 
-function mesh_build.build_moc3_drawable_meshes_with_parameters(art_meshes, art_mesh_keyforms, deformers, bindings, parameter_values)
+function mesh_build.build_moc3_drawable_meshes_with_parameters(art_meshes, art_mesh_keyforms, deformers, bindings, parameter_values, out_meshes)
     local composed = deformers:compose(bindings, parameter_values)
     if not composed then return nil end
 
-    local meshes = {}
+    local meshes = out_meshes or {}
     local mesh_count = #art_meshes.meshes
     for i = 0, mesh_count - 1 do
         local m = build_moc3_drawable_mesh_for_pose(
-            art_meshes, art_mesh_keyforms, composed, bindings, parameter_values, i
+            art_meshes, art_mesh_keyforms, composed, bindings, parameter_values, i, meshes[i + 1]
         )
         if not m then return nil end
-        meshes[#meshes + 1] = m
+        meshes[i + 1] = m
+    end
+    for i = mesh_count + 1, #meshes do
+        meshes[i] = nil
     end
     return meshes
 end
 
 function mesh_build.build_moc3_drawable_meshes_with_parameters_offscreen_and_part_opacities(
-    art_meshes, art_mesh_keyforms, deformers, bindings, ids, offscreen, parameter_values, drawable_part_opacities)
+    art_meshes, art_mesh_keyforms, deformers, bindings, ids, offscreen, parameter_values, drawable_part_opacities, out_meshes)
     local meshes = mesh_build.build_moc3_drawable_meshes_with_parameters(
-        art_meshes, art_mesh_keyforms, deformers, bindings, parameter_values
+        art_meshes, art_mesh_keyforms, deformers, bindings, parameter_values, out_meshes
     )
     if not meshes then return nil end
 

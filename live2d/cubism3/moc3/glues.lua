@@ -5,8 +5,6 @@ local header = require("live2d.cubism3.moc3.header")
 local offsets = require("live2d.cubism3.moc3.offsets")
 local counts = require("live2d.cubism3.moc3.counts")
 local parse = require("live2d.cubism3.moc3.parse")
-local Vector2 = require("live2d.cubism3.core.math").Vector2
-local affect_art_mesh_pair = require("live2d.cubism3.core.art_mesh").affect_art_mesh_pair
 
 local glues = {}
 
@@ -134,17 +132,6 @@ function glues:is_empty()
     return #self.binding_indices == 0
 end
 
-local function vertex_position(vertex)
-    return Vector2.new(vertex.position[1], vertex.position[2])
-end
-
-local function vertex_with_position(vertex, position)
-    return {
-        position = { position:x(), position:y() },
-        uv = vertex.uv,
-    }
-end
-
 local function mesh_pair(meshes, mesh_a_index, mesh_b_index)
     if mesh_a_index == mesh_b_index then return nil end
     local mesh_a = meshes[mesh_a_index + 1]
@@ -153,26 +140,31 @@ local function mesh_pair(meshes, mesh_a_index, mesh_b_index)
     return mesh_a, mesh_b
 end
 
-local function apply_glue_to_mesh_pair(meshes, mesh_a_index, mesh_b_index, weights, position_indices, intensity)
+local function apply_glue_to_mesh_pair(meshes, mesh_a_index, mesh_b_index, weights, position_indices, info_begin, info_count, intensity)
     local mesh_a, mesh_b = mesh_pair(meshes, mesh_a_index, mesh_b_index)
     if not mesh_a then return nil end
 
-    for pair = 1, #position_indices, 2 do
-        local index_a = position_indices[pair]
-        local index_b = position_indices[pair + 1]
+    for offset = 0, info_count - 1, 2 do
+        local source_a = info_begin + offset + 1
+        local source_b = source_a + 1
+        local index_a = position_indices[source_a]
+        local index_b = position_indices[source_b]
         local vertex_a = mesh_a.vertices[index_a + 1]
         local vertex_b = mesh_b.vertices[index_b + 1]
         if not vertex_a or not vertex_b then return nil end
 
-        local position_a, position_b = affect_art_mesh_pair(
-            vertex_position(vertex_a),
-            vertex_position(vertex_b),
-            weights[pair],
-            weights[pair + 1],
-            intensity
-        )
-        mesh_a.vertices[index_a + 1] = vertex_with_position(vertex_a, position_a)
-        mesh_b.vertices[index_b + 1] = vertex_with_position(vertex_b, position_b)
+        local position_a = vertex_a.position
+        local position_b = vertex_b.position
+        local ax, ay = position_a[1], position_a[2]
+        local bx, by = position_b[1], position_b[2]
+        local weight_a = weights[source_a]
+        local weight_b = weights[source_b]
+        if weight_a == nil or weight_b == nil then return nil end
+
+        position_a[1] = ax + (bx - ax) * weight_a * intensity
+        position_a[2] = ay + (by - ay) * weight_a * intensity
+        position_b[1] = bx + (ax - bx) * weight_b * intensity
+        position_b[2] = by + (ay - by) * weight_b * intensity
     end
 
     return true
@@ -212,16 +204,16 @@ function glues:apply(meshes, bindings, parameter_values)
             local info_begin = self.info_begin_indices[index]
             if info_begin == nil or info_begin < 0 then return nil end
 
-            local weights = {}
-            local position_indices = {}
-            for offset = 0, info_count - 1 do
-                local source_index = info_begin + offset + 1
-                weights[#weights + 1] = self.info_weights[source_index]
-                position_indices[#position_indices + 1] = self.info_position_indices[source_index]
-                if weights[#weights] == nil or position_indices[#position_indices] == nil then return nil end
-            end
-
-            if not apply_glue_to_mesh_pair(meshes, mesh_a, mesh_b, weights, position_indices, intensity) then
+            if not apply_glue_to_mesh_pair(
+                meshes,
+                mesh_a,
+                mesh_b,
+                self.info_weights,
+                self.info_position_indices,
+                info_begin,
+                info_count,
+                intensity
+            ) then
                 return nil
             end
         end

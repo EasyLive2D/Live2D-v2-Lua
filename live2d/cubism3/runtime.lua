@@ -125,6 +125,10 @@ function ModelRuntime.new(model, canvas, art_meshes, art_mesh_keyforms, deformer
         pose_fade_time = pose_fade_time,
         pose_opacities = pose_opacities,
         meshes = {},
+        _drawable_part_opacities = {},
+        _drawable_draw_orders = {},
+        _part_draw_orders = {},
+        _part_enable = {},
     }, ModelRuntime)
 
     local ok = self:update_meshes()
@@ -414,8 +418,8 @@ function ModelRuntime:update_part_opacities()
     end
 end
 
-function ModelRuntime:drawable_part_opacities()
-    local result = {}
+function ModelRuntime:drawable_part_opacities(out)
+    local result = out or {}
     local mesh_count = #self.art_meshes.meshes
     for i = 0, mesh_count - 1 do
         local part_idx = self.offscreen:drawable_parent_part_index(i)
@@ -423,14 +427,17 @@ function ModelRuntime:drawable_part_opacities()
         if part_idx and part_idx >= 0 then
             opacity = self.part_opacities[part_idx + 1] or 1.0
         end
-        result[#result + 1] = opacity
+        result[i + 1] = opacity
+    end
+    for i = mesh_count + 1, #result do
+        result[i] = nil
     end
     return result
 end
 
 function ModelRuntime:update_meshes()
     self:update_part_opacities()
-    local drawable_part_opacities = self:drawable_part_opacities()
+    local drawable_part_opacities = self:drawable_part_opacities(self._drawable_part_opacities)
     local meshes = moc3.mesh_build.build_moc3_drawable_meshes_with_parameters_offscreen_and_part_opacities(
         self.art_meshes,
         self.art_mesh_keyforms,
@@ -439,7 +446,8 @@ function ModelRuntime:update_meshes()
         self.ids,
         self.offscreen,
         self.parameter_values,
-        drawable_part_opacities
+        drawable_part_opacities,
+        self.meshes
     )
     if not meshes then
         return nil
@@ -456,14 +464,17 @@ function ModelRuntime:apply_group_render_orders()
     local groups = self.draw_order_groups
     if not groups then return end
 
-    local drawable_draw_orders = {}
+    local drawable_draw_orders = self._drawable_draw_orders
     for i, mesh in ipairs(self.meshes) do
         drawable_draw_orders[i] = draw_order_from_raw(mesh.draw_order)
     end
+    for i = #self.meshes + 1, #drawable_draw_orders do
+        drawable_draw_orders[i] = nil
+    end
 
     local part_count = self.parts:part_count()
-    local part_draw_orders = {}
-    local part_enable = {}
+    local part_draw_orders = self._part_draw_orders
+    local part_enable = self._part_enable
     for index = 0, part_count - 1 do
         local raw = self.parts:interpolate_draw_order(index, self.bindings, self.parameter_values)
         if raw ~= nil then
@@ -473,6 +484,10 @@ function ModelRuntime:apply_group_render_orders()
             part_draw_orders[index + 1] = 0
             part_enable[index + 1] = false
         end
+    end
+    for i = part_count + 1, #part_draw_orders do
+        part_draw_orders[i] = nil
+        part_enable[i] = nil
     end
 
     local render_orders = groups:render_orders(
