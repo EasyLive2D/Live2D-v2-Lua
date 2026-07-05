@@ -9,6 +9,42 @@ local new_vertex = drawable.new_vertex
 
 local mesh_build = {}
 
+local function static_drawable_mesh(art_meshes, art_mesh_index, vertex_count)
+    local cache = art_meshes._static_drawable_meshes
+    if not cache then
+        cache = {}
+        art_meshes._static_drawable_meshes = cache
+    end
+
+    local cached = cache[art_mesh_index + 1]
+    if cached then return cached end
+
+    local mesh = art_meshes.meshes[art_mesh_index + 1]
+    if not mesh then return nil end
+
+    local uvs = art_meshes:art_mesh_uvs(art_mesh_index)
+    if not uvs or #uvs ~= vertex_count * 2 then return nil end
+
+    local indices = art_meshes:art_mesh_position_indices(art_mesh_index)
+    if not indices then return nil end
+    for _, pi in ipairs(indices) do
+        if pi < 0 or pi >= vertex_count then
+            return nil
+        end
+    end
+
+    cached = {
+        texture_index = mesh.texture_index,
+        drawable_flags = mesh.drawable_flags,
+        render_order = art_meshes:art_mesh_render_order(art_mesh_index) or art_mesh_index,
+        uvs = uvs,
+        indices = indices,
+        masks = art_meshes:art_mesh_masks(art_mesh_index) or {},
+    }
+    cache[art_mesh_index + 1] = cached
+    return cached
+end
+
 local function clamp01(value)
     if value < 0 then return 0 end
     if value > 1 then return 1 end
@@ -46,10 +82,6 @@ local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, 
     if band_index == nil then return nil end
     local slots = bindings:keyform_slots(band_index, #kfs, parameter_values)
     if not slots or #slots == 0 then return nil end
-
-    local base_local_index = slots[1].local_index
-    local mesh = drawable.build_moc3_drawable_mesh(art_meshes, art_mesh_keyforms, art_mesh_index, base_local_index)
-    if not mesh then return nil end
 
     local parent_deformer_index = art_meshes:art_mesh_keyform_binding_band_index(art_mesh_index) or -1
     -- Actually parent_deformer_index comes from art_meshes
@@ -112,6 +144,8 @@ local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, 
     local first_kf = art_mesh_keyforms:art_mesh_keyform_positions(art_mesh_index, slots[1].local_index)
     if not first_kf or #first_kf % 2 ~= 0 then return nil end
     local vertex_count = #first_kf / 2
+    local static_mesh = static_drawable_mesh(art_meshes, art_mesh_index, vertex_count)
+    if not static_mesh then return nil end
     local positions_x = {}
     local positions_y = {}
     for i = 1, vertex_count do
@@ -142,27 +176,28 @@ local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, 
         end
     end
 
-    -- Build final vertices: position from deformer, UV from base mesh, flip Y
+    -- Build final vertices: position from deformer, UV from cached static mesh, flip Y
     local final_vertices = {}
-    for i = 1, #mesh.vertices do
-        local vertex = mesh.vertices[i]
+    local uvs = static_mesh.uvs
+    for i = 1, vertex_count do
+        local uvIndex = (i - 1) * 2 + 1
         final_vertices[i] = new_vertex(
             { positions_x[i], -positions_y[i] },
-            vertex.uv
+            { uvs[uvIndex], uvs[uvIndex + 1] }
         )
     end
 
     return {
-        texture_index = mesh.texture_index,
-        drawable_flags = mesh.drawable_flags,
+        texture_index = static_mesh.texture_index,
+        drawable_flags = static_mesh.drawable_flags,
         opacity = opacity,
         draw_order = draw_order,
-        render_order = mesh.render_order,
+        render_order = static_mesh.render_order,
         multiply_color = multiply_color,
         screen_color = screen_color,
         vertices = final_vertices,
-        indices = mesh.indices,
-        masks = mesh.masks,
+        indices = static_mesh.indices,
+        masks = static_mesh.masks,
     }
 end
 

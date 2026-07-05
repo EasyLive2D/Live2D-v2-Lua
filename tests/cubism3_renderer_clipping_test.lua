@@ -60,6 +60,14 @@ local function has_call(calls, name, predicate)
     return false
 end
 
+local function count_calls(calls, name)
+    local count = 0
+    for _, call in ipairs(calls) do
+        if call.name == name then count = count + 1 end
+    end
+    return count
+end
+
 local function mesh(masks)
     return {
         texture_index = 0,
@@ -166,7 +174,9 @@ local projection = ffi.new("float[16]", {
     0, 0, 0, 1,
 })
 
-renderer:render_meshes({ mesh({}), mesh({ 0 }) }, nil, projection)
+local zero_opacity_mask = mesh({})
+zero_opacity_mask.opacity = 0.0
+renderer:render_meshes({ zero_opacity_mask, mesh({ 0 }) }, nil, projection)
 
 check("normal blend uses premultiplied alpha",
     has_call(gl.calls, "glBlendFuncSeparate", function(args)
@@ -205,6 +215,9 @@ check("masked drawable tests stencil equality",
     has_call(gl.calls, "glStencilFunc", function(args) return args[1] == 0x0202 end))
 check("stencil is disabled after masked draw",
     has_call(gl.calls, "glDisable", function(args) return args[1] == 0x0B90 end))
+check("zero-opacity masks still draw into stencil",
+    zero_opacity_mask.opacity == 0.0 and count_calls(gl.calls, "glDrawElements") >= 2,
+    "mask opacity should be restored after stencil draw")
 
 local order_gl = new_fake_gl()
 local order_renderer = setmetatable({

@@ -130,8 +130,67 @@ function OpenGLRenderer.new(gl, opts)
     self.vertex_capacity = 0
     self.index_data = nil
     self.index_capacity = 0
+    self._drawing = false
+    self._enabled_attribs = {}
+    self._last_blend = nil
+    self._last_texture = nil
     self:init_shader()
     return self
+end
+
+function OpenGLRenderer:begin_render(projection)
+    local gl = self.gl
+    gl.glUseProgram(self.shader)
+    gl.glUniformMatrix4fv(self.u_projection, 1, 0, projection)
+    gl.glActiveTexture(0x84C0) -- GL_TEXTURE0
+    gl.glUniform1i(self.u_texture, 0)
+    self._drawing = true
+    self._enabled_attribs = self._enabled_attribs or {}
+    self._last_blend = nil
+    self._last_texture = nil
+end
+
+function OpenGLRenderer:end_render()
+    local gl = self.gl
+    local enabled = self._enabled_attribs or {}
+    for attrib in pairs(enabled) do
+        gl.glDisableVertexAttribArray(attrib)
+        enabled[attrib] = nil
+    end
+    self._drawing = false
+end
+
+function OpenGLRenderer:use_blend(blend)
+    if self._last_blend == blend then return end
+    local gl = self.gl
+    if blend == "normal" then
+        set_blend_func(gl, GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA)
+        gl.glBlendEquationSeparate(0x8006, 0x8006) -- GL_FUNC_ADD
+    elseif blend == "additive" then
+        set_blend_func(gl, GL_ONE, GL_ONE, GL_ZERO, GL_ONE)
+        gl.glBlendEquationSeparate(0x8006, 0x8006) -- GL_FUNC_ADD
+    elseif blend == "multiplicative" then
+        set_blend_func(gl, GL_DST_COLOR, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE)
+        gl.glBlendEquationSeparate(0x8006, 0x8006) -- GL_FUNC_ADD
+    end
+    self._last_blend = blend
+end
+
+function OpenGLRenderer:bind_texture(tex_id)
+    if self._last_texture == tex_id then return end
+    self.gl.glBindTexture(0x0DE1, tex_id)
+    self._last_texture = tex_id
+end
+
+function OpenGLRenderer:enable_attrib(attrib)
+    if attrib < 0 then return false end
+    local enabled = self._enabled_attribs or {}
+    if not enabled[attrib] then
+        self.gl.glEnableVertexAttribArray(attrib)
+        enabled[attrib] = true
+        self._enabled_attribs = enabled
+    end
+    return true
 end
 
 function OpenGLRenderer:init_shader()
@@ -312,8 +371,7 @@ end
 
 function OpenGLRenderer:render_meshes(meshes, textures, projection)
     local gl = self.gl
-
-    gl.glUseProgram(self.shader)
+    self:begin_render(projection)
 
     -- Calculate draw order
     local draw_order_indices = self.draw_order_indices
@@ -345,6 +403,7 @@ function OpenGLRenderer:render_meshes(meshes, textures, projection)
             end
         end
     end
+    self:end_render()
 end
 
 function OpenGLRenderer:draw_clipped_mesh(mesh, meshes, textures, projection)
@@ -364,8 +423,11 @@ function OpenGLRenderer:draw_clipped_mesh(mesh, meshes, textures, projection)
 
     for _, mask_idx in ipairs(mesh.masks) do
         local mask_mesh = meshes[mask_idx + 1]
-        if mask_mesh and mask_mesh.opacity > 0.001 then
+        if mask_mesh and #mask_mesh.vertices > 0 and #mask_mesh.indices > 0 then
+            local old_opacity = mask_mesh.opacity
+            mask_mesh.opacity = 1.0
             self:draw_mesh(mask_mesh, textures, projection)
+            mask_mesh.opacity = old_opacity
         end
     end
 
@@ -385,9 +447,15 @@ end
 
 function OpenGLRenderer:draw_mesh(mesh, textures, projection)
     local gl = self.gl
+    local standalone = not self._drawing
+    if standalone then
+        self:begin_render(projection)
+    end
+
     local vertices = mesh.vertices
     local indices = mesh.indices
     if #vertices == 0 or #indices == 0 then
+        if standalone then self:end_render() end
         return
     end
 
@@ -436,18 +504,7 @@ function OpenGLRenderer:draw_mesh(mesh, textures, projection)
         tex_id = self:ensure_texture(tex_path, tex_idx)
     end
 
-    -- Set blend mode
-    local blend = drawable.blend_mode_from_flags(mesh.drawable_flags)
-    if blend == "normal" then
-        set_blend_func(gl, GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA)
-        gl.glBlendEquationSeparate(0x8006, 0x8006) -- GL_FUNC_ADD
-    elseif blend == "additive" then
-        set_blend_func(gl, GL_ONE, GL_ONE, GL_ZERO, GL_ONE)
-        gl.glBlendEquationSeparate(0x8006, 0x8006) -- GL_FUNC_ADD
-    elseif blend == "multiplicative" then
-        set_blend_func(gl, GL_DST_COLOR, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE)
-        gl.glBlendEquationSeparate(0x8006, 0x8006) -- GL_FUNC_ADD
-    end
+    self:use_blend(drawable.blend_mode_from_flags(mesh.drawable_flags))
 
     -- Upload geometry
     gl.glBindBuffer(0x8892, self.vbo) -- GL_ARRAY_BUFFER
@@ -473,44 +530,29 @@ function OpenGLRenderer:draw_mesh(mesh, textures, projection)
     local a_multiply = self.a_multiply
     local a_screen = self.a_screen
 
-    if a_pos >= 0 then
-        gl.glEnableVertexAttribArray(a_pos)
+    if self:enable_attrib(a_pos) then
         gl.glVertexAttribPointer(a_pos, 2, 0x1406, 0, stride, ffi.cast("void*", ffi.cast("intptr_t", 0)))
     end
-    if a_uv >= 0 then
-        gl.glEnableVertexAttribArray(a_uv)
+    if self:enable_attrib(a_uv) then
         gl.glVertexAttribPointer(a_uv, 2, 0x1406, 0, stride, ffi.cast("void*", ffi.cast("intptr_t", 8)))
     end
-    if a_opacity >= 0 then
-        gl.glEnableVertexAttribArray(a_opacity)
+    if self:enable_attrib(a_opacity) then
         gl.glVertexAttribPointer(a_opacity, 1, 0x1406, 0, stride, ffi.cast("void*", ffi.cast("intptr_t", 16)))
     end
-    if a_multiply >= 0 then
-        gl.glEnableVertexAttribArray(a_multiply)
+    if self:enable_attrib(a_multiply) then
         gl.glVertexAttribPointer(a_multiply, 3, 0x1406, 0, stride, ffi.cast("void*", ffi.cast("intptr_t", 20)))
     end
-    if a_screen >= 0 then
-        gl.glEnableVertexAttribArray(a_screen)
+    if self:enable_attrib(a_screen) then
         gl.glVertexAttribPointer(a_screen, 3, 0x1406, 0, stride, ffi.cast("void*", ffi.cast("intptr_t", 32)))
     end
 
-    -- Set projection matrix
-    gl.glUniformMatrix4fv(self.u_projection, 1, 0, projection)
-
     -- Bind texture
-    gl.glActiveTexture(0x84C0) -- GL_TEXTURE0
-    gl.glBindTexture(0x0DE1, tex_id)
-    gl.glUniform1i(self.u_texture, 0)
+    self:bind_texture(tex_id)
 
     -- Draw
     gl.glDrawElements(0x0004, index_count, 0x1403, nil) -- GL_TRIANGLES, GL_UNSIGNED_SHORT
 
-    -- Disable attributes
-    if a_pos >= 0 then gl.glDisableVertexAttribArray(a_pos) end
-    if a_uv >= 0 then gl.glDisableVertexAttribArray(a_uv) end
-    if a_opacity >= 0 then gl.glDisableVertexAttribArray(a_opacity) end
-    if a_multiply >= 0 then gl.glDisableVertexAttribArray(a_multiply) end
-    if a_screen >= 0 then gl.glDisableVertexAttribArray(a_screen) end
+    if standalone then self:end_render() end
 end
 
 function OpenGLRenderer:destroy()
