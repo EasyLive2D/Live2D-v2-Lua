@@ -40,7 +40,7 @@ function motion3.parameter_curve_fade_weight(motion_weight, motion_fade_in, moti
     end
 
     if curve_fade_in_seconds == nil and curve_fade_out_seconds == nil then
-        return motion_weight
+        return motion_weight * motion_fade_in * motion_fade_out
     end
 
     local fade_in

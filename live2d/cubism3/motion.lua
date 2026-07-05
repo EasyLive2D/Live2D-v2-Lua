@@ -56,8 +56,12 @@ end
 function MotionPlayer:apply(runtime)
     local duration = self.motion.meta.Duration or 0
     local end_time = self:should_loop() and -1.0 or duration
-    local fade_in = motion3.motion_fade_in_weight(self.time, 0, 0)
-    local fade_out = motion3.motion_fade_out_weight(self.time, end_time, 0)
+    local fade_in_seconds = tonumber(self.motion.meta.FadeInTime) or 0
+    local fade_out_seconds = tonumber(self.motion.meta.FadeOutTime) or 0
+    if fade_in_seconds < 0 then fade_in_seconds = 0 end
+    if fade_out_seconds < 0 then fade_out_seconds = 0 end
+    local fade_in = motion3.motion_fade_in_weight(self.time, 0, fade_in_seconds)
+    local fade_out = motion3.motion_fade_out_weight(self.time, end_time, fade_out_seconds)
 
     for _, curve in ipairs(self.motion.curves) do
         local sampled = curve:sample(self.time)
