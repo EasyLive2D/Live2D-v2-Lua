@@ -27,6 +27,8 @@ local MotionPlayer = require("live2d.cubism3.motion")
 local OpenGLRenderer = require("live2d.cubism3.opengl_renderer")
 local pose3 = require("live2d.cubism3.json.pose3")
 local motion3 = require("live2d.cubism3.json.motion3")
+local expression_runtime = require("live2d.cubism3.expression")
+local DemoSelector = require("live2d.cubism3.demo_selector")
 
 -- Enable blending
 gl.glEnable(0x0BE2) -- GL_BLEND
@@ -132,7 +134,7 @@ print("Loading motions...")
 local motions = {}
 local motion_groups = model_data.file_references.motions
 for group_name, refs in pairs(motion_groups) do
-    for _, ref in ipairs(refs) do
+    for motion_no, ref in ipairs(refs) do
         local motion_path = base .. ref.File
         local ok, mf = pcall(io.open, motion_path, "r")
         if ok and mf then
@@ -141,13 +143,40 @@ for group_name, refs in pairs(motion_groups) do
             local motion_data, err = motion3.parse(motion_json)
             if motion_data then
                 local player = MotionPlayer.new(motion_data)
-                table.insert(motions, { name = group_name, player = player })
+                table.insert(motions, {
+                    name = group_name,
+                    file = ref.File,
+                    label = string.format("%s #%d", group_name, motion_no),
+                    player = player,
+                })
                 print("  Motion: " .. group_name .. " - " .. ref.File)
             else
                 print("  Motion parse warning: " .. tostring(err))
             end
         end
     end
+end
+
+-- Load expressions
+print("Loading expressions...")
+local expressions = {}
+for _, ref in ipairs(model_data.file_references.expressions or {}) do
+    local expression_path = base .. ref.File
+    local expression_data, err = expression_runtime.load_expression(expression_path)
+    if expression_data then
+        table.insert(expressions, {
+            name = ref.Name,
+            file = ref.File,
+            label = ref.Name or ref.File,
+            expression = expression_data,
+        })
+        print("  Expression: " .. (ref.Name or ref.File))
+    else
+        print("  Expression parse warning: " .. tostring(err))
+    end
+end
+if #expressions == 0 then
+    print("  No expressions")
 end
 
 -- Create renderer
@@ -192,21 +221,34 @@ print("\n=== Starting render loop ===")
 local running = true
 local frameCount = 0
 local targetFrameMs = 1000 / 60
-local motionIndex = 1
+local motionIndex = 0
 local currentMotion = nil
 local lastTime = sdl2.getTicks()
+local expressionManager = expression_runtime.ExpressionManager.new()
+local selector = DemoSelector.new({ motions = motions, expressions = expressions })
 
 local function isInsideWindow(x, y)
     return x >= 0 and x < W and y >= 0 and y < H
 end
 
-local function playNextMotion()
-    if #motions == 0 then return end
-    motionIndex = motionIndex % #motions + 1
-    local motionData = motions[motionIndex]
+local function playMotion(motionData, selectedIndex)
+    if motionData == nil then return end
+    motionIndex = selectedIndex or motionIndex
     currentMotion = motionData.player
     currentMotion:restart()
-    print("Motion: " .. motionData.name)
+    print("Motion: " .. (motionData.label or motionData.name))
+end
+
+local function playNextMotion()
+    if #motions == 0 then return end
+    local motionData, selectedIndex = selector:select_next_motion()
+    playMotion(motionData, selectedIndex)
+end
+
+local function playExpression(expressionData)
+    if expressionData == nil then return end
+    expressionManager:play(expressionData.expression)
+    print("Expression: " .. (expressionData.label or expressionData.name or expressionData.file))
 end
 
 -- Event loop
@@ -228,7 +270,10 @@ while running do
             local x = tonumber(event.button.x) or -1
             local y = tonumber(event.button.y) or -1
             if tonumber(event.button.button) == 1 and isInsideWindow(x, y) then
-                playNextMotion()
+                local hit = selector:handle_click(x, y, playMotion, playExpression)
+                if hit == nil then
+                    playNextMotion()
+                end
             end
         elseif etype == sdl2.SDL_WINDOWEVENT then
             if tonumber(event.window.event) == sdl2.SDL_WINDOWEVENT_SIZE_CHANGED then
@@ -249,6 +294,9 @@ while running do
         end
     end
 
+    expressionManager:tick(delta)
+    expressionManager:apply(runtime)
+
     -- Apply pose
     runtime:apply_pose(delta)
 
@@ -261,6 +309,7 @@ while running do
     gl.glClear(0x4000) -- GL_COLOR_BUFFER_BIT
 
     renderer:render_meshes(runtime.meshes, textures, proj)
+    selector:draw(gl, W, H)
 
     sdl2.swapWindow(win)
     frameCount = frameCount + 1

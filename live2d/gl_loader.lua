@@ -79,6 +79,15 @@ ffi.cdef[[
     void glReadPixels(GLint x, GLint y, GLsizei width, GLsizei height, GLenum format, GLenum type, void *pixels);
     void glDrawArrays(GLenum mode, GLint first, GLsizei count);
     void glBlendFunc(GLenum sfactor, GLenum dfactor);
+    void glBegin(GLenum mode);
+    void glEnd(void);
+    void glVertex2f(GLfloat x, GLfloat y);
+    void glColor4f(GLfloat red, GLfloat green, GLfloat blue, GLfloat alpha);
+    void glMatrixMode(GLenum mode);
+    void glPushMatrix(void);
+    void glPopMatrix(void);
+    void glLoadIdentity(void);
+    void glOrtho(GLdouble left, GLdouble right, GLdouble bottom, GLdouble top, GLdouble near_val, GLdouble far_val);
 ]]
 
 -- Platform-specific extension loader declaration. macOS exposes every GL 2.1
