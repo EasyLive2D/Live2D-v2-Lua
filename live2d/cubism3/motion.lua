@@ -6,11 +6,12 @@ local motion3 = require("live2d.cubism3.json.motion3")
 local MotionPlayer = {}
 MotionPlayer.__index = MotionPlayer
 
-function MotionPlayer.new(motion)
+function MotionPlayer.new(motion, loop)
     return setmetatable({
         motion = motion,
         time = 0.0,
         weight = 1.0,
+        loop = loop,
         finished = false,
     }, MotionPlayer)
 end
@@ -28,6 +29,11 @@ function MotionPlayer:restart()
     self.finished = false
 end
 
+function MotionPlayer:should_loop()
+    if self.loop ~= nil then return self.loop end
+    return self.motion.meta.Loop
+end
+
 function MotionPlayer:tick(delta_seconds)
     if self.finished then
         return
@@ -39,7 +45,7 @@ function MotionPlayer:tick(delta_seconds)
         return
     end
 
-    if self.motion.meta.Loop then
+    if self:should_loop() then
         self.time = self.time % duration
     elseif self.time >= duration then
         self.time = duration
@@ -49,7 +55,7 @@ end
 
 function MotionPlayer:apply(runtime)
     local duration = self.motion.meta.Duration or 0
-    local end_time = self.motion.meta.Loop and -1.0 or duration
+    local end_time = self:should_loop() and -1.0 or duration
     local fade_in = motion3.motion_fade_in_weight(self.time, 0, 0)
     local fade_out = motion3.motion_fade_out_weight(self.time, end_time, 0)
 

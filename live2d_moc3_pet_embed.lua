@@ -190,12 +190,12 @@ function Renderer:model_info()
     return info
 end
 
-function Renderer:start_motion(name, no, priority)
+function Renderer:start_motion(name, no, priority, loop)
     if self.renderer == nil then return self end
     if tonumber(priority) and tonumber(priority) >= 3 then
         self.renderer:clear_motions()
     end
-    pcall(function() self.renderer:start_motion(tostring(name), tonumber(no) or 0, 1.0) end)
+    pcall(function() self.renderer:start_motion(tostring(name), tonumber(no) or 0, 1.0, loop) end)
     return self
 end
 

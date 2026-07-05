@@ -356,8 +356,8 @@ function Renderer:load_motion(group, no)
     return self.motion_cache[motion_path]
 end
 
-function Renderer:start_motion(group, no, weight)
-    local player = MotionPlayer.new(self:load_motion(group, no))
+function Renderer:start_motion(group, no, weight, loop)
+    local player = MotionPlayer.new(self:load_motion(group, no), loop)
     if weight ~= nil then player:set_weight(tonumber(weight) or 1.0) end
     self.active_motions[#self.active_motions + 1] = player
     return self
@@ -516,9 +516,9 @@ function M.set_parameter(param_id, value)
     return current_renderer:set_parameter(param_id, value)
 end
 
-function M.start_motion(group, no, weight)
+function M.start_motion(group, no, weight, loop)
     if current_renderer == nil then error("no current renderer", 2) end
-    return current_renderer:start_motion(group, no, weight)
+    return current_renderer:start_motion(group, no, weight, loop)
 end
 
 function M.clear_motions()
