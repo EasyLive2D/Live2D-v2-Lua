@@ -15,6 +15,7 @@ local ART_MESH_KEYFORM_OPACITIES_SLOT = 68
 local ART_MESH_KEYFORM_DRAW_ORDERS_SLOT = 69
 local KEYFORM_POSITION_BEGIN_INDICES_SLOT = 70
 local KEYFORM_POSITION_XYS_SLOT = 71
+local ART_MESH_KEYFORM_COLOR_BEGIN_INDICES_SLOT = 107
 local KEYFORM_MULTIPLY_COLOR_SLOTS = { 108, 109, 110 }
 local KEYFORM_SCREEN_COLOR_SLOTS = { 111, 112, 113 }
 
@@ -70,24 +71,31 @@ function keyforms.parse(bytes)
     local pos_xys, err = parse.read_f32_section(bytes, offs, KEYFORM_POSITION_XYS_SLOT, kf_pos_count)
     if not pos_xys then return nil, err end
 
+    local color_begin_indices, err = parse.read_i32_section_or_default(
+        bytes, offs, ART_MESH_KEYFORM_COLOR_BEGIN_INDICES_SLOT, art_mesh_count, -1
+    )
+    if not color_begin_indices then return nil, err end
+
     -- Read color channels (optional, default 1.0 for multiply, 0.0 for screen)
-    local function read_color_channels(slots, default_val)
+    local function read_color_channels(slots, count, default_val)
         local r = {}
         local g = {}
         local b = {}
         local rv, gv, bv
-        rv, err = parse.read_f32_section_or_default(bytes, offs, slots[1], art_mesh_kf_count, default_val)
+        rv, err = parse.read_f32_section_or_default(bytes, offs, slots[1], count, default_val)
         if not rv then return nil, err end
-        gv, err = parse.read_f32_section_or_default(bytes, offs, slots[2], art_mesh_kf_count, default_val)
+        gv, err = parse.read_f32_section_or_default(bytes, offs, slots[2], count, default_val)
         if not gv then return nil, err end
-        bv, err = parse.read_f32_section_or_default(bytes, offs, slots[3], art_mesh_kf_count, default_val)
+        bv, err = parse.read_f32_section_or_default(bytes, offs, slots[3], count, default_val)
         if not bv then return nil, err end
         return rv, gv, bv
     end
 
-    local mult_r, mult_g, mult_b, err = read_color_channels(KEYFORM_MULTIPLY_COLOR_SLOTS, 1)
+    local multiply_color_count = cnts.keyform_multiply_colors or 0
+    local screen_color_count = cnts.keyform_screen_colors or 0
+    local mult_r, mult_g, mult_b, err = read_color_channels(KEYFORM_MULTIPLY_COLOR_SLOTS, multiply_color_count, 1)
     if not mult_r then return nil, err end
-    local scr_r, scr_g, scr_b, err = read_color_channels(KEYFORM_SCREEN_COLOR_SLOTS, 0)
+    local scr_r, scr_g, scr_b, err = read_color_channels(KEYFORM_SCREEN_COLOR_SLOTS, screen_color_count, 0)
     if not scr_r then return nil, err end
 
     local kfs = {}
@@ -96,9 +104,35 @@ function keyforms.parse(bytes)
             opacities[i + 1],
             draw_orders[i + 1],
             pos_begin[i + 1],
-            { mult_r[i + 1], mult_g[i + 1], mult_b[i + 1] },
-            { scr_r[i + 1], scr_g[i + 1], scr_b[i + 1] }
+            { 1, 1, 1 },
+            { 0, 0, 0 }
         )
+    end
+
+    for mesh_index = 0, art_mesh_count - 1 do
+        local keyform_begin = kf_begin_indices[mesh_index + 1]
+        local keyform_count = kf_counts[mesh_index + 1]
+        local color_begin = color_begin_indices[mesh_index + 1]
+        if keyform_begin == nil or keyform_begin < 0 then return nil, "art mesh keyform begin index is negative" end
+        if keyform_count == nil or keyform_count < 0 then return nil, "art mesh keyform count is negative" end
+        if color_begin ~= nil and color_begin >= 0 then
+            for local_index = 0, keyform_count - 1 do
+                local keyform_index = keyform_begin + local_index
+                local color_index = color_begin + local_index
+                local keyform = kfs[keyform_index + 1]
+                if keyform == nil then return nil, "art mesh keyform color index is outside keyforms" end
+                keyform.multiply_color = {
+                    mult_r[color_index + 1] or 1,
+                    mult_g[color_index + 1] or 1,
+                    mult_b[color_index + 1] or 1,
+                }
+                keyform.screen_color = {
+                    scr_r[color_index + 1] or 0,
+                    scr_g[color_index + 1] or 0,
+                    scr_b[color_index + 1] or 0,
+                }
+            end
+        end
     end
 
     return setmetatable({

@@ -9,6 +9,36 @@ local new_vertex = drawable.new_vertex
 
 local mesh_build = {}
 
+local function clamp01(value)
+    if value < 0 then return 0 end
+    if value > 1 then return 1 end
+    return value
+end
+
+local function combine_multiply_color(local_color, parent_color)
+    return {
+        clamp01((local_color[1] or 1) * (parent_color[1] or 1)),
+        clamp01((local_color[2] or 1) * (parent_color[2] or 1)),
+        clamp01((local_color[3] or 1) * (parent_color[3] or 1)),
+    }
+end
+
+local function combine_screen_color(local_color, parent_color)
+    local r = (local_color[1] or 0) + (parent_color[1] or 0) - (local_color[1] or 0) * (parent_color[1] or 0)
+    local g = (local_color[2] or 0) + (parent_color[2] or 0) - (local_color[2] or 0) * (parent_color[2] or 0)
+    local b = (local_color[3] or 0) + (parent_color[3] or 0) - (local_color[3] or 0) * (parent_color[3] or 0)
+    return { clamp01(r), clamp01(g), clamp01(b) }
+end
+
+local function parent_deformer_colors(composed, parent_index)
+    if not composed or parent_index == nil or parent_index < 0 then
+        return { 1, 1, 1 }, { 0, 0, 0 }
+    end
+    local def = composed[parent_index + 1]
+    if not def then return { 1, 1, 1 }, { 0, 0, 0 } end
+    return def.multiply_color or { 1, 1, 1 }, def.screen_color or { 0, 0, 0 }
+end
+
 local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, composed, bindings, parameter_values, art_mesh_index)
     local kfs = art_mesh_keyforms:art_mesh_keyforms(art_mesh_index)
     if not kfs then return nil end
@@ -74,6 +104,9 @@ local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, 
             end
         end
     end
+    local parent_multiply, parent_screen = parent_deformer_colors(composed, def_parent)
+    multiply_color = combine_multiply_color(multiply_color, parent_multiply)
+    screen_color = combine_screen_color(screen_color, parent_screen)
 
     -- Interpolate positions
     local first_kf = art_mesh_keyforms:art_mesh_keyform_positions(art_mesh_index, slots[1].local_index)

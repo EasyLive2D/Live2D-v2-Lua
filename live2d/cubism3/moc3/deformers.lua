@@ -33,6 +33,10 @@ local ROTATION_KEYFORM_SCALES_SLOT = 65
 local ROTATION_KEYFORM_REFLECT_XS_SLOT = 66
 local ROTATION_KEYFORM_REFLECT_YS_SLOT = 67
 local KEYFORM_POSITION_XYS_SLOT = 71
+local WARP_KEYFORM_COLOR_BEGIN_INDICES_SLOT = 105
+local ROTATION_KEYFORM_COLOR_BEGIN_INDICES_SLOT = 106
+local KEYFORM_MULTIPLY_COLOR_SLOTS = { 108, 109, 110 }
+local KEYFORM_SCREEN_COLOR_SLOTS = { 111, 112, 113 }
 
 -- Deformer kind
 local DEFORMER_WARP = 0
@@ -52,6 +56,46 @@ local function wrap_angle(angle)
     return angle
 end
 
+local function read_color_channels(bytes, offs, slots, count, default)
+    local r, err = parse.read_f32_section_or_default(bytes, offs, slots[1], count, default)
+    if not r then return nil, err end
+    local g, err = parse.read_f32_section_or_default(bytes, offs, slots[2], count, default)
+    if not g then return nil, err end
+    local b, err = parse.read_f32_section_or_default(bytes, offs, slots[3], count, default)
+    if not b then return nil, err end
+    return { r, g, b }
+end
+
+local function interpolate_colors(begin, slots, multiply_colors, screen_colors)
+    if begin == nil or begin < 0 then
+        return { 1, 1, 1 }, { 0, 0, 0 }
+    end
+
+    local multiply = { 0, 0, 0 }
+    local screen = { 0, 0, 0 }
+    for _, slot in ipairs(slots) do
+        local color_index = begin + slot.local_index + 1
+        for channel = 1, 3 do
+            local multiply_channel = multiply_colors[channel] or {}
+            local screen_channel = screen_colors[channel] or {}
+            multiply[channel] = multiply[channel] + (multiply_channel[color_index] or 1) * slot.weight
+            screen[channel] = screen[channel] + (screen_channel[color_index] or 0) * slot.weight
+        end
+    end
+    return multiply, screen
+end
+
+local function compose_colors(local_multiply, local_screen, parent_multiply, parent_screen)
+    local multiply = { 0, 0, 0 }
+    local screen = { 0, 0, 0 }
+    for channel = 1, 3 do
+        multiply[channel] = local_multiply[channel] * parent_multiply[channel]
+        screen[channel] = local_screen[channel] + parent_screen[channel]
+            - local_screen[channel] * parent_screen[channel]
+    end
+    return multiply, screen
+end
+
 function deformers.parse(bytes)
     local hdr, err = header.parse(bytes)
     if not hdr then return nil, err end
@@ -65,10 +109,14 @@ function deformers.parse(bytes)
     local rotation_count = parse.to_usize(cnts.rotation_deformers, "rotation deformer count")
     local warp_kf_count = parse.to_usize(cnts.warp_deformer_keyforms, "warp deformer keyform count")
     local rotation_kf_count = parse.to_usize(cnts.rotation_deformer_keyforms, "rotation deformer keyform count")
+    local keyform_multiply_color_count = parse.to_usize(cnts.keyform_multiply_colors or 0, "keyform multiply color count")
+    local keyform_screen_color_count = parse.to_usize(cnts.keyform_screen_colors or 0, "keyform screen color count")
     if not deformer_count then return nil, "Invalid deformer count" end
 
     if warp_kf_count == nil then warp_kf_count = 0 end
     if rotation_kf_count == nil then rotation_kf_count = 0 end
+    if keyform_multiply_color_count == nil then keyform_multiply_color_count = 0 end
+    if keyform_screen_color_count == nil then keyform_screen_color_count = 0 end
 
     local deformer_types, err = parse.read_i32_section(bytes, offs, DEFORMER_TYPES_SLOT, deformer_count)
     if not deformer_types then return nil, err end
@@ -125,6 +173,23 @@ function deformers.parse(bytes)
     local kf_pos_xys, err = parse.read_f32_section(bytes, offs, KEYFORM_POSITION_XYS_SLOT, kf_pos_count)
     if not kf_pos_xys then return nil, err end
 
+    local warp_color_begin, err = parse.read_i32_section_or_default(
+        bytes, offs, WARP_KEYFORM_COLOR_BEGIN_INDICES_SLOT, warp_count, -1
+    )
+    if not warp_color_begin then return nil, err end
+    local rotation_color_begin, err = parse.read_i32_section_or_default(
+        bytes, offs, ROTATION_KEYFORM_COLOR_BEGIN_INDICES_SLOT, rotation_count, -1
+    )
+    if not rotation_color_begin then return nil, err end
+    local multiply_colors, err = read_color_channels(
+        bytes, offs, KEYFORM_MULTIPLY_COLOR_SLOTS, keyform_multiply_color_count, 1
+    )
+    if not multiply_colors then return nil, err end
+    local screen_colors, err = read_color_channels(
+        bytes, offs, KEYFORM_SCREEN_COLOR_SLOTS, keyform_screen_color_count, 0
+    )
+    if not screen_colors then return nil, err end
+
     return setmetatable({
         parent_deformer_indices = parent_indices,
         deformer_kinds = deformer_types,
@@ -149,6 +214,10 @@ function deformers.parse(bytes)
         rotation_keyform_reflect_ys = rot_reflect_ys,
         rotation_keyform_opacities = rot_kf_opacities,
         keyform_position_xys = kf_pos_xys,
+        warp_keyform_color_begin_indices = warp_color_begin,
+        rotation_keyform_color_begin_indices = rotation_color_begin,
+        keyform_multiply_colors = multiply_colors,
+        keyform_screen_colors = screen_colors,
     }, { __index = deformers })
 end
 
@@ -291,6 +360,18 @@ local function interpolated_warp_opacity(self, warp_index, bindings, parameter_v
     return opacity
 end
 
+local function interpolated_warp_colors(self, warp_index, bindings, parameter_values)
+    local slots = warp_keyform_slots(self, warp_index, bindings, parameter_values)
+    if not slots then return nil end
+    local begins = self.warp_keyform_color_begin_indices or {}
+    return interpolate_colors(
+        begins[warp_index + 1] or -1,
+        slots,
+        self.keyform_multiply_colors or { {}, {}, {} },
+        self.keyform_screen_colors or { {}, {}, {} }
+    )
+end
+
 -- Interpolate rotation opacity
 local function interpolated_rotation_opacity(self, rotation_index, bindings, parameter_values)
     local slots = rotation_keyform_slots(self, rotation_index, bindings, parameter_values)
@@ -303,6 +384,18 @@ local function interpolated_rotation_opacity(self, rotation_index, bindings, par
         opacity = opacity + (self.rotation_keyform_opacities[kf_idx + 1] or 1.0) * slot.weight
     end
     return opacity
+end
+
+local function interpolated_rotation_colors(self, rotation_index, bindings, parameter_values)
+    local slots = rotation_keyform_slots(self, rotation_index, bindings, parameter_values)
+    if not slots then return nil end
+    local begins = self.rotation_keyform_color_begin_indices or {}
+    return interpolate_colors(
+        begins[rotation_index + 1] or -1,
+        slots,
+        self.keyform_multiply_colors or { {}, {}, {} },
+        self.keyform_screen_colors or { {}, {}, {} }
+    )
 end
 
 -- Compose deformers (the main composition function)
@@ -360,6 +453,14 @@ function deformers.compose(self, bindings, parameter_values)
             return 1.0
         end
 
+        local function parent_colors(p)
+            if p < 0 then return { 1, 1, 1 }, { 0, 0, 0 } end
+            local childIndex = p + 1
+            local c = composed[childIndex]
+            if not c then return { 1, 1, 1 }, { 0, 0, 0 } end
+            return c.multiply_color or { 1, 1, 1 }, c.screen_color or { 0, 0, 0 }
+        end
+
         if kind == DEFORMER_WARP then
             local grid = interpolated_warp_grid(self, specific, bindings, parameter_values)
             if not grid then return nil end
@@ -375,6 +476,15 @@ function deformers.compose(self, bindings, parameter_values)
             local opacity = interpolated_warp_opacity(self, specific, bindings, parameter_values)
             if not opacity then return nil end
             local opacity_accum = opacity * parent_opacity(parent)
+            local local_multiply, local_screen = interpolated_warp_colors(self, specific, bindings, parameter_values)
+            if not local_multiply then return nil end
+            local parent_multiply, parent_screen = parent_colors(parent)
+            local multiply_color, screen_color = compose_colors(
+                local_multiply,
+                local_screen,
+                parent_multiply,
+                parent_screen
+            )
             composed[idx + 1] = {
                 kind = "warp",
                 grid = grid,
@@ -382,6 +492,8 @@ function deformers.compose(self, bindings, parameter_values)
                 rows = rows,
                 scale_accum = scale_accum,
                 opacity_accum = opacity_accum,
+                multiply_color = multiply_color,
+                screen_color = screen_color,
             }
         elseif kind == DEFORMER_ROTATION then
             local rotation = interpolated_rotation(self, specific, bindings, parameter_values)
@@ -435,6 +547,15 @@ function deformers.compose(self, bindings, parameter_values)
             local opacity = interpolated_rotation_opacity(self, specific, bindings, parameter_values)
             if not opacity then return nil end
             local opacity_accum = opacity * parent_opacity(parent)
+            local local_multiply, local_screen = interpolated_rotation_colors(self, specific, bindings, parameter_values)
+            if not local_multiply then return nil end
+            local parent_multiply, parent_screen = parent_colors(parent)
+            local multiply_color, screen_color = compose_colors(
+                local_multiply,
+                local_screen,
+                parent_multiply,
+                parent_screen
+            )
             composed[idx + 1] = {
                 kind = "rotation",
                 origin = origin,
@@ -444,6 +565,8 @@ function deformers.compose(self, bindings, parameter_values)
                 flip_y = rotation.flip_y,
                 scale_accum = rotation.scale * scale_accum,
                 opacity_accum = opacity_accum,
+                multiply_color = multiply_color,
+                screen_color = screen_color,
             }
         end
     end

@@ -9,6 +9,11 @@ local draw_order_from_raw = require("live2d.cubism3.core.art_mesh").draw_order_f
 local ModelRuntime = {}
 ModelRuntime.__index = ModelRuntime
 
+local function normalized_parameter_value(value, minimum, maximum)
+    if maximum <= minimum then return 0.0 end
+    return math.max(0, math.min(1, (value - minimum) / (maximum - minimum)))
+end
+
 local function build_pose_groups(pose_data, part_index)
     local groups = {}
     for _, group in ipairs(pose_data.groups or {}) do
@@ -112,6 +117,7 @@ function ModelRuntime.new(model, canvas, art_meshes, art_mesh_keyforms, deformer
         draw_order_groups = draw_order_groups,
         parameter_index = parameter_index,
         parameter_values = parameter_values,
+        parameter_overrides = {},
         part_index = part_index,
         part_opacity_overrides = part_opacity_overrides,
         part_opacities = part_opacities,
@@ -142,6 +148,78 @@ function ModelRuntime:parameter_value_by_index(index)
     return self.parameter_values[index + 1]
 end
 
+function ModelRuntime:parameter_ids()
+    return self.ids.parameters
+end
+
+function ModelRuntime:parameter_minimum_by_index(index)
+    return self.bindings.parameter_min_values[index + 1]
+end
+
+function ModelRuntime:parameter_maximum_by_index(index)
+    return self.bindings.parameter_max_values[index + 1]
+end
+
+function ModelRuntime:parameter_default_by_index(index)
+    return self.bindings.parameter_default_values[index + 1]
+end
+
+function ModelRuntime:parameter_info(id)
+    local idx = self:parameter_index_of(id)
+    if idx == nil then return nil end
+    return self:parameter_info_by_index(idx)
+end
+
+function ModelRuntime:parameter_info_by_index(index)
+    local id = self.ids.parameters[index + 1]
+    local minimum = self:parameter_minimum_by_index(index)
+    local maximum = self:parameter_maximum_by_index(index)
+    local default = self:parameter_default_by_index(index)
+    local value = self:parameter_value_by_index(index)
+    if id == nil or minimum == nil or maximum == nil or default == nil or value == nil then
+        return nil
+    end
+    return {
+        id = id,
+        minimum = minimum,
+        maximum = maximum,
+        default = default,
+        value = value,
+        normalized_value = normalized_parameter_value(value, minimum, maximum),
+    }
+end
+
+function ModelRuntime:parameter_infos()
+    local infos = {}
+    for index = 0, #self.ids.parameters - 1 do
+        local info = self:parameter_info_by_index(index)
+        if info ~= nil then infos[#infos + 1] = info end
+    end
+    return infos
+end
+
+function ModelRuntime:parameter_normalized_value(id)
+    local idx = self:parameter_index_of(id)
+    if idx == nil then return nil end
+    return self:parameter_normalized_value_by_index(idx)
+end
+
+function ModelRuntime:parameter_normalized_value_by_index(index)
+    local value = self:parameter_value_by_index(index)
+    local minimum = self:parameter_minimum_by_index(index)
+    local maximum = self:parameter_maximum_by_index(index)
+    if value == nil or minimum == nil or maximum == nil then return nil end
+    return normalized_parameter_value(value, minimum, maximum)
+end
+
+function ModelRuntime:raw_parameter_value_from_normalized_index(index, value)
+    local minimum = self:parameter_minimum_by_index(index)
+    local maximum = self:parameter_maximum_by_index(index)
+    if minimum == nil or maximum == nil then return nil end
+    local amount = math.max(0, math.min(1, tonumber(value) or 0))
+    return minimum + (maximum - minimum) * amount
+end
+
 function ModelRuntime:set_parameter(id, value)
     local idx = self:parameter_index_of(id)
     if idx == nil then return false end
@@ -155,6 +233,96 @@ function ModelRuntime:set_parameter_by_index(index, value)
     local maximum = self.bindings.parameter_max_values[index + 1] or math.huge
     self.parameter_values[index + 1] = parameter_utils.clamp_parameter_value(value, minimum, maximum)
     return true
+end
+
+function ModelRuntime:set_parameter_normalized(id, value)
+    local idx = self:parameter_index_of(id)
+    if idx == nil then return false end
+    return self:set_parameter_normalized_by_index(idx, value)
+end
+
+function ModelRuntime:set_parameter_normalized_by_index(index, value)
+    local raw = self:raw_parameter_value_from_normalized_index(index, value)
+    if raw == nil then return false end
+    return self:set_parameter_by_index(index, raw)
+end
+
+function ModelRuntime:parameter_override_value(id)
+    local idx = self:parameter_index_of(id)
+    if idx == nil then return nil end
+    return self:parameter_override_value_by_index(idx)
+end
+
+function ModelRuntime:parameter_override_value_by_index(index)
+    return self.parameter_overrides[index + 1]
+end
+
+function ModelRuntime:parameter_override_normalized_value(id)
+    local idx = self:parameter_index_of(id)
+    if idx == nil then return nil end
+    return self:parameter_override_normalized_value_by_index(idx)
+end
+
+function ModelRuntime:parameter_override_normalized_value_by_index(index)
+    local value = self:parameter_override_value_by_index(index)
+    local minimum = self:parameter_minimum_by_index(index)
+    local maximum = self:parameter_maximum_by_index(index)
+    if value == nil or minimum == nil or maximum == nil then return nil end
+    return normalized_parameter_value(value, minimum, maximum)
+end
+
+function ModelRuntime:set_parameter_override(id, value)
+    local idx = self:parameter_index_of(id)
+    if idx == nil then return false end
+    return self:set_parameter_override_by_index(idx, value)
+end
+
+function ModelRuntime:set_parameter_override_by_index(index, value)
+    if self.parameter_values[index + 1] == nil then return false end
+    local minimum = self:parameter_minimum_by_index(index)
+    local maximum = self:parameter_maximum_by_index(index)
+    if minimum == nil or maximum == nil then return false end
+    self.parameter_overrides[index + 1] = parameter_utils.clamp_parameter_value(tonumber(value) or 0, minimum, maximum)
+    return true
+end
+
+function ModelRuntime:set_parameter_override_normalized(id, value)
+    local idx = self:parameter_index_of(id)
+    if idx == nil then return false end
+    return self:set_parameter_override_normalized_by_index(idx, value)
+end
+
+function ModelRuntime:set_parameter_override_normalized_by_index(index, value)
+    local raw = self:raw_parameter_value_from_normalized_index(index, value)
+    if raw == nil then return false end
+    return self:set_parameter_override_by_index(index, raw)
+end
+
+function ModelRuntime:clear_parameter_override(id)
+    local idx = self:parameter_index_of(id)
+    if idx == nil then return false end
+    return self:clear_parameter_override_by_index(idx)
+end
+
+function ModelRuntime:clear_parameter_override_by_index(index)
+    if self.parameter_values[index + 1] == nil then return false end
+    self.parameter_overrides[index + 1] = nil
+    return true
+end
+
+function ModelRuntime:clear_parameter_overrides()
+    for i = 1, #self.parameter_values do
+        self.parameter_overrides[i] = nil
+    end
+end
+
+function ModelRuntime:apply_parameter_overrides()
+    for index = 0, #self.parameter_values - 1 do
+        local value = self.parameter_overrides[index + 1]
+        if value ~= nil then
+            self:set_parameter_by_index(index, value)
+        end
+    end
 end
 
 function ModelRuntime:reset_parameters()

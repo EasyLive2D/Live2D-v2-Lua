@@ -9,9 +9,11 @@ package.path = package.path .. ";./?.lua;./?/init.lua"
 local moc3 = require("live2d.cubism3.moc3")
 local model3 = require("live2d.cubism3.json.model3")
 local motion3 = require("live2d.cubism3.json.motion3")
+local expression3 = require("live2d.cubism3.json.expression3")
 local pose3 = require("live2d.cubism3.json.pose3")
 local ModelRuntime = require("live2d.cubism3.runtime")
 local MotionPlayer = require("live2d.cubism3.motion")
+local expression_runtime = require("live2d.cubism3.expression")
 
 local M = {}
 local Renderer = {}
@@ -154,6 +156,8 @@ function Renderer:load_model(model_path, opts)
     self.textures = references.textures or {}
     self.motion_cache = {}
     self.active_motions = {}
+    self.expression_cache = {}
+    self.expression_manager = expression_runtime.ExpressionManager.new()
     return self
 end
 
@@ -205,6 +209,83 @@ end
 
 function Renderer:reset_parameters()
     require_runtime(self):reset_parameters()
+    return self
+end
+
+function Renderer:get_parameter_info(param_id)
+    return require_runtime(self):parameter_info(param_id)
+end
+
+function Renderer:get_parameter_info_by_index(index)
+    return require_runtime(self):parameter_info_by_index(tonumber(index) or 0)
+end
+
+function Renderer:get_parameter_normalized(param_id)
+    return require_runtime(self):parameter_normalized_value(param_id)
+end
+
+function Renderer:get_parameter_normalized_by_index(index)
+    return require_runtime(self):parameter_normalized_value_by_index(tonumber(index) or 0)
+end
+
+function Renderer:set_parameter_normalized(param_id, value)
+    if not require_runtime(self):set_parameter_normalized(param_id, tonumber(value) or 0) then
+        error("unknown parameter: " .. tostring(param_id), 2)
+    end
+    return self
+end
+
+function Renderer:set_parameter_normalized_by_index(index, value)
+    if not require_runtime(self):set_parameter_normalized_by_index(tonumber(index) or 0, tonumber(value) or 0) then
+        error("unknown parameter index: " .. tostring(index), 2)
+    end
+    return self
+end
+
+function Renderer:set_parameter_override(param_id, value)
+    if not require_runtime(self):set_parameter_override(param_id, tonumber(value) or 0) then
+        error("unknown parameter: " .. tostring(param_id), 2)
+    end
+    return self
+end
+
+function Renderer:set_parameter_override_by_index(index, value)
+    if not require_runtime(self):set_parameter_override_by_index(tonumber(index) or 0, tonumber(value) or 0) then
+        error("unknown parameter index: " .. tostring(index), 2)
+    end
+    return self
+end
+
+function Renderer:set_parameter_override_normalized(param_id, value)
+    if not require_runtime(self):set_parameter_override_normalized(param_id, tonumber(value) or 0) then
+        error("unknown parameter: " .. tostring(param_id), 2)
+    end
+    return self
+end
+
+function Renderer:set_parameter_override_normalized_by_index(index, value)
+    if not require_runtime(self):set_parameter_override_normalized_by_index(tonumber(index) or 0, tonumber(value) or 0) then
+        error("unknown parameter index: " .. tostring(index), 2)
+    end
+    return self
+end
+
+function Renderer:clear_parameter_override(param_id)
+    if not require_runtime(self):clear_parameter_override(param_id) then
+        error("unknown parameter: " .. tostring(param_id), 2)
+    end
+    return self
+end
+
+function Renderer:clear_parameter_override_by_index(index)
+    if not require_runtime(self):clear_parameter_override_by_index(tonumber(index) or 0) then
+        error("unknown parameter index: " .. tostring(index), 2)
+    end
+    return self
+end
+
+function Renderer:clear_parameter_overrides()
+    require_runtime(self):clear_parameter_overrides()
     return self
 end
 
@@ -260,6 +341,51 @@ function Renderer:clear_motions()
     return self
 end
 
+function Renderer:expression_reference(name_or_index)
+    local references = self.model_data and self.model_data.file_references
+    local expressions = references and references.expressions or {}
+    if type(name_or_index) == "number" then
+        return expressions[name_or_index + 1]
+    end
+    for _, reference in ipairs(expressions) do
+        if reference.Name == name_or_index then
+            return reference
+        end
+    end
+    return nil
+end
+
+function Renderer:load_expression(name_or_index)
+    local reference = self:expression_reference(name_or_index)
+    if reference == nil or reference.File == nil then
+        error("unknown expression: " .. tostring(name_or_index), 2)
+    end
+
+    local expression_path = join_path(self.base_path, reference.File)
+    if self.expression_cache[expression_path] == nil then
+        self.expression_cache[expression_path] = assert_parsed(
+            "exp3.json",
+            expression3.parse(self:read_resource(expression_path))
+        )
+    end
+    return self.expression_cache[expression_path]
+end
+
+function Renderer:set_expression(name_or_index, weight)
+    local player = self.expression_manager:play(self:load_expression(name_or_index))
+    if weight ~= nil then player:set_weight(tonumber(weight) or 1.0) end
+    return self
+end
+
+function Renderer:clear_expressions()
+    self.expression_manager:clear()
+    return self
+end
+
+function Renderer:clear_expression()
+    return self:clear_expressions()
+end
+
 function Renderer:update(delta_seconds)
     local runtime = require_runtime(self)
     delta_seconds = tonumber(delta_seconds) or 0
@@ -272,6 +398,9 @@ function Renderer:update(delta_seconds)
         end
     end
     self.active_motions = kept
+    self.expression_manager:tick(delta_seconds)
+    self.expression_manager:apply(runtime)
+    runtime:apply_parameter_overrides()
     runtime:apply_pose(delta_seconds)
     runtime:update_meshes()
     return self
@@ -303,6 +432,8 @@ function Renderer:dispose()
     self.textures = {}
     self.motion_cache = {}
     self.active_motions = {}
+    self.expression_cache = {}
+    self.expression_manager = expression_runtime.ExpressionManager.new()
     self.gl_renderer = nil
     collectgarbage("collect")
     return true
@@ -315,6 +446,8 @@ function M.new(opts)
         textures = {},
         motion_cache = {},
         active_motions = {},
+        expression_cache = {},
+        expression_manager = expression_runtime.ExpressionManager.new(),
         gl = opts.gl,
     }, Renderer)
     renderer:set_resource_streams(opts.resource_streams or opts.resourceStreams or {})
@@ -359,6 +492,20 @@ function M.clear_motions()
     return current_renderer:clear_motions()
 end
 
+function M.set_expression(name_or_index, weight)
+    if current_renderer == nil then error("no current renderer", 2) end
+    return current_renderer:set_expression(name_or_index, weight)
+end
+
+function M.clear_expressions()
+    if current_renderer == nil then error("no current renderer", 2) end
+    return current_renderer:clear_expressions()
+end
+
+function M.clear_expression()
+    return M.clear_expressions()
+end
+
 function M.render(projection, texture_paths)
     if current_renderer == nil then error("no current renderer", 2) end
     return current_renderer:render(projection, texture_paths)
@@ -375,9 +522,12 @@ end
 M.Renderer = Renderer
 M.ModelRuntime = ModelRuntime
 M.MotionPlayer = MotionPlayer
+M.ExpressionPlayer = expression_runtime.ExpressionPlayer
+M.ExpressionManager = expression_runtime.ExpressionManager
 M.moc3 = moc3
 M.model3 = model3
 M.motion3 = motion3
+M.expression3 = expression3
 M.pose3 = pose3
 
 return M

@@ -31,6 +31,7 @@ function model3.parse(source)
             pose = fr.Pose,
             display_info = fr.DisplayInfo,
             motions = fr.Motions or {},
+            expressions = fr.Expressions or {},
         },
         groups = raw.Groups or {},
         hit_areas = raw.HitAreas or {},

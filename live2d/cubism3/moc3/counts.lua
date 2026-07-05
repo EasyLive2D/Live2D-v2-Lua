@@ -64,6 +64,8 @@ function counts.parse(bytes)
         glue = read(20),
         glue_info = read(21),
         glue_keyforms = read(22),
+        keyform_multiply_colors = word_count > 23 and read(23) or 0,
+        keyform_screen_colors = word_count > 24 and read(24) or 0,
     }
 end
 
