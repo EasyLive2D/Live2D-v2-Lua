@@ -4,6 +4,8 @@ package.path = package.path .. ";./?.lua;./?/init.lua"
 local ffi = require("ffi")
 local OpenGLRenderer = require("live2d.cubism3.opengl_renderer")
 
+pcall(ffi.cdef, "typedef unsigned int GLuint;")
+
 local passed = 0
 local total = 0
 
@@ -35,6 +37,7 @@ local function new_fake_gl()
     gl.glStencilOp = function(...) record("glStencilOp", ...) end
     gl.glAlphaFunc = function(...) record("glAlphaFunc", ...) end
     gl.glBlendFunc = function(...) record("glBlendFunc", ...) end
+    gl.glBlendFuncSeparate = function(...) record("glBlendFuncSeparate", ...) end
     gl.glBlendEquationSeparate = function(...) record("glBlendEquationSeparate", ...) end
     gl.glBindBuffer = function(...) record("glBindBuffer", ...) end
     gl.glBufferData = function(...) record("glBufferData", ...) end
@@ -76,6 +79,51 @@ local function mesh(masks)
     }
 end
 
+local function new_shader_capture_gl()
+    local shader_id = 0
+    local program_id = 100
+    local gl = {
+        shader_sources = {},
+        calls = {},
+    }
+
+    local function record(name, ...)
+        gl.calls[#gl.calls + 1] = { name = name, args = { ... } }
+    end
+
+    gl.glCreateShader = function(kind)
+        shader_id = shader_id + 1
+        gl.shader_sources[shader_id] = { kind = kind, source = "" }
+        return shader_id
+    end
+    gl.glShaderSource = function(shader, count, strings, lengths)
+        local chunks = {}
+        for i = 0, count - 1 do
+            chunks[#chunks + 1] = ffi.string(strings[i], lengths and lengths[i] or nil)
+        end
+        gl.shader_sources[shader].source = table.concat(chunks)
+    end
+    gl.glCompileShader = function(...) record("glCompileShader", ...) end
+    gl.glGetShaderiv = function(_, _, status) status[0] = 1 end
+    gl.glGetShaderInfoLog = function() end
+    gl.glCreateProgram = function()
+        program_id = program_id + 1
+        return program_id
+    end
+    gl.glAttachShader = function(...) record("glAttachShader", ...) end
+    gl.glLinkProgram = function(...) record("glLinkProgram", ...) end
+    gl.glGetProgramiv = function(_, _, status) status[0] = 1 end
+    gl.glGetProgramInfoLog = function() end
+    gl.glDeleteShader = function(...) record("glDeleteShader", ...) end
+    gl.glGetUniformLocation = function() return 0 end
+    gl.glGetAttribLocation = function() return -1 end
+    gl.glGenBuffers = function(count, out)
+        for i = 0, count - 1 do out[i] = i + 1 end
+    end
+
+    return gl
+end
+
 local function bound_textures(calls)
     local textures = {}
     for _, call in ipairs(calls) do
@@ -97,6 +145,20 @@ local renderer = setmetatable({
     textures = {},
 }, { __index = OpenGLRenderer })
 
+local shader_gl = new_shader_capture_gl()
+OpenGLRenderer.new(shader_gl)
+local fragment_source
+for _, shader in pairs(shader_gl.shader_sources) do
+    if shader.kind == 0x8B30 then
+        fragment_source = shader.source
+    end
+end
+check("shader applies screen color before premultiplying alpha",
+    fragment_source ~= nil
+    and fragment_source:find("blended = blended + v_screen - blended * v_screen", 1, true) ~= nil
+    and fragment_source:find("gl_FragColor = vec4(blended * alpha, alpha)", 1, true) ~= nil,
+    fragment_source or "fragment shader was not captured")
+
 local projection = ffi.new("float[16]", {
     1, 0, 0, 0,
     0, 1, 0, 0,
@@ -105,6 +167,33 @@ local projection = ffi.new("float[16]", {
 })
 
 renderer:render_meshes({ mesh({}), mesh({ 0 }) }, nil, projection)
+
+check("normal blend uses premultiplied alpha",
+    has_call(gl.calls, "glBlendFuncSeparate", function(args)
+        return args[1] == 0x0001 and args[2] == 0x0303
+            and args[3] == 0x0001 and args[4] == 0x0303
+    end),
+    "expected GL_ONE/GL_ONE_MINUS_SRC_ALPHA for color and alpha")
+
+local additive_mesh = mesh({})
+additive_mesh.drawable_flags = 1
+renderer:draw_mesh(additive_mesh, nil, projection)
+check("additive blend preserves destination alpha",
+    has_call(gl.calls, "glBlendFuncSeparate", function(args)
+        return args[1] == 0x0001 and args[2] == 0x0001
+            and args[3] == 0x0000 and args[4] == 0x0001
+    end),
+    "expected GL_ONE/GL_ONE/GL_ZERO/GL_ONE")
+
+local multiplicative_mesh = mesh({})
+multiplicative_mesh.drawable_flags = 2
+renderer:draw_mesh(multiplicative_mesh, nil, projection)
+check("multiplicative blend uses destination color",
+    has_call(gl.calls, "glBlendFuncSeparate", function(args)
+        return args[1] == 0x0306 and args[2] == 0x0303
+            and args[3] == 0x0000 and args[4] == 0x0001
+    end),
+    "expected GL_DST_COLOR/GL_ONE_MINUS_SRC_ALPHA/GL_ZERO/GL_ONE")
 
 check("masked drawable enables stencil test",
     has_call(gl.calls, "glEnable", function(args) return args[1] == 0x0B90 end))

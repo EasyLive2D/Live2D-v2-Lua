@@ -15,6 +15,10 @@ local GL_NOTEQUAL = 0x0205
 local GL_KEEP = 0x1E00
 local GL_REPLACE = 0x1E01
 local GL_GREATER = 0x0204
+local GL_ZERO = 0x0000
+local GL_ONE = 0x0001
+local GL_ONE_MINUS_SRC_ALPHA = 0x0303
+local GL_DST_COLOR = 0x0306
 
 -- Vertex shader: position + uv + opacity + multiply + screen colors
 local VERTEX_SHADER = [[
@@ -55,9 +59,9 @@ void main() {
     // Multiply blend: output = tex * multiply
     // Screen blend: output = 1 - (1-tex)*(1-screen) = tex + screen - tex*screen
     vec3 blended = tex.rgb * v_multiply;
-    // Apply screen color (simplified screen blend)
-    blended = blended + v_screen * (1.0 - tex.rgb);
-    gl_FragColor = vec4(blended, tex.a * v_opacity);
+    blended = blended + v_screen - blended * v_screen;
+    float alpha = tex.a * v_opacity;
+    gl_FragColor = vec4(blended * alpha, alpha);
 }
 ]]
 
@@ -66,6 +70,14 @@ OpenGLRenderer.__index = OpenGLRenderer
 
 local sort_meshes
 local sort_by_render_order = false
+
+local function set_blend_func(gl, src_rgb, dst_rgb, src_alpha, dst_alpha)
+    if gl.glBlendFuncSeparate then
+        gl.glBlendFuncSeparate(src_rgb, dst_rgb, src_alpha, dst_alpha)
+    else
+        gl.glBlendFunc(src_rgb, dst_rgb)
+    end
+end
 
 local function render_orders_are_total_rank(meshes)
     local count = #meshes
@@ -354,13 +366,13 @@ function OpenGLRenderer:draw_mesh(mesh, textures, projection)
     -- Set blend mode
     local blend = drawable.blend_mode_from_flags(mesh.drawable_flags)
     if blend == "normal" then
-        gl.glBlendFunc(0x0302, 0x0303) -- GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA
+        set_blend_func(gl, GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA)
         gl.glBlendEquationSeparate(0x8006, 0x8006) -- GL_FUNC_ADD
     elseif blend == "additive" then
-        gl.glBlendFunc(0x0302, 0x0001) -- GL_SRC_ALPHA, GL_ONE
+        set_blend_func(gl, GL_ONE, GL_ONE, GL_ZERO, GL_ONE)
         gl.glBlendEquationSeparate(0x8006, 0x8006) -- GL_FUNC_ADD
     elseif blend == "multiplicative" then
-        gl.glBlendFunc(0x0300, 0x0302) -- GL_DST_COLOR, GL_ONE_MINUS_SRC_ALPHA
+        set_blend_func(gl, GL_DST_COLOR, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE)
         gl.glBlendEquationSeparate(0x8006, 0x8006) -- GL_FUNC_ADD
     end
 
