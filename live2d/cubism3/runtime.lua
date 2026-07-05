@@ -129,6 +129,7 @@ function ModelRuntime.new(model, canvas, art_meshes, art_mesh_keyforms, deformer
         _drawable_draw_orders = {},
         _part_draw_orders = {},
         _part_enable = {},
+        _composed_deformers = {},
     }, ModelRuntime)
 
     local ok = self:update_meshes()
@@ -447,7 +448,8 @@ function ModelRuntime:update_meshes()
         self.offscreen,
         self.parameter_values,
         drawable_part_opacities,
-        self.meshes
+        self.meshes,
+        self._composed_deformers
     )
     if not meshes then
         return nil

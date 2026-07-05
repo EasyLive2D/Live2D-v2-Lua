@@ -44,6 +44,8 @@ local DEFORMER_ROTATION = 1
 local ROTATION_PROBE_ITERATIONS = 10
 local ROTATION_PROBE_STEP_WARP_PARENT = -0.1
 local ROTATION_PROBE_STEP_ROTATION_PARENT = -10.0
+local IDENTITY_MULTIPLY = { 1, 1, 1 }
+local ZERO_SCREEN = { 0, 0, 0 }
 
 local function wrap_angle(angle)
     local two_pi = 2.0 * math.pi
@@ -279,7 +281,7 @@ local function warp_grid(self, warp_index, keyform_index)
 end
 
 -- Interpolate warp grid
-local function interpolated_warp_grid(self, warp_index, bindings, parameter_values)
+local function interpolated_warp_grid(self, warp_index, bindings, parameter_values, out_grid)
     local slots = warp_keyform_slots(self, warp_index, bindings, parameter_values)
     if not slots then return nil end
     local begin = self.warp_keyform_begin_indices[warp_index + 1]
@@ -287,20 +289,31 @@ local function interpolated_warp_grid(self, warp_index, bindings, parameter_valu
     local vertex_count = self.warp_vertex_counts[warp_index + 1]
     if vertex_count == nil or vertex_count < 0 then return nil end
 
-    local grid = {}
+    local grid = out_grid or {}
     for i = 1, vertex_count do
-        grid[i] = Vector2.new(0, 0)
+        local point = grid[i]
+        if point then
+            point._x = 0
+            point._y = 0
+        else
+            grid[i] = Vector2.new(0, 0)
+        end
+    end
+    for i = vertex_count + 1, #grid do
+        grid[i] = nil
     end
 
     for _, slot in ipairs(slots) do
         local kf_idx = begin + slot.local_index
-        local source = warp_grid(self, warp_index, kf_idx)
-        if not source or #source ~= #grid then return nil end
-        for i = 1, #grid do
-            grid[i] = Vector2.new(
-                grid[i]:x() + source[i]:x() * slot.weight,
-                grid[i]:y() + source[i]:y() * slot.weight
-            )
+        local start = self.warp_keyform_position_begin_indices[kf_idx + 1]
+        if start == nil or start < 0 then return nil end
+        local len = vertex_count * 2
+        if start + len > #self.keyform_position_xys then return nil end
+        for i = 1, vertex_count do
+            local source = start + (i - 1) * 2
+            local point = grid[i]
+            point._x = point._x + self.keyform_position_xys[source + 1] * slot.weight
+            point._y = point._y + self.keyform_position_xys[source + 2] * slot.weight
         end
     end
     return grid
@@ -399,7 +412,7 @@ local function interpolated_rotation_colors(self, rotation_index, bindings, para
 end
 
 -- Compose deformers (the main composition function)
-function deformers.compose(self, bindings, parameter_values)
+function deformers.compose(self, bindings, parameter_values, out_composed)
     local count = #self.deformer_kinds
     -- Topological sort by depth
     local order = {}
@@ -410,10 +423,7 @@ function deformers.compose(self, bindings, parameter_values)
         return deformer_depth(self, a) < deformer_depth(self, b)
     end)
 
-    local composed = {}
-    for i = 1, count do
-        composed[i] = nil
-    end
+    local composed = out_composed or {}
 
     for _, idx in ipairs(order) do
         local parent = self.parent_deformer_indices[idx + 1] or -1
@@ -454,23 +464,25 @@ function deformers.compose(self, bindings, parameter_values)
         end
 
         local function parent_colors(p)
-            if p < 0 then return { 1, 1, 1 }, { 0, 0, 0 } end
+            if p < 0 then return IDENTITY_MULTIPLY, ZERO_SCREEN end
             local childIndex = p + 1
             local c = composed[childIndex]
-            if not c then return { 1, 1, 1 }, { 0, 0, 0 } end
-            return c.multiply_color or { 1, 1, 1 }, c.screen_color or { 0, 0, 0 }
+            if not c then return IDENTITY_MULTIPLY, ZERO_SCREEN end
+            return c.multiply_color or IDENTITY_MULTIPLY, c.screen_color or ZERO_SCREEN
         end
 
         if kind == DEFORMER_WARP then
-            local grid = interpolated_warp_grid(self, specific, bindings, parameter_values)
+            local target = composed[idx + 1] or {}
+            local grid = interpolated_warp_grid(self, specific, bindings, parameter_values, target.grid)
             if not grid then return nil end
             local cols = self.warp_cols[specific + 1] or 0
             local rows = self.warp_rows[specific + 1] or 0
             -- Apply parent transforms to grid
             for i, point in ipairs(grid) do
-                local p = apply_parent(parent, point)
-                if not p then return nil end
-                grid[i] = p
+                local x, y = apply_one_xy(composed[parent + 1], point._x, point._y)
+                if not x then return nil end
+                point._x = x
+                point._y = y
             end
             local scale_accum = parent_scale(parent)
             local opacity = interpolated_warp_opacity(self, specific, bindings, parameter_values)
@@ -485,16 +497,15 @@ function deformers.compose(self, bindings, parameter_values)
                 parent_multiply,
                 parent_screen
             )
-            composed[idx + 1] = {
-                kind = "warp",
-                grid = grid,
-                cols = cols,
-                rows = rows,
-                scale_accum = scale_accum,
-                opacity_accum = opacity_accum,
-                multiply_color = multiply_color,
-                screen_color = screen_color,
-            }
+            target.kind = "warp"
+            target.grid = grid
+            target.cols = cols
+            target.rows = rows
+            target.scale_accum = scale_accum
+            target.opacity_accum = opacity_accum
+            target.multiply_color = multiply_color
+            target.screen_color = screen_color
+            composed[idx + 1] = target
         elseif kind == DEFORMER_ROTATION then
             local rotation = interpolated_rotation(self, specific, bindings, parameter_values)
             if not rotation then return nil end
@@ -556,18 +567,18 @@ function deformers.compose(self, bindings, parameter_values)
                 parent_multiply,
                 parent_screen
             )
-            composed[idx + 1] = {
-                kind = "rotation",
-                origin = origin,
-                angle_degrees = rotation.angle_degrees + parent_angle_deg,
-                scale = rotation.scale * scale_accum,
-                flip_x = rotation.flip_x,
-                flip_y = rotation.flip_y,
-                scale_accum = rotation.scale * scale_accum,
-                opacity_accum = opacity_accum,
-                multiply_color = multiply_color,
-                screen_color = screen_color,
-            }
+            local target = composed[idx + 1] or {}
+            target.kind = "rotation"
+            target.origin = origin
+            target.angle_degrees = rotation.angle_degrees + parent_angle_deg
+            target.scale = rotation.scale * scale_accum
+            target.flip_x = rotation.flip_x
+            target.flip_y = rotation.flip_y
+            target.scale_accum = rotation.scale * scale_accum
+            target.opacity_accum = opacity_accum
+            target.multiply_color = multiply_color
+            target.screen_color = screen_color
+            composed[idx + 1] = target
         end
     end
 
@@ -591,6 +602,23 @@ function apply_one(deformer, point)
     return point
 end
 
+function apply_one_xy(deformer, x, y)
+    if not deformer then return x, y end
+    if deformer.kind == "warp" then
+        return deformers_core.warp_deformer_transform_target_xy(
+            x, y, deformer.grid, deformer.cols, deformer.rows,
+            deformers_core.WARP_QUAD
+        )
+    elseif deformer.kind == "rotation" then
+        return deformers_core.rotation_deformer_transform_point_xy(
+            x, y, deformer.angle_degrees, deformer.scale,
+            deformer.origin, deformer.flip_x, deformer.flip_y
+        )
+    end
+    return x, y
+end
+
 deformers.apply_one = apply_one
+deformers.apply_one_xy = apply_one_xy
 
 return deformers

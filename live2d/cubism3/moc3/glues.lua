@@ -165,6 +165,17 @@ local function apply_glue_to_mesh_pair(meshes, mesh_a_index, mesh_b_index, weigh
         position_a[2] = ay + (by - ay) * weight_a * intensity
         position_b[1] = bx + (ax - bx) * weight_b * intensity
         position_b[2] = by + (ay - by) * weight_b * intensity
+
+        if mesh_a.vertex_data then
+            local off = index_a * 11
+            mesh_a.vertex_data[off + 0] = position_a[1]
+            mesh_a.vertex_data[off + 1] = position_a[2]
+        end
+        if mesh_b.vertex_data then
+            local off = index_b * 11
+            mesh_b.vertex_data[off + 0] = position_b[1]
+            mesh_b.vertex_data[off + 1] = position_b[2]
+        end
     end
 
     return true

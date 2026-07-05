@@ -193,6 +193,43 @@ function OpenGLRenderer:enable_attrib(attrib)
     return true
 end
 
+local function sync_flat_vertex_uniforms(mesh)
+    local vertex_data = mesh.vertex_data
+    local vertex_count = mesh.vertex_data and #mesh.vertices or 0
+    if not vertex_data or vertex_count == 0 then return end
+
+    local multiply = mesh.multiply_color
+    local screen = mesh.screen_color
+    local opacity = mesh.opacity
+    if mesh._flat_opacity == opacity
+        and mesh._flat_multiply_r == multiply[1]
+        and mesh._flat_multiply_g == multiply[2]
+        and mesh._flat_multiply_b == multiply[3]
+        and mesh._flat_screen_r == screen[1]
+        and mesh._flat_screen_g == screen[2]
+        and mesh._flat_screen_b == screen[3] then
+        return
+    end
+
+    for i = 1, vertex_count do
+        local off = (i - 1) * 11
+        vertex_data[off + 4] = opacity
+        vertex_data[off + 5] = multiply[1]
+        vertex_data[off + 6] = multiply[2]
+        vertex_data[off + 7] = multiply[3]
+        vertex_data[off + 8] = screen[1]
+        vertex_data[off + 9] = screen[2]
+        vertex_data[off + 10] = screen[3]
+    end
+    mesh._flat_opacity = opacity
+    mesh._flat_multiply_r = multiply[1]
+    mesh._flat_multiply_g = multiply[2]
+    mesh._flat_multiply_b = multiply[3]
+    mesh._flat_screen_r = screen[1]
+    mesh._flat_screen_g = screen[2]
+    mesh._flat_screen_b = screen[3]
+end
+
 function OpenGLRenderer:init_shader()
     local gl = self.gl
 
@@ -459,38 +496,45 @@ function OpenGLRenderer:draw_mesh(mesh, textures, projection)
         return
     end
 
-    -- Build vertex data: position(2) + uv(2) + opacity(1) + multiply(3) + screen(3) = 11 floats
     local vertex_count = #vertices
     local index_count = #indices
-    local vertex_float_count = vertex_count * 11
-    if (self.vertex_capacity or 0) < vertex_float_count then
-        self.vertex_data = ffi.new("float[?]", vertex_float_count)
-        self.vertex_capacity = vertex_float_count
-    end
-    local vertex_data = self.vertex_data
-    for i = 1, #vertices do
-        local vertex = vertices[i]
-        local off = (i - 1) * 11
-        vertex_data[off + 0] = vertex.position[1]
-        vertex_data[off + 1] = vertex.position[2]
-        vertex_data[off + 2] = vertex.uv[1]
-        vertex_data[off + 3] = vertex.uv[2]
-        vertex_data[off + 4] = mesh.opacity
-        vertex_data[off + 5] = mesh.multiply_color[1]
-        vertex_data[off + 6] = mesh.multiply_color[2]
-        vertex_data[off + 7] = mesh.multiply_color[3]
-        vertex_data[off + 8] = mesh.screen_color[1]
-        vertex_data[off + 9] = mesh.screen_color[2]
-        vertex_data[off + 10] = mesh.screen_color[3]
+    local vertex_float_count = mesh.vertex_float_count or (vertex_count * 11)
+    local vertex_data = mesh.vertex_data
+    if vertex_data then
+        sync_flat_vertex_uniforms(mesh)
+    else
+        if (self.vertex_capacity or 0) < vertex_float_count then
+            self.vertex_data = ffi.new("float[?]", vertex_float_count)
+            self.vertex_capacity = vertex_float_count
+        end
+        vertex_data = self.vertex_data
+        for i = 1, #vertices do
+            local vertex = vertices[i]
+            local off = (i - 1) * 11
+            vertex_data[off + 0] = vertex.position[1]
+            vertex_data[off + 1] = vertex.position[2]
+            vertex_data[off + 2] = vertex.uv[1]
+            vertex_data[off + 3] = vertex.uv[2]
+            vertex_data[off + 4] = mesh.opacity
+            vertex_data[off + 5] = mesh.multiply_color[1]
+            vertex_data[off + 6] = mesh.multiply_color[2]
+            vertex_data[off + 7] = mesh.multiply_color[3]
+            vertex_data[off + 8] = mesh.screen_color[1]
+            vertex_data[off + 9] = mesh.screen_color[2]
+            vertex_data[off + 10] = mesh.screen_color[3]
+        end
     end
 
-    if (self.index_capacity or 0) < index_count then
-        self.index_data = ffi.new("uint16_t[?]", index_count)
-        self.index_capacity = index_count
-    end
-    local index_data = self.index_data
-    for i = 1, index_count do
-        index_data[i - 1] = indices[i]
+    local index_data = mesh.index_data
+    if not index_data then
+        if (self.index_capacity or 0) < index_count then
+            self.index_data = ffi.new("uint16_t[?]", index_count)
+            self.index_capacity = index_count
+        end
+        index_data = self.index_data
+        for i = 1, index_count do
+            index_data[i - 1] = indices[i]
+        end
     end
 
     -- Get texture

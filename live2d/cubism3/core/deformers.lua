@@ -57,6 +57,23 @@ function deformers.rotation_deformer_transform_point(point, angle_degrees, scale
     )
 end
 
+function deformers.rotation_deformer_transform_point_xy(x, y, angle_degrees, scale, translation, flip_x, flip_y)
+    local theta = degrees_to_radian(angle_degrees)
+    local cos = math_lib.cos(theta)
+    local sin = math_lib.sin(theta)
+    local sign_x = flip_x and -1 or 1
+    local sign_y = flip_y and -1 or 1
+
+    local m00 = cos * scale * sign_x
+    local m01 = -sin * scale * sign_y
+    local m10 = sin * scale * sign_x
+    local m11 = cos * scale * sign_y
+
+    return
+        m00 * x + m01 * y + translation:x(),
+        m10 * x + m11 * y + translation:y()
+end
+
 -- Bilinear interpolation
 local function bilinear_cell(cellFractionS, cellFractionT, c00, c10, c01, c11)
     local w00 = (1 - cellFractionS) * (1 - cellFractionT)
@@ -324,6 +341,187 @@ function deformers.warp_deformer_transform_target(local_point, grid, cols, rows,
         grid
     )
     return triangle_interpolate(cell)
+end
+
+local function point_xy(point)
+    return point._x or point:x(), point._y or point:y()
+end
+
+local function bilinear_cell_xy(cellFractionS, cellFractionT, c00, c10, c01, c11)
+    local w00 = (1 - cellFractionS) * (1 - cellFractionT)
+    local w10 = cellFractionS * (1 - cellFractionT)
+    local w01 = (1 - cellFractionS) * cellFractionT
+    local w11 = cellFractionS * cellFractionT
+    local c00x, c00y = point_xy(c00)
+    local c10x, c10y = point_xy(c10)
+    local c01x, c01y = point_xy(c01)
+    local c11x, c11y = point_xy(c11)
+    return
+        w00 * c00x + w10 * c10x + w01 * c01x + w11 * c11x,
+        w00 * c00y + w10 * c10y + w01 * c01y + w11 * c11y
+end
+
+local function triangle_cell_xy(cellFractionS, cellFractionT, c00, c10, c01, c11)
+    local c00x, c00y = point_xy(c00)
+    local c10x, c10y = point_xy(c10)
+    local c01x, c01y = point_xy(c01)
+    if cellFractionS + cellFractionT <= 1 then
+        return
+            c00x + (c10x - c00x) * cellFractionS + (c01x - c00x) * cellFractionT,
+            c00y + (c10y - c00y) * cellFractionS + (c01y - c00y) * cellFractionT
+    end
+    local c11x, c11y = point_xy(c11)
+    local oneMinusS = 1 - cellFractionS
+    local oneMinusT = 1 - cellFractionT
+    return
+        c11x + (c01x - c11x) * oneMinusS + (c10x - c11x) * oneMinusT,
+        c11y + (c01y - c11y) * oneMinusS + (c10y - c11y) * oneMinusT
+end
+
+local function warp_inside_xy(px, py, grid, cols, rows, interpolation)
+    if px <= 0 or px >= 1 or py <= 0 or py >= 1 then
+        return nil
+    end
+
+    local stride = cols + 1
+    local required = stride * (rows + 1)
+    if #grid < required then
+        return nil
+    end
+
+    local gridU = px * cols
+    local gridV = py * rows
+    local cellI = math.floor(gridU)
+    local cellJ = math.floor(gridV)
+    local cellFractionS = gridU - cellI
+    local cellFractionT = gridV - cellJ
+
+    if cellI >= cols or cellJ >= rows then
+        return nil
+    end
+
+    local flatIndex = cellJ * stride + cellI + 1
+    local c00 = grid[flatIndex]
+    local c10 = grid[flatIndex + 1]
+    local c01 = grid[flatIndex + stride]
+    local c11 = grid[flatIndex + stride + 1]
+
+    if interpolation == deformers.WARP_QUAD then
+        return bilinear_cell_xy(cellFractionS, cellFractionT, c00, c10, c01, c11)
+    end
+    return triangle_cell_xy(cellFractionS, cellFractionT, c00, c10, c01, c11)
+end
+
+local function basis_from_corners_xy(grid, rows, cols, stride)
+    local c00x, c00y = point_xy(grid[1])
+    local c10x, c10y = point_xy(grid[cols + 1])
+    local c01x, c01y = point_xy(grid[rows * stride + 1])
+    local c11x, c11y = point_xy(grid[rows * stride + cols + 1])
+    local d11_00x, d11_00y = c11x - c00x, c11y - c00y
+    local d10_01x, d10_01y = c10x - c01x, c10y - c01y
+    local dpdux, dpduy = (d11_00x - d10_01x) * 0.5, (d11_00y - d10_01y) * 0.5
+    local dpdvx, dpdvy = (d10_01x + d11_00x) * 0.5, (d10_01y + d11_00y) * 0.5
+    local centerx = (c00x + c10x + c01x + c11x) * 0.25 - d11_00x * 0.5
+    local centery = (c00y + c10y + c01y + c11y) * 0.25 - d11_00y * 0.5
+    return centerx, centery, dpdux, dpduy, dpdvx, dpdvy
+end
+
+local function bary3_xy(ax, ay, bx, by, cx, cy, wa, wb, wc)
+    return wa * ax + wb * bx + wc * cx, wa * ay + wb * by + wc * cy
+end
+
+local function triangle_interpolate_xy(fu, fv, p00x, p00y, p10x, p10y, p01x, p01y, p11x, p11y)
+    if fu + fv <= 1.0 then
+        return bary3_xy(p00x, p00y, p10x, p10y, p01x, p01y, 1.0 - fu - fv, fu, fv)
+    end
+    return bary3_xy(p10x, p10y, p11x, p11y, p01x, p01y, 1.0 - fv, fu + fv - 1.0, 1.0 - fu)
+end
+
+function deformers.warp_deformer_transform_target_xy(x, y, grid, cols, rows, interpolation)
+    if x > 0 and x < 1 and y > 0 and y < 1 then
+        return warp_inside_xy(x, y, grid, cols, rows, interpolation)
+    end
+
+    local stride = cols + 1
+    local required = stride * (rows + 1)
+    if cols == 0 or rows == 0 or #grid < required then
+        return nil
+    end
+    if x ~= x or y ~= y then return nil end
+
+    local cenx, ceny, dux, duy, dvx, dvy = basis_from_corners_xy(grid, rows, cols, stride)
+    if x <= -2.0 or x >= 3.0 or y <= -2.0 or y >= 3.0 then
+        return dvx * x + cenx + dux * y, dvy * x + ceny + duy * y
+    end
+
+    local gu = x * cols
+    local gv = y * rows
+    local fu, fv, p00x, p00y, p10x, p10y, p01x, p01y, p11x, p11y
+
+    if x <= 0.0 then
+        if y <= 0.0 then
+            fu, fv = (x + 2.0) * 0.5, (y + 2.0) * 0.5
+            p00x, p00y = cenx - dux * 2.0 - dvx * 2.0, ceny - duy * 2.0 - dvy * 2.0
+            p10x, p10y = cenx - dux * 2.0, ceny - duy * 2.0
+            p01x, p01y = cenx - dvx * 2.0, ceny - dvy * 2.0
+            p11x, p11y = point_xy(grid[1])
+        elseif y < 1.0 then
+            local cv = clamp_cell(math.floor(gv), rows)
+            local vc = cv / rows
+            local vn = (cv + 1) / rows
+            fu, fv = (x + 2.0) * 0.5, gv - cv
+            p00x, p00y = cenx - dvx * 2.0 + dux * vc, ceny - dvy * 2.0 + duy * vc
+            p10x, p10y = point_xy(grid[cv * stride + 1])
+            p01x, p01y = cenx - dvx * 2.0 + dux * vn, ceny - dvy * 2.0 + duy * vn
+            p11x, p11y = point_xy(grid[(cv + 1) * stride + 1])
+        else
+            fu, fv = (x + 2.0) * 0.5, (y - 1.0) * 0.5
+            p00x, p00y = cenx - dvx * 2.0 + dux, ceny - dvy * 2.0 + duy
+            p10x, p10y = point_xy(grid[rows * stride + 1])
+            p01x, p01y = cenx - dvx * 2.0 + dux * 3.0, ceny - dvy * 2.0 + duy * 3.0
+            p11x, p11y = cenx + dux * 3.0, ceny + duy * 3.0
+        end
+    elseif x < 1.0 then
+        local cu = clamp_cell(math.floor(gu), cols)
+        local uc = cu / cols
+        local un = (cu + 1) / cols
+        if y <= 0.0 then
+            fu, fv = gu - cu, (y + 2.0) * 0.5
+            p00x, p00y = dvx * uc + cenx - dux * 2.0, dvy * uc + ceny - duy * 2.0
+            p10x, p10y = dvx * un + cenx - dux * 2.0, dvy * un + ceny - duy * 2.0
+            p01x, p01y = point_xy(grid[cu + 1])
+            p11x, p11y = point_xy(grid[cu + 2])
+        else
+            fu, fv = gu - cu, (y - 1.0) * 0.5
+            p00x, p00y = point_xy(grid[rows * stride + cu + 1])
+            p10x, p10y = point_xy(grid[rows * stride + cu + 2])
+            p01x, p01y = cenx + dvx * uc + dux * 3.0, ceny + dvy * uc + duy * 3.0
+            p11x, p11y = cenx + dvx * un + dux * 3.0, ceny + dvy * un + duy * 3.0
+        end
+    elseif y <= 0.0 then
+        fu, fv = (x - 1.0) * 0.5, (y + 2.0) * 0.5
+        p00x, p00y = cenx - dux * 2.0 + dvx, ceny - duy * 2.0 + dvy
+        p10x, p10y = cenx - dux * 2.0 + dvx * 3.0, ceny - duy * 2.0 + dvy * 3.0
+        p01x, p01y = point_xy(grid[cols + 1])
+        p11x, p11y = cenx + dvx * 3.0, ceny + dvy * 3.0
+    elseif y < 1.0 then
+        local cv = clamp_cell(math.floor(gv), rows)
+        local vc = cv / rows
+        local vn = (cv + 1) / rows
+        fu, fv = (x - 1.0) * 0.5, gv - cv
+        p00x, p00y = point_xy(grid[cols + cv * stride + 1])
+        p10x, p10y = cenx + dvx * 3.0 + dux * vc, ceny + dvy * 3.0 + duy * vc
+        p01x, p01y = point_xy(grid[cols + (cv + 1) * stride + 1])
+        p11x, p11y = cenx + dvx * 3.0 + dux * vn, ceny + dvy * 3.0 + duy * vn
+    else
+        fu, fv = (x - 1.0) * 0.5, (y - 1.0) * 0.5
+        p00x, p00y = point_xy(grid[rows * stride + cols + 1])
+        p10x, p10y = cenx + dvx * 3.0 + dux, ceny + dvy * 3.0 + duy
+        p01x, p01y = cenx + dux * 3.0 + dvx, ceny + duy * 3.0 + dvy
+        p11x, p11y = cenx + dvx * 3.0 + dux * 3.0, ceny + dvy * 3.0 + duy * 3.0
+    end
+
+    return triangle_interpolate_xy(fu, fv, p00x, p00y, p10x, p10y, p01x, p01y, p11x, p11y)
 end
 
 function deformers.transform_art_mesh_vertices_by_deformers(vertices, transforms)

@@ -109,8 +109,15 @@ check("parameter count", param_count == 70)
 
 -- Save default meshes
 local default_mesh_opacities = {}
+local default_positions = {}
 for _, m in ipairs(meshes) do
     table.insert(default_mesh_opacities, m.opacity)
+end
+for i, m in ipairs(meshes) do
+    default_positions[i] = {}
+    for j, vertex in ipairs(m.vertices) do
+        default_positions[i][j] = { vertex.position[1], vertex.position[2] }
+    end
 end
 
 -- Change parameters that affect deformer positions
@@ -121,13 +128,13 @@ local new_meshes = runtime.meshes
 check("meshes updated after param change", (function()
     -- Check if vertex positions changed
     local changed = 0
-    for i = 1, #meshes do
-        if #meshes[i].vertices == #new_meshes[i].vertices then
-            for j = 1, #meshes[i].vertices do
-                local drawableVertex = meshes[i].vertices[j]
+    for i = 1, #default_positions do
+        if #default_positions[i] == #new_meshes[i].vertices then
+            for j = 1, #default_positions[i] do
+                local drawableVertex = default_positions[i][j]
                 local newVertex = new_meshes[i].vertices[j]
-                if math.abs(drawableVertex.position[1] - newVertex.position[1]) > 0.0001
-                    or math.abs(drawableVertex.position[2] - newVertex.position[2]) > 0.0001 then
+                if math.abs(drawableVertex[1] - newVertex.position[1]) > 0.0001
+                    or math.abs(drawableVertex[2] - newVertex.position[2]) > 0.0001 then
                     changed = changed + 1
                     break
                 end
