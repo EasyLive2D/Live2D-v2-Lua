@@ -88,6 +88,30 @@ function Renderer:clear_resource_streams()
     return self
 end
 
+function Renderer:set_texture_stream(path, data)
+    self.texture_streams[normalize_path(path)] = data
+    if self.gl_renderer ~= nil and self.gl_renderer.set_texture_stream ~= nil then
+        self.gl_renderer:set_texture_stream(path, data)
+    end
+    return self
+end
+
+function Renderer:set_texture_streams(texture_streams)
+    self.texture_streams = texture_streams or {}
+    if self.gl_renderer ~= nil and self.gl_renderer.set_texture_streams ~= nil then
+        self.gl_renderer:set_texture_streams(self.texture_streams)
+    end
+    return self
+end
+
+function Renderer:clear_texture_streams()
+    self.texture_streams = {}
+    if self.gl_renderer ~= nil and self.gl_renderer.clear_texture_streams ~= nil then
+        self.gl_renderer:clear_texture_streams()
+    end
+    return self
+end
+
 function Renderer:read_resource(path)
     path = normalize_path(path)
     local data = resolve_stream(self.resource_streams[path])
@@ -116,6 +140,9 @@ function Renderer:load_model(model_path, opts)
     opts = opts or {}
     if opts.resource_streams or opts.resourceStreams then
         self:set_resource_streams(opts.resource_streams or opts.resourceStreams)
+    end
+    if opts.texture_streams or opts.textureStreams then
+        self:set_texture_streams(opts.texture_streams or opts.textureStreams)
     end
 
     local normalized_model_path = normalize_path(model_path)
@@ -415,7 +442,9 @@ end
 function Renderer:get_gl_renderer()
     if self.gl_renderer == nil then
         if self.gl == nil then error("OpenGL table is required", 2) end
-        self.gl_renderer = require("live2d.cubism3.opengl_renderer").new(self.gl)
+        self.gl_renderer = require("live2d.cubism3.opengl_renderer").new(self.gl, {
+            texture_streams = self.texture_streams,
+        })
     end
     return self.gl_renderer
 end
@@ -434,6 +463,9 @@ function Renderer:dispose()
     self.active_motions = {}
     self.expression_cache = {}
     self.expression_manager = expression_runtime.ExpressionManager.new()
+    if self.gl_renderer ~= nil and self.gl_renderer.destroy ~= nil then
+        pcall(function() self.gl_renderer:destroy() end)
+    end
     self.gl_renderer = nil
     collectgarbage("collect")
     return true
@@ -443,6 +475,7 @@ function M.new(opts)
     opts = opts or {}
     local renderer = setmetatable({
         resource_streams = {},
+        texture_streams = {},
         textures = {},
         motion_cache = {},
         active_motions = {},
@@ -451,6 +484,7 @@ function M.new(opts)
         gl = opts.gl,
     }, Renderer)
     renderer:set_resource_streams(opts.resource_streams or opts.resourceStreams or {})
+    renderer:set_texture_streams(opts.texture_streams or opts.textureStreams or {})
     if opts.model_path ~= nil then
         renderer:load_model(opts.model_path, opts)
     end

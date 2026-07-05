@@ -71,6 +71,10 @@ OpenGLRenderer.__index = OpenGLRenderer
 local sort_meshes
 local sort_by_render_order = false
 
+local function normalize_path(path)
+    return (tostring(path or ""):gsub("\\", "/"))
+end
+
 local function set_blend_func(gl, src_rgb, dst_rgb, src_alpha, dst_alpha)
     if gl.glBlendFuncSeparate then
         gl.glBlendFuncSeparate(src_rgb, dst_rgb, src_alpha, dst_alpha)
@@ -111,11 +115,13 @@ local function compare_draw_order(a, b)
     return a < b
 end
 
-function OpenGLRenderer.new(gl)
+function OpenGLRenderer.new(gl, opts)
+    opts = opts or {}
     local self = setmetatable({}, OpenGLRenderer)
     self.gl = gl
     self.shader = nil
     self.textures = {}  -- texture_id -> GL texture object
+    self.texture_streams = opts.texture_streams or opts.textureStreams or {}
     self.vao = nil
     self.vbo = nil
     self.ibo = nil
@@ -207,12 +213,79 @@ function OpenGLRenderer:init_shader()
     self.ibo = ibo[0]
 end
 
-function OpenGLRenderer:load_texture(texture_path)
+function OpenGLRenderer:set_texture_stream(path, stream)
+    self.texture_streams[normalize_path(path)] = stream
+    return self
+end
+
+function OpenGLRenderer:set_texture_streams(texture_streams)
+    self.texture_streams = texture_streams or {}
+    return self
+end
+
+function OpenGLRenderer:clear_texture_streams()
+    self.texture_streams = {}
+    return self
+end
+
+function OpenGLRenderer:resolve_texture_stream(texture_path, texture_index)
+    local path = normalize_path(texture_path)
+    local streams = self.texture_streams or {}
+    local stream = streams[path] or streams[texture_path]
+    if stream ~= nil then return stream end
+
+    local loader = streams.__loader or streams["__loader"]
+    if type(loader) == "function" then
+        return loader(texture_index or 0, path)
+    end
+    return nil
+end
+
+local function texture_stream_pixels(stream, texture_path)
+    if type(stream) == "function" then
+        stream = stream()
+    end
+    if stream == nil then return nil end
+
+    if type(stream) == "table" then
+        local width = tonumber(stream.width or stream.Width)
+        local height = tonumber(stream.height or stream.Height)
+        local data = stream.data or stream.rgba or stream.bytes_rgba or stream[1]
+        if width and height and data ~= nil then
+            return width, height, data
+        end
+
+        local bytes = stream.bytes or stream.png or stream[1]
+        if bytes ~= nil and image_loader.loadImageBytes ~= nil then
+            return image_loader.loadImageBytes(bytes, texture_path)
+        end
+
+        local path = stream.path or stream.Path
+        if path ~= nil then
+            return image_loader.loadImage(tostring(path))
+        end
+    elseif image_loader.loadImageBytes ~= nil then
+        return image_loader.loadImageBytes(stream, texture_path)
+    end
+
+    return nil
+end
+
+function OpenGLRenderer:load_texture(texture_path, texture_index)
     local gl = self.gl
 
-    local width, height, data = image_loader.loadImage(texture_path)
+    local width, height, data = texture_stream_pixels(
+        self:resolve_texture_stream(texture_path, texture_index),
+        texture_path
+    )
+    if not width or not data then
+        width, height, data = image_loader.loadImage(texture_path)
+    end
     if not width or not data then
         error("Failed to load texture: " .. texture_path)
+    end
+    if type(data) == "string" then
+        data = ffi.cast("const unsigned char *", data)
     end
 
     local tex_id = ffi.new("GLuint[1]")
@@ -230,11 +303,11 @@ function OpenGLRenderer:load_texture(texture_path)
     return tex_id[0]
 end
 
-function OpenGLRenderer:ensure_texture(texture_path)
+function OpenGLRenderer:ensure_texture(texture_path, texture_index)
     if self.textures[texture_path] then
         return self.textures[texture_path]
     end
-    return self:load_texture(texture_path)
+    return self:load_texture(texture_path, texture_index)
 end
 
 function OpenGLRenderer:render_meshes(meshes, textures, projection)
@@ -360,7 +433,7 @@ function OpenGLRenderer:draw_mesh(mesh, textures, projection)
     end
     local tex_id = 0
     if tex_path then
-        tex_id = self:ensure_texture(tex_path)
+        tex_id = self:ensure_texture(tex_path, tex_idx)
     end
 
     -- Set blend mode
