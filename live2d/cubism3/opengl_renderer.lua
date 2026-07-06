@@ -402,15 +402,15 @@ function OpenGLRenderer:resolve_texture_stream(texture_path, texture_index)
     if stream ~= nil then return stream end
 
     local loader = streams.__loader or streams["__loader"]
-    if type(loader) == "function" then
+    if type(loader) == "function" or type(loader) == "userdata" then
         return loader(texture_index or 0, path)
     end
     return nil
 end
 
 local function texture_stream_pixels(stream, texture_path)
-    if type(stream) == "function" then
-        stream = stream()
+    if type(stream) == "function" or type(stream) == "userdata" then
+        stream = stream(texture_path)
     end
     if stream == nil then return nil end
 

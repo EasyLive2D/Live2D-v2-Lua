@@ -47,9 +47,9 @@ local function read_file(path)
     return data
 end
 
-local function resolve_stream(stream)
-    if type(stream) == "function" then
-        return stream()
+local function resolve_stream(stream, path)
+    if type(stream) == "function" or type(stream) == "userdata" then
+        stream = stream(path)
     elseif type(stream) == "table" then
         return stream.data or stream.bytes or stream[1]
     end
@@ -114,15 +114,19 @@ end
 
 function Renderer:read_resource(path)
     path = normalize_path(path)
-    local data = resolve_stream(self.resource_streams[path])
+    local data = resolve_stream(self.resource_streams[path], path)
     if data ~= nil then return data end
 
     for stream_path, stream in pairs(self.resource_streams) do
         if normalize_path(stream_path) == path then
-            data = resolve_stream(stream)
+            data = resolve_stream(stream, path)
             if data ~= nil then return data end
         end
     end
+
+    local loader = self.resource_streams.__loader or self.resource_streams["__loader"]
+    data = resolve_stream(loader, path)
+    if data ~= nil then return data end
 
     local err
     data, err = read_file(path)
