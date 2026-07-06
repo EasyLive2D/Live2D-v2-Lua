@@ -244,6 +244,24 @@ local function deformer_depth(self, index)
     return depth
 end
 
+local function compose_order(self)
+    local cached = self._compose_order
+    local count = #self.deformer_kinds
+    if cached and #cached == count then
+        return cached
+    end
+
+    local order = {}
+    for i = 0, count - 1 do
+        order[#order + 1] = i
+    end
+    table.sort(order, function(a, b)
+        return deformer_depth(self, a) < deformer_depth(self, b)
+    end)
+    self._compose_order = order
+    return order
+end
+
 -- Get warp keyform slots
 local function warp_keyform_slots(self, warp_index, bindings, parameter_values)
     local kf_count = self.warp_keyform_counts[warp_index + 1]
@@ -413,16 +431,7 @@ end
 
 -- Compose deformers (the main composition function)
 function deformers.compose(self, bindings, parameter_values, out_composed)
-    local count = #self.deformer_kinds
-    -- Topological sort by depth
-    local order = {}
-    for i = 0, count - 1 do
-        order[#order + 1] = i
-    end
-    table.sort(order, function(a, b)
-        return deformer_depth(self, a) < deformer_depth(self, b)
-    end)
-
+    local order = compose_order(self)
     local composed = out_composed or {}
 
     for _, idx in ipairs(order) do

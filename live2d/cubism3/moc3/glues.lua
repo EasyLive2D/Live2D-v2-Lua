@@ -140,41 +140,73 @@ local function mesh_pair(meshes, mesh_a_index, mesh_b_index)
     return mesh_a, mesh_b
 end
 
+local function ensure_position_arrays(mesh)
+    if mesh.positions_x and mesh.positions_y then
+        return mesh.positions_x, mesh.positions_y
+    end
+    local vertices = mesh.vertices
+    if not vertices then return nil end
+    local xs = {}
+    local ys = {}
+    for i = 1, #vertices do
+        local vertex = vertices[i]
+        local position = vertex and vertex.position
+        if not position then return nil end
+        xs[i] = position[1]
+        ys[i] = position[2]
+    end
+    mesh.positions_x = xs
+    mesh.positions_y = ys
+    return xs, ys
+end
+
 local function apply_glue_to_mesh_pair(meshes, mesh_a_index, mesh_b_index, weights, position_indices, info_begin, info_count, intensity)
     local mesh_a, mesh_b = mesh_pair(meshes, mesh_a_index, mesh_b_index)
     if not mesh_a then return nil end
+    local ax_values, ay_values = ensure_position_arrays(mesh_a)
+    local bx_values, by_values = ensure_position_arrays(mesh_b)
+    if not ax_values or not ay_values or not bx_values or not by_values then return nil end
+    local vertices_a = mesh_a.vertices
+    local vertices_b = mesh_b.vertices
+    local vertex_data_a = mesh_a.vertex_data
+    local vertex_data_b = mesh_b.vertex_data
 
     for offset = 0, info_count - 1, 2 do
         local source_a = info_begin + offset + 1
         local source_b = source_a + 1
         local index_a = position_indices[source_a]
         local index_b = position_indices[source_b]
-        local vertex_a = mesh_a.vertices[index_a + 1]
-        local vertex_b = mesh_b.vertices[index_b + 1]
-        if not vertex_a or not vertex_b then return nil end
-
-        local position_a = vertex_a.position
-        local position_b = vertex_b.position
-        local ax, ay = position_a[1], position_a[2]
-        local bx, by = position_b[1], position_b[2]
+        local array_index_a = index_a + 1
+        local array_index_b = index_b + 1
+        local ax, ay = ax_values[array_index_a], ay_values[array_index_a]
+        local bx, by = bx_values[array_index_b], by_values[array_index_b]
+        if ax == nil or ay == nil or bx == nil or by == nil then return nil end
         local weight_a = weights[source_a]
         local weight_b = weights[source_b]
         if weight_a == nil or weight_b == nil then return nil end
 
-        position_a[1] = ax + (bx - ax) * weight_a * intensity
-        position_a[2] = ay + (by - ay) * weight_a * intensity
-        position_b[1] = bx + (ax - bx) * weight_b * intensity
-        position_b[2] = by + (ay - by) * weight_b * intensity
+        local new_ax = ax + (bx - ax) * weight_a * intensity
+        local new_ay = ay + (by - ay) * weight_a * intensity
+        local new_bx = bx + (ax - bx) * weight_b * intensity
+        local new_by = by + (ay - by) * weight_b * intensity
+        ax_values[array_index_a], ay_values[array_index_a] = new_ax, new_ay
+        bx_values[array_index_b], by_values[array_index_b] = new_bx, new_by
 
-        if mesh_a.vertex_data then
+        local vertex_a = vertices_a[array_index_a]
+        local vertex_b = vertices_b[array_index_b]
+        if not vertex_a or not vertex_b then return nil end
+        vertex_a.position[1], vertex_a.position[2] = new_ax, new_ay
+        vertex_b.position[1], vertex_b.position[2] = new_bx, new_by
+
+        if vertex_data_a then
             local off = index_a * 11
-            mesh_a.vertex_data[off + 0] = position_a[1]
-            mesh_a.vertex_data[off + 1] = position_a[2]
+            vertex_data_a[off + 0] = new_ax
+            vertex_data_a[off + 1] = new_ay
         end
-        if mesh_b.vertex_data then
+        if vertex_data_b then
             local off = index_b * 11
-            mesh_b.vertex_data[off + 0] = position_b[1]
-            mesh_b.vertex_data[off + 1] = position_b[2]
+            vertex_data_b[off + 0] = new_bx
+            vertex_data_b[off + 1] = new_by
         end
     end
 

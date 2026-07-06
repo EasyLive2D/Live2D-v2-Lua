@@ -19,6 +19,9 @@ local GL_ZERO = 0x0000
 local GL_ONE = 0x0001
 local GL_ONE_MINUS_SRC_ALPHA = 0x0303
 local GL_DST_COLOR = 0x0306
+local GL_ARRAY_BUFFER = 0x8892
+local GL_ELEMENT_ARRAY_BUFFER = 0x8893
+local GL_DYNAMIC_DRAW = 0x88E4
 
 -- Vertex shader: position + uv + opacity + multiply + screen colors
 local VERTEX_SHADER = [[
@@ -69,7 +72,7 @@ local OpenGLRenderer = {}
 OpenGLRenderer.__index = OpenGLRenderer
 
 local sort_meshes
-local sort_by_render_order = false
+local sort_draw_order_ranks
 
 local function normalize_path(path)
     return (tostring(path or ""):gsub("\\", "/"))
@@ -83,19 +86,25 @@ local function set_blend_func(gl, src_rgb, dst_rgb, src_alpha, dst_alpha)
     end
 end
 
-local function render_orders_are_total_rank(meshes)
+local function render_orders_are_total_rank(renderer, meshes)
     local count = #meshes
     if count == 0 then return false end
 
-    local seen = {}
+    local seen = renderer._render_order_seen
+    if not seen then
+        seen = {}
+        renderer._render_order_seen = seen
+    end
+    local stamp = (renderer._render_order_stamp or 0) + 1
+    renderer._render_order_stamp = stamp
     local identity = true
     for index, mesh in ipairs(meshes) do
         local rank = mesh.render_order
         if type(rank) ~= "number" or rank < 0 or rank >= count or rank ~= math.floor(rank) then
             return false
         end
-        if seen[rank + 1] then return false end
-        seen[rank + 1] = true
+        if seen[rank + 1] == stamp then return false end
+        seen[rank + 1] = stamp
         identity = identity and rank == index - 1
     end
     return not identity
@@ -104,15 +113,77 @@ end
 local function compare_draw_order(a, b)
     local meshA = sort_meshes[a + 1]
     local meshB = sort_meshes[b + 1]
-    if sort_by_render_order then
-        if meshA.render_order ~= meshB.render_order then return meshA.render_order < meshB.render_order end
-        return a < b
-    end
-    local drawOrderA = draw_order_from_raw(meshA.draw_order)
-    local drawOrderB = draw_order_from_raw(meshB.draw_order)
+    local drawOrderA = sort_draw_order_ranks[a + 1]
+    local drawOrderB = sort_draw_order_ranks[b + 1]
     if drawOrderA ~= drawOrderB then return drawOrderA < drawOrderB end
     if meshA.render_order ~= meshB.render_order then return meshA.render_order < meshB.render_order end
     return a < b
+end
+
+local function update_draw_order_indices(renderer, meshes)
+    local draw_order_indices = renderer.draw_order_indices
+    if not draw_order_indices then
+        draw_order_indices = {}
+        renderer.draw_order_indices = draw_order_indices
+    end
+
+    local count = #meshes
+    local old_draw_order_count = #draw_order_indices
+    if render_orders_are_total_rank(renderer, meshes) then
+        for i = 1, count do
+            local mesh = meshes[i]
+            draw_order_indices[mesh.render_order + 1] = i - 1
+        end
+        for i = count + 1, old_draw_order_count do
+            draw_order_indices[i] = nil
+        end
+        renderer._draw_order_cache_mode = "render_order"
+        renderer._draw_order_cache_count = count
+        return draw_order_indices
+    end
+
+    local ranks = renderer._draw_order_ranks
+    if not ranks then
+        ranks = {}
+        renderer._draw_order_ranks = ranks
+    end
+    local render_orders = renderer._draw_order_render_orders
+    if not render_orders then
+        render_orders = {}
+        renderer._draw_order_render_orders = render_orders
+    end
+
+    local dirty = renderer._draw_order_cache_mode ~= "fallback" or renderer._draw_order_cache_count ~= count
+    for i = 1, count do
+        local mesh = meshes[i]
+        local rank = draw_order_from_raw(mesh.draw_order)
+        if ranks[i] ~= rank or render_orders[i] ~= mesh.render_order then
+            dirty = true
+            ranks[i] = rank
+            render_orders[i] = mesh.render_order
+        end
+    end
+    for i = count + 1, old_draw_order_count do
+        draw_order_indices[i] = nil
+    end
+    for i = count + 1, #ranks do
+        ranks[i] = nil
+        render_orders[i] = nil
+    end
+
+    if dirty then
+        for i = 1, count do
+            draw_order_indices[i] = i - 1
+        end
+        sort_meshes = meshes
+        sort_draw_order_ranks = ranks
+        table.sort(draw_order_indices, compare_draw_order)
+        sort_meshes = nil
+        sort_draw_order_ranks = nil
+        renderer._draw_order_cache_mode = "fallback"
+        renderer._draw_order_cache_count = count
+    end
+    return draw_order_indices
 end
 
 function OpenGLRenderer.new(gl, opts)
@@ -410,24 +481,7 @@ function OpenGLRenderer:render_meshes(meshes, textures, projection)
     local gl = self.gl
     self:begin_render(projection)
 
-    -- Calculate draw order
-    local draw_order_indices = self.draw_order_indices
-    if not draw_order_indices then
-        draw_order_indices = {}
-        self.draw_order_indices = draw_order_indices
-    end
-    local old_draw_order_count = #draw_order_indices
-    for i = 1, #meshes do
-        draw_order_indices[i] = i - 1
-    end
-    for i = #meshes + 1, old_draw_order_count do
-        draw_order_indices[i] = nil
-    end
-    sort_meshes = meshes
-    sort_by_render_order = render_orders_are_total_rank(meshes)
-    table.sort(draw_order_indices, compare_draw_order)
-    sort_meshes = nil
-    sort_by_render_order = false
+    local draw_order_indices = update_draw_order_indices(self, meshes)
 
     -- Upload and draw each mesh
     for _, idx in ipairs(draw_order_indices) do
@@ -551,11 +605,11 @@ function OpenGLRenderer:draw_mesh(mesh, textures, projection)
     self:use_blend(drawable.blend_mode_from_flags(mesh.drawable_flags))
 
     -- Upload geometry
-    gl.glBindBuffer(0x8892, self.vbo) -- GL_ARRAY_BUFFER
-    gl.glBufferData(0x8892, vertex_float_count * 4, vertex_data, 0x88E4) -- GL_DYNAMIC_DRAW
+    gl.glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
+    gl.glBufferData(GL_ARRAY_BUFFER, vertex_float_count * 4, vertex_data, GL_DYNAMIC_DRAW)
 
-    gl.glBindBuffer(0x8893, self.ibo) -- GL_ELEMENT_ARRAY_BUFFER
-    gl.glBufferData(0x8893, index_count * 2, index_data, 0x88E4) -- GL_DYNAMIC_DRAW
+    gl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self.ibo)
+    gl.glBufferData(GL_ELEMENT_ARRAY_BUFFER, index_count * 2, index_data, GL_DYNAMIC_DRAW)
 
     -- Set vertex attributes
     local stride = 11 * 4 -- 11 floats * 4 bytes

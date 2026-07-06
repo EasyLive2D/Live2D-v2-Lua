@@ -129,6 +129,8 @@ function ModelRuntime.new(model, canvas, art_meshes, art_mesh_keyforms, deformer
         _drawable_draw_orders = {},
         _part_draw_orders = {},
         _part_enable = {},
+        _pose_selection = {},
+        _pose_faded = {},
         _composed_deformers = {},
     }, ModelRuntime)
 
@@ -360,14 +362,21 @@ function ModelRuntime:reset_part_opacities()
 end
 
 function ModelRuntime:apply_pose(delta_seconds)
+    local selection = self._pose_selection
+    local faded = self._pose_faded
     for _, group in ipairs(self.pose_groups) do
-        local selection = {}
-        for _, part in ipairs(group.members) do
-            selection[#selection + 1] = self:part_selection_opacity(part)
+        local member_count = #group.members
+        for i = 1, member_count do
+            local part = group.members[i]
+            selection[i] = self:part_selection_opacity(part)
         end
-        local faded = {}
-        for _, part in ipairs(group.members) do
-            faded[#faded + 1] = self.pose_opacities[part + 1]
+        for i = 1, member_count do
+            local part = group.members[i]
+            faded[i] = self.pose_opacities[part + 1]
+        end
+        for i = member_count + 1, #selection do
+            selection[i] = nil
+            faded[i] = nil
         end
 
         local ok = pose3.update_pose_group_opacities(
@@ -398,32 +407,35 @@ function ModelRuntime:part_selection_opacity(part_index)
 end
 
 function ModelRuntime:update_part_opacities()
+    local part_opacities = self.part_opacities
+    local parent_part_indices = self.parts.parent_part_indices
     -- Compute base part opacities
-    for index = 0, #self.part_opacities - 1 do
+    for index = 0, #part_opacities - 1 do
         local base = self.part_opacity_overrides[index + 1]
         if base == nil then
             base = self.parts:interpolate_opacity(index, self.bindings, self.parameter_values) or 1.0
         end
-        self.part_opacities[index + 1] = base * self.pose_opacities[index + 1]
+        part_opacities[index + 1] = base * self.pose_opacities[index + 1]
     end
 
     -- Multiply by parent opacities (hierarchical)
-    for index = 0, #self.part_opacities - 1 do
-        local opacity = self.part_opacities[index + 1]
-        local parent = self.parts:parent_part_index(index)
+    for index = 0, #part_opacities - 1 do
+        local opacity = part_opacities[index + 1]
+        local parent = parent_part_indices[index + 1]
         while parent ~= nil and parent >= 0 do
-            opacity = opacity * (self.part_opacities[parent + 1] or 1.0)
-            parent = self.parts:parent_part_index(parent)
+            opacity = opacity * (part_opacities[parent + 1] or 1.0)
+            parent = parent_part_indices[parent + 1]
         end
-        self.part_opacities[index + 1] = opacity
+        part_opacities[index + 1] = opacity
     end
 end
 
 function ModelRuntime:drawable_part_opacities(out)
     local result = out or {}
     local mesh_count = #self.art_meshes.meshes
+    local drawable_parent_part_indices = self.offscreen.drawable_parent_part_indices
     for i = 0, mesh_count - 1 do
-        local part_idx = self.offscreen:drawable_parent_part_index(i)
+        local part_idx = drawable_parent_part_indices[i + 1]
         local opacity = 1.0
         if part_idx and part_idx >= 0 then
             opacity = self.part_opacities[part_idx + 1] or 1.0

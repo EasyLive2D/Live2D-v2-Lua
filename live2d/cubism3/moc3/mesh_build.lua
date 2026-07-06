@@ -94,12 +94,35 @@ local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, 
     -- Actually parent_deformer_index comes from art_meshes
     local def_parent = art_meshes:art_mesh_parent_deformer_index(art_mesh_index) or -1
 
-    -- Interpolate opacity
     local opacity = 0.0
-    for _, slot in ipairs(slots) do
+    local draw_order = 0.0
+    out_mesh = out_mesh or {}
+    local multiply_color = out_mesh.multiply_color or { 0, 0, 0 }
+    local screen_color = out_mesh.screen_color or { 0, 0, 0 }
+    multiply_color[1], multiply_color[2], multiply_color[3] = 0, 0, 0
+    screen_color[1], screen_color[2], screen_color[3] = 0, 0, 0
+
+    for slot_index = 1, #slots do
+        local slot = slots[slot_index]
         local kf = kfs[slot.local_index + 1]
         if kf then
-            opacity = opacity + kf.opacity * slot.weight
+            local weight = slot.weight
+            opacity = opacity + kf.opacity * weight
+            draw_order = draw_order + kf.draw_order * weight
+
+            local multiplyColor = kf.multiply_color
+            if multiplyColor then
+                multiply_color[1] = multiply_color[1] + multiplyColor[1] * weight
+                multiply_color[2] = multiply_color[2] + multiplyColor[2] * weight
+                multiply_color[3] = multiply_color[3] + multiplyColor[3] * weight
+            end
+
+            local screenColor = kf.screen_color
+            if screenColor then
+                screen_color[1] = screen_color[1] + screenColor[1] * weight
+                screen_color[2] = screen_color[2] + screenColor[2] * weight
+                screen_color[3] = screen_color[3] + screenColor[3] * weight
+            end
         end
     end
 
@@ -114,38 +137,6 @@ local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, 
         end
     end
 
-    -- Interpolate draw order
-    local draw_order = 0.0
-    for _, slot in ipairs(slots) do
-        local kf = kfs[slot.local_index + 1]
-        if kf then
-            draw_order = draw_order + kf.draw_order * slot.weight
-        end
-    end
-
-    -- Interpolate colors
-    out_mesh = out_mesh or {}
-    local multiply_color = out_mesh.multiply_color or { 0, 0, 0 }
-    local screen_color = out_mesh.screen_color or { 0, 0, 0 }
-    multiply_color[1], multiply_color[2], multiply_color[3] = 0, 0, 0
-    screen_color[1], screen_color[2], screen_color[3] = 0, 0, 0
-    for _, slot in ipairs(slots) do
-        local kf = kfs[slot.local_index + 1]
-        if kf then
-            local multiplyColor = kf.multiply_color
-            local screenColor = kf.screen_color
-            if multiplyColor then
-                multiply_color[1] = multiply_color[1] + multiplyColor[1] * slot.weight
-                multiply_color[2] = multiply_color[2] + multiplyColor[2] * slot.weight
-                multiply_color[3] = multiply_color[3] + multiplyColor[3] * slot.weight
-            end
-            if screenColor then
-                screen_color[1] = screen_color[1] + screenColor[1] * slot.weight
-                screen_color[2] = screen_color[2] + screenColor[2] * slot.weight
-                screen_color[3] = screen_color[3] + screenColor[3] * slot.weight
-            end
-        end
-    end
     local parent_multiply, parent_screen = parent_deformer_colors(composed, def_parent)
     multiply_color = combine_multiply_color(multiply_color, parent_multiply)
     screen_color = combine_screen_color(screen_color, parent_screen)
@@ -160,18 +151,29 @@ local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, 
     local positions_y = static_mesh.positions_y or {}
     static_mesh.positions_x = positions_x
     static_mesh.positions_y = positions_y
-    for i = 1, vertex_count do
-        positions_x[i] = 0
-        positions_y[i] = 0
-    end
-
-    for _, slot in ipairs(slots) do
-        local kf_pos = art_mesh_keyforms:art_mesh_keyform_positions(art_mesh_index, slot.local_index)
-        if not kf_pos or #kf_pos ~= #first_kf then return nil end
+    if #slots == 1 then
+        local weight = slots[1].weight
         for i = 0, vertex_count - 1 do
             local positionIndex = i + 1
-            positions_x[positionIndex] = positions_x[positionIndex] + kf_pos[i * 2 + 1] * slot.weight
-            positions_y[positionIndex] = positions_y[positionIndex] + kf_pos[i * 2 + 2] * slot.weight
+            positions_x[positionIndex] = first_kf[i * 2 + 1] * weight
+            positions_y[positionIndex] = first_kf[i * 2 + 2] * weight
+        end
+    else
+        for i = 1, vertex_count do
+            positions_x[i] = 0
+            positions_y[i] = 0
+        end
+
+        for slot_index = 1, #slots do
+            local slot = slots[slot_index]
+            local kf_pos = art_mesh_keyforms:art_mesh_keyform_positions(art_mesh_index, slot.local_index)
+            if not kf_pos or #kf_pos ~= #first_kf then return nil end
+            local weight = slot.weight
+            for i = 0, vertex_count - 1 do
+                local positionIndex = i + 1
+                positions_x[positionIndex] = positions_x[positionIndex] + kf_pos[i * 2 + 1] * weight
+                positions_y[positionIndex] = positions_y[positionIndex] + kf_pos[i * 2 + 2] * weight
+            end
         end
     end
 
@@ -202,6 +204,8 @@ local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, 
         local uvIndex = (i - 1) * 2 + 1
         local x = positions_x[i]
         local y = -positions_y[i]
+        positions_x[i] = x
+        positions_y[i] = y
         local u = uvs[uvIndex]
         local v = uvs[uvIndex + 1]
         local vertex = final_vertices[i]
@@ -238,6 +242,8 @@ local function build_moc3_drawable_mesh_for_pose(art_meshes, art_mesh_keyforms, 
     out_mesh.multiply_color = multiply_color
     out_mesh.screen_color = screen_color
     out_mesh.vertices = final_vertices
+    out_mesh.positions_x = positions_x
+    out_mesh.positions_y = positions_y
     out_mesh.indices = static_mesh.indices
     out_mesh.index_data = static_mesh.index_data
     out_mesh.vertex_float_count = vertex_float_count

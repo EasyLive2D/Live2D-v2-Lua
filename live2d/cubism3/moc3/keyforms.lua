@@ -141,10 +141,16 @@ function keyforms.parse(bytes)
         vertex_counts = vertex_counts,
         keyforms = kfs,
         position_xys = pos_xys,
+        _art_mesh_keyforms_cache = {},
+        _art_mesh_positions_cache = {},
     }, { __index = keyforms })
 end
 
 function keyforms.art_mesh_keyforms(self, mesh_index)
+    local cache = self._art_mesh_keyforms_cache
+    local cached = cache and cache[mesh_index + 1]
+    if cached then return cached end
+
     local start = self.keyform_begin_indices[mesh_index + 1]
     if start == nil or start < 0 then return nil end
     local keyformCount = self.keyform_counts[mesh_index + 1]
@@ -154,10 +160,17 @@ function keyforms.art_mesh_keyforms(self, mesh_index)
     for i = 1, keyformCount do
         keyformData[i] = self.keyforms[start + i]
     end
+    if cache then cache[mesh_index + 1] = keyformData end
     return keyformData
 end
 
 function keyforms.art_mesh_keyform_positions(self, mesh_index, local_keyform_index)
+    local mesh_cache = self._art_mesh_positions_cache and self._art_mesh_positions_cache[mesh_index + 1]
+    if mesh_cache then
+        local cached = mesh_cache[local_keyform_index + 1]
+        if cached then return cached end
+    end
+
     local kfs = keyforms.art_mesh_keyforms(self, mesh_index)
     if not kfs then return nil end
     local kf = kfs[local_keyform_index + 1]
@@ -171,6 +184,11 @@ function keyforms.art_mesh_keyform_positions(self, mesh_index, local_keyform_ind
     local positions = {}
     for i = 1, positionArrayLength do
         positions[i] = self.position_xys[start + i]
+    end
+    if self._art_mesh_positions_cache then
+        mesh_cache = mesh_cache or {}
+        self._art_mesh_positions_cache[mesh_index + 1] = mesh_cache
+        mesh_cache[local_keyform_index + 1] = positions
     end
     return positions
 end

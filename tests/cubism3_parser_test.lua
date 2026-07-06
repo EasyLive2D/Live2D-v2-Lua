@@ -245,6 +245,25 @@ end
 check("runtime create", runtime ~= nil)
 check("runtime meshes", runtime and #runtime.meshes == 134)
 check("runtime default param", runtime and runtime:parameter_value_by_index(0) ~= nil)
+check("runtime glue fast positions match final vertices", (function()
+    if not runtime then return false end
+    for _, mesh in ipairs(runtime.meshes) do
+        local xs = mesh.positions_x
+        local ys = mesh.positions_y
+        if xs or ys then
+            if not xs or not ys then return false end
+            for i, vertex in ipairs(mesh.vertices or {}) do
+                local position = vertex.position
+                if not position
+                    or math.abs((xs[i] or 0) - position[1]) > 0.0001
+                    or math.abs((ys[i] or 0) - position[2]) > 0.0001 then
+                    return false
+                end
+            end
+        end
+    end
+    return true
+end)())
 
 -- Test parameter setting
 if runtime then

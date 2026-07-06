@@ -110,8 +110,13 @@ local function is_part_descendant_of(self, part_index, ancestor_index)
 end
 
 function offscreen.effect_source_drawable_indices(self, ids)
+    if self._effect_source_drawable_indices ~= nil then
+        return self._effect_source_drawable_indices
+    end
+
     if #self.offscreen_owner_part_indices == 0 then
-        return {}
+        self._effect_source_drawable_indices = {}
+        return self._effect_source_drawable_indices
     end
 
     local effect_part_index = nil
@@ -122,7 +127,8 @@ function offscreen.effect_source_drawable_indices(self, ids)
         end
     end
     if effect_part_index == nil then
-        return {}
+        self._effect_source_drawable_indices = {}
+        return self._effect_source_drawable_indices
     end
 
     local result = {}
@@ -134,6 +140,7 @@ function offscreen.effect_source_drawable_indices(self, ids)
             end
         end
     end
+    self._effect_source_drawable_indices = result
     return result
 end
 
