@@ -40,6 +40,15 @@ local function read_file(path)
     return data
 end
 
+local function file_exists(path)
+    local file = io.open(path, "rb")
+    if file then
+        file:close()
+        return true
+    end
+    return false
+end
+
 local function load_hiyori_runtime()
     local base = "resources/Hiyori/"
     local model_data = assert(model3.parse(read_file(base .. "Hiyori.model3.json")))
@@ -59,6 +68,41 @@ local function load_hiyori_runtime()
         model_data, canvas, art_meshes, keyforms, deformers, bindings,
         ids, offscreen, glues, parts, draw_order_groups, pose_data
     ))
+end
+
+local function load_sakiko_runtime()
+    local base = "resources/Sakiko/"
+    local model_data = assert(model3.parse(read_file(base .. "adv_live2d_sakiko_010_live_01.model3.json")))
+    local moc_bytes = read_file(base .. model_data.file_references.moc)
+    local canvas = assert(moc3.canvas.parse(moc_bytes))
+    local art_meshes = assert(moc3.art_meshes.parse(moc_bytes))
+    local keyforms = assert(moc3.keyforms.parse(moc_bytes))
+    local deformers = assert(moc3.deformers.parse(moc_bytes))
+    local bindings = assert(moc3.keyform_bindings.parse(moc_bytes))
+    local ids = assert(moc3.ids.parse(moc_bytes))
+    local offscreen = assert(moc3.offscreen.parse(moc_bytes))
+    local glues = assert(moc3.glues.parse(moc_bytes))
+    local parts = assert(moc3.parts.parse(moc_bytes))
+    local draw_order_groups = assert(moc3.draw_order_groups.parse(moc_bytes))
+    return assert(ModelRuntime.new(
+        model_data, canvas, art_meshes, keyforms, deformers, bindings,
+        ids, offscreen, glues, parts, draw_order_groups, nil
+    ))
+end
+
+local function max_drawable_opacity_for_part(runtime, part_id)
+    local part_index = runtime:part_index_of(part_id)
+    if part_index == nil then return nil end
+    local max_opacity = nil
+    for mesh_index, mesh in ipairs(runtime.meshes) do
+        if runtime.offscreen.drawable_parent_part_indices[mesh_index] == part_index then
+            local opacity = mesh.opacity or 0
+            if max_opacity == nil or opacity > max_opacity then
+                max_opacity = opacity
+            end
+        end
+    end
+    return max_opacity
 end
 
 print("\n-- Model3 Expressions --")
@@ -128,6 +172,16 @@ if type(runtime.apply_parameter_overrides) == "function" then runtime:apply_para
 check("parameter overrides clear", clear_ok == true
     and info ~= nil
     and close(runtime:parameter_value_by_index(angle_index), info.default))
+
+print("\n-- Part Opacity --")
+local sakiko_model_path = "resources/Sakiko/adv_live2d_sakiko_010_live_01.model3.json"
+if file_exists(sakiko_model_path) then
+    local sakiko_runtime = load_sakiko_runtime()
+    check("sakiko static hidden shoe part remains drawable", close(max_drawable_opacity_for_part(sakiko_runtime, "Part72"), 1.0))
+    check("sakiko right upper arm part remains drawable", close(max_drawable_opacity_for_part(sakiko_runtime, "Part191"), 1.0))
+else
+    print("[SKIP] Sakiko resource not found")
+end
 
 print("\n-- Expression Runtime --")
 local ok_expression_runtime, expression_runtime = pcall(require, "live2d.cubism3.expression")

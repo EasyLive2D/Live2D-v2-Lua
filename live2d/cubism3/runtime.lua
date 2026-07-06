@@ -406,15 +406,20 @@ function ModelRuntime:part_selection_opacity(part_index)
     return self.parts:interpolate_opacity(part_index, self.bindings, self.parameter_values) or 1.0
 end
 
+function ModelRuntime:part_drawable_opacity(part_index)
+    local override = self.part_opacity_overrides[part_index + 1]
+    if override ~= nil then
+        return override
+    end
+    return 1.0
+end
+
 function ModelRuntime:update_part_opacities()
     local part_opacities = self.part_opacities
     local parent_part_indices = self.parts.parent_part_indices
     -- Compute base part opacities
     for index = 0, #part_opacities - 1 do
-        local base = self.part_opacity_overrides[index + 1]
-        if base == nil then
-            base = self.parts:interpolate_opacity(index, self.bindings, self.parameter_values) or 1.0
-        end
+        local base = self:part_drawable_opacity(index)
         part_opacities[index + 1] = base * self.pose_opacities[index + 1]
     end
 
