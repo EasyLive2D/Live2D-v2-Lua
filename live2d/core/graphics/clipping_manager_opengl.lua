@@ -26,6 +26,7 @@ function ClippingManagerOpenGL.new(drawParamGL)
     self.tmpMatrix2 = ClipMatrix.new()
     self.tmpMatrixForMask = ClipMatrix.new()
     self.tmpMatrixForDraw = ClipMatrix.new()
+    self.tmpViewport = {0, 0, 0, 0}
     self.channelColors = {}
 
     local channelColor = TextureInfo.new()
@@ -86,7 +87,8 @@ function ClippingManagerOpenGL:setupClip(modelContext, drawParam)
 
     if activeClipCount > 0 then
         local oldFbo = Live2DGLWrapper.getParameter(Live2DGLWrapper.FRAMEBUFFER_BINDING)
-        local rect = {0, 0, drawParam.gl.width, drawParam.gl.height}
+        local rect = self.tmpViewport
+        rect[1] = 0; rect[2] = 0; rect[3] = drawParam.gl.width; rect[4] = drawParam.gl.height
         Live2DGLWrapper.viewport(0, 0, Live2D.clippingMaskBufferSize, Live2D.clippingMaskBufferSize)
         self:setupLayoutBounds(activeClipCount)
         if drawParam.framebufferObject then

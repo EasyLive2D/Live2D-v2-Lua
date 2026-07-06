@@ -31,9 +31,9 @@ function DrawParamOpenGL.new()
     self.firstDraw = true
     self.anisotropyExt = nil
     self.maxAnisotropy = 0
-    self.uvbo = nil
     self.vbo = nil
-    self.ebo = nil
+    self.staticArrayBuffers = {}
+    self.staticElementBuffers = {}
     self.vertShader = nil
     self.fragShader = nil
     self.vertShaderOff = nil
@@ -90,12 +90,29 @@ local function bindOrCreateVBO(vbo, data)
     return vbo
 end
 
-local function bindOrCreateEBO(ebo, data)
+local function bindOrCreateStaticVBO(cache, data)
+    local vbo = cache[data]
+    if vbo == nil then
+        vbo = Live2DGLWrapper.createBuffer()
+        cache[data] = vbo
+        Live2DGLWrapper.bindBuffer(Live2DGLWrapper.ARRAY_BUFFER, vbo)
+        Live2DGLWrapper.bufferData(Live2DGLWrapper.ARRAY_BUFFER, data, Live2DGLWrapper.STATIC_DRAW)
+    else
+        Live2DGLWrapper.bindBuffer(Live2DGLWrapper.ARRAY_BUFFER, vbo)
+    end
+    return vbo
+end
+
+local function bindOrCreateStaticEBO(cache, data)
+    local ebo = cache[data]
     if ebo == nil then
         ebo = Live2DGLWrapper.createBuffer()
+        cache[data] = ebo
+        Live2DGLWrapper.bindBuffer(Live2DGLWrapper.ELEMENT_ARRAY_BUFFER, ebo)
+        Live2DGLWrapper.bufferData(Live2DGLWrapper.ELEMENT_ARRAY_BUFFER, data, Live2DGLWrapper.STATIC_DRAW)
+    else
+        Live2DGLWrapper.bindBuffer(Live2DGLWrapper.ELEMENT_ARRAY_BUFFER, ebo)
     end
-    Live2DGLWrapper.bindBuffer(Live2DGLWrapper.ELEMENT_ARRAY_BUFFER, ebo)
-    Live2DGLWrapper.bufferData(Live2DGLWrapper.ELEMENT_ARRAY_BUFFER, data, Live2DGLWrapper.DYNAMIC_DRAW)
     return ebo
 end
 
@@ -114,10 +131,10 @@ function DrawParamOpenGL:drawTexture(texNo, screenColor, indexArray, vertexArray
         Live2DGLWrapper.frontFace(Live2DGLWrapper.CCW)
         Live2DGLWrapper.useProgram(self.shaderProgram)
         self.vbo = bindOrCreateVBO(self.vbo, vertexArray)
-        self.ebo = bindOrCreateEBO(self.ebo, indexArray)
+        bindOrCreateStaticEBO(self.staticElementBuffers, indexArray)
         Live2DGLWrapper.vertexAttribPointer(self.a_position_Loc, 2, Live2DGLWrapper.FLOAT, false, 0, nil)
         Live2DGLWrapper.enableVertexAttribArray(self.a_position_Loc)
-        self.uvbo = bindOrCreateVBO(self.uvbo, uvArray)
+        bindOrCreateStaticVBO(self.staticArrayBuffers, uvArray)
         Live2DGLWrapper.activeTexture(Live2DGLWrapper.TEXTURE1)
         Live2DGLWrapper.bindTexture(Live2DGLWrapper.TEXTURE_2D, self.textures[texNo + 1] or 0)
         Live2DGLWrapper.uniform1i(self.s_texture0_Loc, 1)
@@ -137,10 +154,10 @@ function DrawParamOpenGL:drawTexture(texNo, screenColor, indexArray, vertexArray
         -- Draw with clipping
         Live2DGLWrapper.useProgram(self.shaderProgramOff)
         self.vbo = bindOrCreateVBO(self.vbo, vertexArray)
-        self.ebo = bindOrCreateEBO(self.ebo, indexArray)
+        bindOrCreateStaticEBO(self.staticElementBuffers, indexArray)
         Live2DGLWrapper.enableVertexAttribArray(self.a_position_Loc_Off)
         Live2DGLWrapper.vertexAttribPointer(self.a_position_Loc_Off, 2, Live2DGLWrapper.FLOAT, false, 0, nil)
-        self.uvbo = bindOrCreateVBO(self.uvbo, uvArray)
+        bindOrCreateStaticVBO(self.staticArrayBuffers, uvArray)
         Live2DGLWrapper.activeTexture(Live2DGLWrapper.TEXTURE1)
         Live2DGLWrapper.bindTexture(Live2DGLWrapper.TEXTURE_2D, self.textures[texNo + 1] or 0)
         Live2DGLWrapper.uniform1i(self.s_texture0_Loc_Off, 1)
@@ -163,10 +180,10 @@ function DrawParamOpenGL:drawTexture(texNo, screenColor, indexArray, vertexArray
         -- Normal draw
         Live2DGLWrapper.useProgram(self.shaderProgram)
         self.vbo = bindOrCreateVBO(self.vbo, vertexArray)
-        self.ebo = bindOrCreateEBO(self.ebo, indexArray)
+        bindOrCreateStaticEBO(self.staticElementBuffers, indexArray)
         Live2DGLWrapper.enableVertexAttribArray(self.a_position_Loc)
         Live2DGLWrapper.vertexAttribPointer(self.a_position_Loc, 2, Live2DGLWrapper.FLOAT, false, 0, nil)
-        self.uvbo = bindOrCreateVBO(self.uvbo, uvArray)
+        bindOrCreateStaticVBO(self.staticArrayBuffers, uvArray)
         Live2DGLWrapper.activeTexture(Live2DGLWrapper.TEXTURE1)
         Live2DGLWrapper.bindTexture(Live2DGLWrapper.TEXTURE_2D, self.textures[texNo + 1] or 0)
         Live2DGLWrapper.uniform1i(self.s_texture0_Loc, 1)
@@ -449,14 +466,18 @@ function DrawParamOpenGL:dispose()
         Live2DGLWrapper.deleteBuffer(self.vbo)
         self.vbo = nil
     end
-    if self.uvbo ~= nil and self.uvbo ~= 0 then
-        Live2DGLWrapper.deleteBuffer(self.uvbo)
-        self.uvbo = nil
+    for _, buffer in pairs(self.staticArrayBuffers) do
+        if buffer ~= nil and buffer ~= 0 then
+            Live2DGLWrapper.deleteBuffer(buffer)
+        end
     end
-    if self.ebo ~= nil and self.ebo ~= 0 then
-        Live2DGLWrapper.deleteBuffer(self.ebo)
-        self.ebo = nil
+    self.staticArrayBuffers = {}
+    for _, buffer in pairs(self.staticElementBuffers) do
+        if buffer ~= nil and buffer ~= 0 then
+            Live2DGLWrapper.deleteBuffer(buffer)
+        end
     end
+    self.staticElementBuffers = {}
 
     if self.framebufferObject ~= nil then
         if self.framebufferObject.framebuffer ~= nil and self.framebufferObject.framebuffer ~= 0 then
