@@ -132,6 +132,7 @@ function ModelRuntime.new(model, canvas, art_meshes, art_mesh_keyforms, deformer
         _pose_selection = {},
         _pose_faded = {},
         _composed_deformers = {},
+        _render_orders = {},
     }, ModelRuntime)
 
     local ok = self:update_meshes()
@@ -484,10 +485,12 @@ function ModelRuntime:apply_group_render_orders()
     if not groups then return end
 
     local drawable_draw_orders = self._drawable_draw_orders
-    for i, mesh in ipairs(self.meshes) do
+    local meshes = self.meshes
+    for i = 1, #meshes do
+        local mesh = meshes[i]
         drawable_draw_orders[i] = draw_order_from_raw(mesh.draw_order)
     end
-    for i = #self.meshes + 1, #drawable_draw_orders do
+    for i = #meshes + 1, #drawable_draw_orders do
         drawable_draw_orders[i] = nil
     end
 
@@ -514,11 +517,12 @@ function ModelRuntime:apply_group_render_orders()
         part_draw_orders,
         part_enable,
         self.offscreen:part_offscreen_indices_list(),
-        self.offscreen:offscreen_count()
+        self.offscreen:offscreen_count(),
+        self._render_orders
     )
     if not render_orders then return end
-    for i, mesh in ipairs(self.meshes) do
-        mesh.render_order = render_orders[i]
+    for i = 1, #meshes do
+        meshes[i].render_order = render_orders[i]
     end
 end
 

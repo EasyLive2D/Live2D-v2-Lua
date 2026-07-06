@@ -129,13 +129,37 @@ local function update_draw_order_indices(renderer, meshes)
 
     local count = #meshes
     local old_draw_order_count = #draw_order_indices
+    local render_orders = renderer._draw_order_render_orders
+    if renderer._draw_order_cache_mode == "render_order"
+        and renderer._draw_order_cache_count == count
+        and render_orders then
+        local unchanged = true
+        for i = 1, count do
+            if render_orders[i] ~= meshes[i].render_order then
+                unchanged = false
+                break
+            end
+        end
+        if unchanged then
+            return draw_order_indices
+        end
+    end
+
     if render_orders_are_total_rank(renderer, meshes) then
+        if not render_orders then
+            render_orders = {}
+            renderer._draw_order_render_orders = render_orders
+        end
         for i = 1, count do
             local mesh = meshes[i]
             draw_order_indices[mesh.render_order + 1] = i - 1
+            render_orders[i] = mesh.render_order
         end
         for i = count + 1, old_draw_order_count do
             draw_order_indices[i] = nil
+        end
+        for i = count + 1, #render_orders do
+            render_orders[i] = nil
         end
         renderer._draw_order_cache_mode = "render_order"
         renderer._draw_order_cache_count = count
@@ -147,7 +171,6 @@ local function update_draw_order_indices(renderer, meshes)
         ranks = {}
         renderer._draw_order_ranks = ranks
     end
-    local render_orders = renderer._draw_order_render_orders
     if not render_orders then
         render_orders = {}
         renderer._draw_order_render_orders = render_orders
@@ -484,7 +507,8 @@ function OpenGLRenderer:render_meshes(meshes, textures, projection)
     local draw_order_indices = update_draw_order_indices(self, meshes)
 
     -- Upload and draw each mesh
-    for _, idx in ipairs(draw_order_indices) do
+    for i = 1, #draw_order_indices do
+        local idx = draw_order_indices[i]
         local mesh = meshes[idx + 1]
         if mesh and mesh.opacity > 0.001 then
             if #mesh.masks > 0 and gl.glStencilFunc and gl.glStencilOp and gl.glStencilMask then
@@ -512,7 +536,9 @@ function OpenGLRenderer:draw_clipped_mesh(mesh, meshes, textures, projection)
     gl.glStencilFunc(GL_ALWAYS, 1, 0xFF)
     gl.glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE)
 
-    for _, mask_idx in ipairs(mesh.masks) do
+    local masks = mesh.masks
+    for i = 1, #masks do
+        local mask_idx = masks[i]
         local mask_mesh = meshes[mask_idx + 1]
         if mask_mesh and #mask_mesh.vertices > 0 and #mask_mesh.indices > 0 then
             local old_opacity = mask_mesh.opacity

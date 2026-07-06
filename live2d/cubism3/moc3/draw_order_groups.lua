@@ -120,8 +120,27 @@ function draw_order_groups.expand_group(self, group_index, start_rank, drawable_
     if not group then return nil end
 
     local bucket_count = math.max(group.max_draw_order - group.base_draw_order, 0) + 1
-    local buckets = {}
-    for i = 1, bucket_count do buckets[i] = {} end
+    local scratch = self._bucket_scratch
+    if not scratch then
+        scratch = {}
+        self._bucket_scratch = scratch
+    end
+    local buckets = scratch[group_index + 1]
+    if not buckets then
+        buckets = {}
+        scratch[group_index + 1] = buckets
+    end
+    for i = 1, bucket_count do
+        local bucket = buckets[i]
+        if bucket then
+            for j = #bucket, 1, -1 do bucket[j] = nil end
+        else
+            buckets[i] = {}
+        end
+    end
+    for i = bucket_count + 1, #buckets do
+        buckets[i] = nil
+    end
 
     for offset = 0, group.object_count - 1 do
         local object = self.objects[group.object_begin + offset + 1]
@@ -159,14 +178,17 @@ function draw_order_groups.expand_group(self, group_index, start_rank, drawable_
     return true
 end
 
-function draw_order_groups.render_orders(self, drawable_draw_orders, part_draw_orders, part_enable, part_offscreen_indices, offscreen_count)
+function draw_order_groups.render_orders(self, drawable_draw_orders, part_draw_orders, part_enable, part_offscreen_indices, offscreen_count, out_render_orders)
     if #drawable_draw_orders ~= self.drawable_count_value then
         return nil
     end
     offscreen_count = offscreen_count or 0
-    local render_orders = {}
+    local render_orders = out_render_orders or {}
     for i = 1, self.drawable_count_value + offscreen_count do
         render_orders[i] = 0
+    end
+    for i = self.drawable_count_value + offscreen_count + 1, #render_orders do
+        render_orders[i] = nil
     end
     local ok = self:expand_group(0, 0, drawable_draw_orders, part_draw_orders or {}, part_enable or {}, part_offscreen_indices or {}, render_orders)
     if not ok then return nil end
