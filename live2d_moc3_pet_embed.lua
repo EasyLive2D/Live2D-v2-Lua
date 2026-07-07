@@ -11,6 +11,19 @@ Renderer.__index = Renderer
 
 local GL_COLOR_BUFFER_BIT = 0x00004000
 
+local function compute_delta_seconds(state, time_msec)
+    time_msec = tonumber(time_msec)
+    if time_msec == nil then
+        return 0
+    end
+    local last_time_msec = state.last_time_msec
+    state.last_time_msec = time_msec
+    if last_time_msec == nil or time_msec <= last_time_msec then
+        return 0
+    end
+    return math.min((time_msec - last_time_msec) / 1000.0, 0.1)
+end
+
 local PARAM_ALIASES = {
     PARAM_MOUTH_OPEN_Y = "ParamMouthOpenY",
     PARAM_MOUTH_FORM = "ParamMouthForm",
@@ -148,12 +161,7 @@ function Renderer:draw(opts)
         end
     end
 
-    local time_msec = tonumber(opts.time_msec) or 0
-    local delta = 1 / 60
-    if self.last_time_msec ~= nil and time_msec > self.last_time_msec then
-        delta = math.min((time_msec - self.last_time_msec) / 1000.0, 0.1)
-    end
-    self.last_time_msec = time_msec
+    local delta = compute_delta_seconds(self, opts.time_msec)
 
     self.renderer:update(delta)
     self.renderer:render(self.projection)
