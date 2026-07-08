@@ -94,10 +94,12 @@ ffi.cdef[[
 -- entry point directly from OpenGL.framework, so no procaddress shim is needed
 -- — but the symbols still have to be declared in cdef so ffi.load can resolve
 -- them. We declare the prototypes below in the macOS branch.
+local egl_lib = nil
 if is_win then
     ffi.cdef[[ void *wglGetProcAddress(const char *name); ]]
 elseif not is_mac then
-    ffi.cdef[[ void *glXGetProcAddress(const char *name); ]]
+    ffi.cdef[[ void *glXGetProcAddress(const char *name); void *eglGetProcAddress(const char *name); ]]
+    pcall(function() egl_lib = ffi.load("EGL") end)
 end
 
 if is_mac then
@@ -205,7 +207,14 @@ local function loadGL(name, cast_type)
     if is_win then
         ptr = gl_lib.wglGetProcAddress(name)
     else
-        ptr = gl_lib.glXGetProcAddress(name)
+        local ok
+        ok, ptr = pcall(function() return gl_lib.glXGetProcAddress(name) end)
+        if not ok or ptr == nil then
+            ok, ptr = pcall(function() return gl_lib[name] end)
+        end
+        if (not ok or ptr == nil) and egl_lib ~= nil then
+            ok, ptr = pcall(function() return egl_lib.eglGetProcAddress(name) end)
+        end
     end
     if ptr == nil then
         error("Failed to load GL function: " .. name)
