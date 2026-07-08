@@ -5,6 +5,7 @@ local ffi = require("ffi")
 local draw_order_from_raw = require("live2d.cubism3.core.art_mesh").draw_order_from_raw
 local drawable = require("live2d.cubism3.moc3.drawable")
 local image_loader = require("live2d.image_loader")
+local floor = math.floor
 
 local GL_STENCIL_TEST = 0x0B90
 local GL_ALPHA_TEST = 0x0BC0
@@ -56,15 +57,21 @@ varying vec3 v_multiply;
 varying vec3 v_screen;
 
 uniform sampler2D u_texture;
+uniform vec4 u_options;
 
 void main() {
     vec4 tex = texture2D(u_texture, v_uv);
-    // Multiply blend: output = tex * multiply
-    // Screen blend: output = 1 - (1-tex)*(1-screen) = tex + screen - tex*screen
-    vec3 blended = tex.rgb * v_multiply;
-    blended = blended + v_screen - blended * v_screen;
     float alpha = tex.a * v_opacity;
-    gl_FragColor = vec4(blended * alpha, alpha);
+    if (u_options.x > 0.0 && alpha <= u_options.x) {
+        discard;
+    }
+
+    // Texture RGB is uploaded premultiplied. Keep it premultiplied after
+    // multiply/screen color so linear filtering cannot pull in black RGB from
+    // transparent texels around masks and facial parts.
+    vec3 blended = tex.rgb * v_multiply;
+    blended = blended + v_screen * tex.a - blended * v_screen;
+    gl_FragColor = vec4(blended * v_opacity, alpha);
 }
 ]]
 
@@ -238,10 +245,15 @@ function OpenGLRenderer:begin_render(projection)
     gl.glUniformMatrix4fv(self.u_projection, 1, 0, projection)
     gl.glActiveTexture(0x84C0) -- GL_TEXTURE0
     gl.glUniform1i(self.u_texture, 0)
+    gl.glUniform4f(self.u_options, 0.0, 0.0, 0.0, 0.0)
     self._drawing = true
     self._enabled_attribs = self._enabled_attribs or {}
     self._last_blend = nil
     self._last_texture = nil
+end
+
+function OpenGLRenderer:use_alpha_test(threshold)
+    self.gl.glUniform4f(self.u_options, tonumber(threshold) or 0.0, 0.0, 0.0, 0.0)
 end
 
 function OpenGLRenderer:end_render()
@@ -375,6 +387,7 @@ function OpenGLRenderer:init_shader()
     self.shader = prog
     self.u_projection = gl.glGetUniformLocation(prog, "u_projection")
     self.u_texture = gl.glGetUniformLocation(prog, "u_texture")
+    self.u_options = gl.glGetUniformLocation(prog, "u_options")
     self.a_position = gl.glGetAttribLocation(prog, "a_position")
     self.a_uv = gl.glGetAttribLocation(prog, "a_uv")
     self.a_opacity = gl.glGetAttribLocation(prog, "a_opacity")
@@ -442,7 +455,11 @@ local function texture_stream_pixels(stream, texture_path)
         local height = tonumber(stream.height or stream.Height)
         local data = stream.data or stream.rgba or stream.bytes_rgba or stream[1]
         if width and height and data ~= nil then
-            return width, height, data
+            local premultiplied = stream.premultiplied == true
+                or stream.premultiplied_alpha == true
+                or stream.premultipliedAlpha == true
+            local edge_bleed = stream.edge_bleed ~= false and stream.edgeBleed ~= false
+            return width, height, data, premultiplied, edge_bleed
         end
 
         local bytes = stream.bytes or stream.png or stream[1]
@@ -461,10 +478,63 @@ local function texture_stream_pixels(stream, texture_path)
     return nil
 end
 
+local function bleed_and_premultiply_alpha(width, height, data, edge_bleed)
+    local pixel_count = width * height
+    local out = ffi.new("uint8_t[?]", pixel_count * 4)
+    local src = ffi.cast("const uint8_t*", data)
+
+    for y = 0, height - 1 do
+        for x = 0, width - 1 do
+            local base = (y * width + x) * 4
+            local alpha = src[base + 3]
+            local red = src[base]
+            local green = src[base + 1]
+            local blue = src[base + 2]
+
+            if edge_bleed ~= false and alpha > 0 and alpha < 255 then
+                local total = 0
+                local accumulated_red = 0
+                local accumulated_green = 0
+                local accumulated_blue = 0
+                for oy = -1, 1 do
+                    for ox = -1, 1 do
+                        if ox ~= 0 or oy ~= 0 then
+                            local nx = x + ox
+                            local ny = y + oy
+                            if nx >= 0 and nx < width and ny >= 0 and ny < height then
+                                local nbase = (ny * width + nx) * 4
+                                local neighbor_alpha = src[nbase + 3]
+                                if neighbor_alpha > alpha then
+                                    accumulated_red = accumulated_red + src[nbase] * neighbor_alpha
+                                    accumulated_green = accumulated_green + src[nbase + 1] * neighbor_alpha
+                                    accumulated_blue = accumulated_blue + src[nbase + 2] * neighbor_alpha
+                                    total = total + neighbor_alpha
+                                end
+                            end
+                        end
+                    end
+                end
+                if total > 0 then
+                    red = floor((accumulated_red + total / 2) / total)
+                    green = floor((accumulated_green + total / 2) / total)
+                    blue = floor((accumulated_blue + total / 2) / total)
+                end
+            end
+
+            out[base] = floor((red * alpha + 127) / 255)
+            out[base + 1] = floor((green * alpha + 127) / 255)
+            out[base + 2] = floor((blue * alpha + 127) / 255)
+            out[base + 3] = alpha
+        end
+    end
+
+    return out
+end
+
 function OpenGLRenderer:load_texture(texture_path, texture_index)
     local gl = self.gl
 
-    local width, height, data = texture_stream_pixels(
+    local width, height, data, premultiplied, edge_bleed = texture_stream_pixels(
         self:resolve_texture_stream(texture_path, texture_index),
         texture_path
     )
@@ -476,6 +546,9 @@ function OpenGLRenderer:load_texture(texture_path, texture_index)
     end
     if type(data) == "string" then
         data = ffi.cast("const unsigned char *", data)
+    end
+    if not premultiplied then
+        data = bleed_and_premultiply_alpha(width, height, data, edge_bleed)
     end
 
     local tex_id = ffi.new("GLuint[1]")
@@ -535,6 +608,7 @@ function OpenGLRenderer:draw_clipped_mesh(mesh, meshes, textures, projection)
     gl.glStencilMask(0xFF)
     gl.glStencilFunc(GL_ALWAYS, 1, 0xFF)
     gl.glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE)
+    self:use_alpha_test(0.01)
 
     local masks = mesh.masks
     for i = 1, #masks do
@@ -550,6 +624,7 @@ function OpenGLRenderer:draw_clipped_mesh(mesh, meshes, textures, projection)
 
     gl.glColorMask(1, 1, 1, 1)
     gl.glStencilMask(0x00)
+    self:use_alpha_test(0.0)
     local stencil_func = drawable.is_inverted_mask(mesh.drawable_flags) and GL_NOTEQUAL or GL_EQUAL
     gl.glStencilFunc(stencil_func, 1, 0xFF)
     gl.glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP)

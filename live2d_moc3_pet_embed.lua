@@ -14,7 +14,7 @@ local GL_COLOR_BUFFER_BIT = 0x00004000
 local function compute_delta_seconds(state, time_msec)
     time_msec = tonumber(time_msec)
     if time_msec == nil then
-        return 0
+        time_msec = os.clock() * 1000.0
     end
     local last_time_msec = state.last_time_msec
     state.last_time_msec = time_msec
@@ -208,7 +208,7 @@ function Renderer:start_motion(name, no, priority, loop)
     if tonumber(priority) and tonumber(priority) >= 3 then
         self.renderer:clear_motions()
     end
-    pcall(function() self.renderer:start_motion(tostring(name), tonumber(no) or 0, 1.0, loop) end)
+    self.renderer:start_motion(tostring(name), tonumber(no) or 0, 1.0, loop)
     return self
 end
 
