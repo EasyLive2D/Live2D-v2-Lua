@@ -9,6 +9,9 @@ local floor = math.floor
 
 local GL_STENCIL_TEST = 0x0B90
 local GL_ALPHA_TEST = 0x0BC0
+local GL_DEPTH_TEST = 0x0B71
+local GL_BLEND = 0x0BE2
+local GL_CULL_FACE = 0x0B44
 local GL_STENCIL_BUFFER_BIT = 0x00000400
 local GL_ALWAYS = 0x0207
 local GL_EQUAL = 0x0202
@@ -241,6 +244,9 @@ end
 
 function OpenGLRenderer:begin_render(projection)
     local gl = self.gl
+    gl.glDisable(GL_DEPTH_TEST)
+    gl.glDisable(GL_CULL_FACE)
+    gl.glEnable(GL_BLEND)
     gl.glUseProgram(self.shader)
     gl.glUniformMatrix4fv(self.u_projection, 1, 0, projection)
     gl.glActiveTexture(0x84C0) -- GL_TEXTURE0
