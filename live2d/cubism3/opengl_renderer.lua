@@ -25,7 +25,8 @@ local GL_ONE_MINUS_SRC_ALPHA = 0x0303
 local GL_DST_COLOR = 0x0306
 local GL_ARRAY_BUFFER = 0x8892
 local GL_ELEMENT_ARRAY_BUFFER = 0x8893
-local GL_DYNAMIC_DRAW = 0x88E4
+local GL_STATIC_DRAW = 0x88E4
+local GL_DYNAMIC_DRAW = 0x88E8
 
 -- Vertex shader: position + uv + opacity + multiply + screen colors
 local VERTEX_SHADER = [[
@@ -234,6 +235,7 @@ function OpenGLRenderer.new(gl, opts)
     self.vertex_capacity = 0
     self.index_data = nil
     self.index_capacity = 0
+    self._owned_buffers = {}
     self._drawing = false
     self._enabled_attribs = {}
     self._last_blend = nil
@@ -420,6 +422,42 @@ function OpenGLRenderer:init_shader()
     gl.glGenBuffers(1, ibo)
     self.vbo = vbo[0]
     self.ibo = ibo[0]
+end
+
+function OpenGLRenderer:new_buffer()
+    local id = ffi.new("GLuint[1]")
+    self.gl.glGenBuffers(1, id)
+    local buffer = id[0]
+    self._owned_buffers[#self._owned_buffers + 1] = buffer
+    return buffer
+end
+
+function OpenGLRenderer:upload_mesh_buffers(mesh, vertex_bytes, vertex_data, index_bytes, index_data)
+    local gl = self.gl
+    if mesh._gl_renderer ~= self or not mesh._gl_vbo or mesh._gl_vbo == 0 then
+        mesh._gl_renderer = self
+        mesh._gl_vbo = self:new_buffer()
+        mesh._gl_ibo = self:new_buffer()
+        mesh._gl_vertex_capacity = 0
+        mesh._gl_index_bytes = 0
+    end
+
+    gl.glBindBuffer(GL_ARRAY_BUFFER, mesh._gl_vbo)
+    if (mesh._gl_vertex_capacity or 0) < vertex_bytes then
+        gl.glBufferData(GL_ARRAY_BUFFER, vertex_bytes, nil, GL_DYNAMIC_DRAW)
+        mesh._gl_vertex_capacity = vertex_bytes
+    end
+    if gl.glBufferSubData then
+        gl.glBufferSubData(GL_ARRAY_BUFFER, 0, vertex_bytes, vertex_data)
+    else
+        gl.glBufferData(GL_ARRAY_BUFFER, vertex_bytes, vertex_data, GL_DYNAMIC_DRAW)
+    end
+
+    gl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh._gl_ibo)
+    if mesh._gl_index_bytes ~= index_bytes then
+        gl.glBufferData(GL_ELEMENT_ARRAY_BUFFER, index_bytes, index_data, GL_STATIC_DRAW)
+        mesh._gl_index_bytes = index_bytes
+    end
 end
 
 function OpenGLRenderer:set_texture_stream(path, stream)
@@ -711,12 +749,7 @@ function OpenGLRenderer:draw_mesh(mesh, textures, projection)
 
     self:use_blend(drawable.blend_mode_from_flags(mesh.drawable_flags))
 
-    -- Upload geometry
-    gl.glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
-    gl.glBufferData(GL_ARRAY_BUFFER, vertex_float_count * 4, vertex_data, GL_DYNAMIC_DRAW)
-
-    gl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self.ibo)
-    gl.glBufferData(GL_ELEMENT_ARRAY_BUFFER, index_count * 2, index_data, GL_DYNAMIC_DRAW)
+    self:upload_mesh_buffers(mesh, vertex_float_count * 4, vertex_data, index_count * 2, index_data)
 
     -- Set vertex attributes
     local stride = 11 * 4 -- 11 floats * 4 bytes
@@ -771,6 +804,10 @@ function OpenGLRenderer:destroy()
     if self.ibo then
         gl.glDeleteBuffers(1, ffi.new("GLuint[1]", self.ibo))
     end
+    for _, buffer in ipairs(self._owned_buffers or {}) do
+        gl.glDeleteBuffers(1, ffi.new("GLuint[1]", buffer))
+    end
+    self._owned_buffers = {}
     for _, tex_id in pairs(self.textures) do
         gl.glDeleteTextures(1, ffi.new("GLuint[1]", tex_id))
     end

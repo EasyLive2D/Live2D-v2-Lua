@@ -80,6 +80,7 @@ function M.new(width, height)
         renderer = moc3.new({ gl = gl }),
         projection = nil,
         last_time_msec = nil,
+        gc_frame_count = 0,
     }, Renderer)
     self:resize(self.width, self.height)
     return self
@@ -97,6 +98,7 @@ function Renderer:load_model(model_path, width, height, opts)
     })
     self.renderer:load_model(model_path, opts)
     self.last_time_msec = nil
+    self.gc_frame_count = 0
     self:resize(width or self.width, height or self.height)
     return self
 end
@@ -167,9 +169,16 @@ function Renderer:draw(opts)
     self.renderer:render(self.projection)
     opts.profile_update_draw_seconds = os.clock() - start
 
-    local gc_start = os.clock()
-    collectgarbage("step", tonumber(opts.gc_step) or 200)
-    opts.profile_gc_seconds = os.clock() - gc_start
+    self.gc_frame_count = (self.gc_frame_count or 0) + 1
+    local gc_interval = tonumber(opts.gc_interval) or 20
+    if self.gc_frame_count >= gc_interval then
+        self.gc_frame_count = 0
+        local gc_start = os.clock()
+        collectgarbage("step", tonumber(opts.gc_step) or 400)
+        opts.profile_gc_seconds = os.clock() - gc_start
+    else
+        opts.profile_gc_seconds = 0
+    end
     return self
 end
 

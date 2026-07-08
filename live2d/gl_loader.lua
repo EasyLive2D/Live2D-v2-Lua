@@ -130,6 +130,7 @@ if is_mac then
         void glDeleteBuffers(GLsizei n, const GLuint *buffers);
         void glBindBuffer(GLenum target, GLuint buffer);
         void glBufferData(GLenum target, GLsizeiptr size, const void *data, GLenum usage);
+        void glBufferSubData(GLenum target, GLintptr offset, GLsizeiptr size, const void *data);
         void glEnableVertexAttribArray(GLuint index);
         void glDisableVertexAttribArray(GLuint index);
         void glVertexAttribPointer(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
@@ -174,6 +175,7 @@ ffi.cdef("typedef void (" .. CC .. "*PFNGLGENBUFFERSPROC)(GLsizei n, GLuint *buf
 ffi.cdef("typedef void (" .. CC .. "*PFNGLDELETEBUFFERSPROC)(GLsizei n, const GLuint *buffers);")
 ffi.cdef("typedef void (" .. CC .. "*PFNGLBINDBUFFERPROC)(GLenum target, GLuint buffer);")
 ffi.cdef("typedef void (" .. CC .. "*PFNGLBUFFERDATAPROC)(GLenum target, GLsizeiptr size, const void *data, GLenum usage);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLBUFFERSUBDATAPROC)(GLenum target, GLintptr offset, GLsizeiptr size, const void *data);")
 ffi.cdef("typedef void (" .. CC .. "*PFNGLENABLEVERTEXATTRIBARRAYPROC)(GLuint index);")
 ffi.cdef("typedef void (" .. CC .. "*PFNGLDISABLEVERTEXATTRIBARRAYPROC)(GLuint index);")
 ffi.cdef("typedef void (" .. CC .. "*PFNGLVERTEXATTRIBPOINTERPROC)(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);")
@@ -270,6 +272,7 @@ function gl.ensureExtensions()
     gl.glDeleteBuffers = loadGL("glDeleteBuffers", "PFNGLDELETEBUFFERSPROC")
     gl.glBindBuffer = loadGL("glBindBuffer", "PFNGLBINDBUFFERPROC")
     gl.glBufferData = loadGL("glBufferData", "PFNGLBUFFERDATAPROC")
+    gl.glBufferSubData = loadOptionalGL("glBufferSubData", "PFNGLBUFFERSUBDATAPROC")
     gl.glEnableVertexAttribArray = loadGL("glEnableVertexAttribArray", "PFNGLENABLEVERTEXATTRIBARRAYPROC")
     gl.glDisableVertexAttribArray = loadGL("glDisableVertexAttribArray", "PFNGLDISABLEVERTEXATTRIBARRAYPROC")
     gl.glVertexAttribPointer = loadGL("glVertexAttribPointer", "PFNGLVERTEXATTRIBPOINTERPROC")
