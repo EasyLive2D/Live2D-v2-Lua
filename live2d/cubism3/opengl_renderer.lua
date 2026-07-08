@@ -25,7 +25,6 @@ local GL_DYNAMIC_DRAW = 0x88E4
 
 -- Vertex shader: position + uv + opacity + multiply + screen colors
 local VERTEX_SHADER = [[
-#version 120
 attribute vec2 a_position;
 attribute vec2 a_uv;
 attribute float a_opacity;
@@ -49,7 +48,8 @@ void main() {
 ]]
 
 local FRAGMENT_SHADER = [[
-#version 120
+precision mediump float;
+
 varying vec2 v_uv;
 varying float v_opacity;
 varying vec3 v_multiply;

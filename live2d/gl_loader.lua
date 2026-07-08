@@ -5,6 +5,10 @@
 local ffi = require("ffi")
 local is_win = ffi.os == "Windows"
 local is_mac = ffi.os == "OSX"
+local is_android = false
+if not is_win and not is_mac then
+    is_android = pcall(ffi.load, "android")
+end
 
 -- Calling convention: __stdcall on Windows, default (blank) everywhere else.
 local CC = is_win and "__stdcall " or ""
@@ -19,6 +23,8 @@ elseif is_mac then
         "OpenGL.framework/OpenGL",
         "OpenGL",
     }
+elseif is_android then
+    gl_lib_names = {"GLESv2", "GLESv3", "GL", "GL.so.1", "GL.so"}
 else
     gl_lib_names = {"GL", "GL.so.1", "GL.so"}
 end
@@ -190,6 +196,20 @@ ffi.cdef("typedef void (" .. CC .. "*PFNGLDELETERENDERBUFFERSPROC)(GLsizei n, co
 ffi.cdef("typedef void (" .. CC .. "*PFNGLGENERATEMIPMAPPROC)(GLenum target);")
 
 local gl = setmetatable({}, { __index = gl_lib })
+if is_android then
+    -- OpenGL ES 2.0 has no fixed-function alpha test or immediate-mode APIs.
+    -- Mark them absent so feature checks do not try to resolve missing symbols.
+    gl.glAlphaFunc = false
+    gl.glBegin = false
+    gl.glEnd = false
+    gl.glVertex2f = false
+    gl.glColor4f = false
+    gl.glMatrixMode = false
+    gl.glPushMatrix = false
+    gl.glPopMatrix = false
+    gl.glLoadIdentity = false
+    gl.glOrtho = false
+end
 local extensions_loaded = false
 
 local function loadGL(name, cast_type)
@@ -222,6 +242,12 @@ local function loadGL(name, cast_type)
     return ffi.cast(cast_type, ptr)
 end
 
+local function loadOptionalGL(name, cast_type)
+    local ok, fn = pcall(loadGL, name, cast_type)
+    if ok then return fn end
+    return false
+end
+
 function gl.ensureExtensions()
     if extensions_loaded then return end
     gl.glActiveTexture = loadGL("glActiveTexture", "PFNGLACTIVETEXTUREPROC")
@@ -247,8 +273,8 @@ function gl.ensureExtensions()
     gl.glEnableVertexAttribArray = loadGL("glEnableVertexAttribArray", "PFNGLENABLEVERTEXATTRIBARRAYPROC")
     gl.glDisableVertexAttribArray = loadGL("glDisableVertexAttribArray", "PFNGLDISABLEVERTEXATTRIBARRAYPROC")
     gl.glVertexAttribPointer = loadGL("glVertexAttribPointer", "PFNGLVERTEXATTRIBPOINTERPROC")
-    gl.glGenVertexArrays = loadGL("glGenVertexArrays", "PFNGLGENVERTEXARRAYSPROC")
-    gl.glBindVertexArray = loadGL("glBindVertexArray", "PFNGLBINDVERTEXARRAYPROC")
+    gl.glGenVertexArrays = loadOptionalGL("glGenVertexArrays", "PFNGLGENVERTEXARRAYSPROC")
+    gl.glBindVertexArray = loadOptionalGL("glBindVertexArray", "PFNGLBINDVERTEXARRAYPROC")
     gl.glUniform1i = loadGL("glUniform1i", "PFNGLUNIFORM1IPROC")
     gl.glUniform4f = loadGL("glUniform4f", "PFNGLUNIFORM4FPROC")
     gl.glUniformMatrix4fv = loadGL("glUniformMatrix4fv", "PFNGLUNIFORMMATRIX4FVPROC")
