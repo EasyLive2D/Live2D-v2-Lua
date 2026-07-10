@@ -65,6 +65,8 @@ check("clear motions", renderer:clear_motions() == renderer)
 
 local textures = renderer:get_textures()
 check("texture references", textures and #textures == 2)
+local texture_paths = renderer:get_texture_paths()
+check("texture paths are cached", texture_paths == renderer:get_texture_paths())
 
 local singleton = embed.load_model(base .. "Hiyori.model3.json", {
     resource_streams = {

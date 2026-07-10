@@ -185,6 +185,10 @@ function Renderer:load_model(model_path, opts)
     self.model_data = model_data
     self.runtime = runtime
     self.textures = references.textures or {}
+    self.texture_paths = {}
+    for i, texture in ipairs(self.textures) do
+        self.texture_paths[i] = join_path(base, texture)
+    end
     self.motion_cache = {}
     self.active_motions = {}
     self.expression_cache = {}
@@ -209,11 +213,7 @@ function Renderer:get_textures()
 end
 
 function Renderer:get_texture_paths()
-    local result = {}
-    for i, texture in ipairs(self.textures or {}) do
-        result[i] = join_path(self.base_path, texture)
-    end
-    return result
+    return self.texture_paths
 end
 
 function Renderer:get_parameter(param_id)
@@ -420,15 +420,20 @@ end
 function Renderer:update(delta_seconds)
     local runtime = require_runtime(self)
     delta_seconds = tonumber(delta_seconds) or 0
-    local kept = {}
-    for _, player in ipairs(self.active_motions) do
+    local motions = self.active_motions
+    local kept_count = 0
+    for i = 1, #motions do
+        local player = motions[i]
         player:tick(delta_seconds)
         player:apply(runtime)
         if not player:is_finished() then
-            kept[#kept + 1] = player
+            kept_count = kept_count + 1
+            motions[kept_count] = player
         end
     end
-    self.active_motions = kept
+    for i = kept_count + 1, #motions do
+        motions[i] = nil
+    end
     self.expression_manager:tick(delta_seconds)
     self.expression_manager:apply(runtime)
     runtime:apply_parameter_overrides()
@@ -463,6 +468,7 @@ function Renderer:dispose()
     self.model_path = nil
     self.base_path = nil
     self.textures = {}
+    self.texture_paths = {}
     self.motion_cache = {}
     self.active_motions = {}
     self.expression_cache = {}
@@ -481,6 +487,7 @@ function M.new(opts)
         resource_streams = {},
         texture_streams = {},
         textures = {},
+        texture_paths = {},
         motion_cache = {},
         active_motions = {},
         expression_cache = {},

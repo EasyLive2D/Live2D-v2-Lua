@@ -67,7 +67,7 @@ function Live2DMotion:updateParamExe(model, currentTimeMSec, weight, motionQueue
                     interpolatedValue = startValue + (endValue - startValue) * frameFraction
                 end
                 local blendedValue = currentValue + (interpolatedValue - currentValue) * weight
-                model:setParamFloat(paramId, blendedValue)
+                model:setParamFloat(paramIndex, blendedValue)
             end
         end
     end

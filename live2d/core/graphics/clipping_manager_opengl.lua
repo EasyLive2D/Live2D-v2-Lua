@@ -45,7 +45,6 @@ function ClippingManagerOpenGL.new(drawParamGL)
     for channelIndex = 0, 3 do
         self.dpGL:setChannelFlagAsColor(channelIndex, self.channelColors[channelIndex + 1])
     end
-    self:genMaskRenderTexture()
     return self
 end
 
@@ -68,6 +67,9 @@ function ClippingManagerOpenGL:init(modelContext, drawDataList, drawContextList)
                 drawCtx.clipBufPre_clipContext = existingClip
             end
         end
+    end
+    if #self.clipContextList > 0 then
+        self:genMaskRenderTexture()
     end
 end
 

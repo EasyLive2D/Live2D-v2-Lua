@@ -22,6 +22,7 @@ function ModelContext.new(model)
     self.initVersion = -1
     self.nextParamPos = 0
     self.paramIdList = {}
+    self.paramIndexById = {}
     self.paramValues = Float32Array(ModelContext.DEFAULT_ARRAY_LENGTH)
     self.lastParamValues = Float32Array(ModelContext.DEFAULT_ARRAY_LENGTH)
     self.paramMinValues = Float32Array(ModelContext.DEFAULT_ARRAY_LENGTH)
@@ -279,8 +280,14 @@ function ModelContext:draw(drawParam)
 end
 
 function ModelContext:getParamIndex(paramId)
+    local key = tostring(paramId)
+    local cached = self.paramIndexById[key]
+    if cached ~= nil then
+        return cached
+    end
     for i = 1, #self.paramIdList do
         if self.paramIdList[i] == paramId then
+            self.paramIndexById[key] = i - 1
             return i - 1
         end
     end
@@ -297,13 +304,17 @@ function ModelContext:getDeformerIndex(deformerId)
 end
 
 function ModelContext:extendAndAddParam(param_id, default_val, max_val, min_val)
+    local paramPosition = self.nextParamPos
     self.paramIdList[#self.paramIdList + 1] = param_id
     self.paramValues[#self.paramValues + 1] = default_val
     self.lastParamValues[#self.lastParamValues + 1] = default_val
     self.paramMinValues[#self.paramMinValues + 1] = max_val
     self.paramMaxValues[#self.paramMaxValues + 1] = min_val
     self.updatedParamFlags[#self.updatedParamFlags + 1] = ModelContext.DEFAULT_PARAM_UPDATE_FLAG
-    local paramPosition = self.nextParamPos
+    local key = tostring(param_id)
+    if self.paramIndexById[key] == nil then
+        self.paramIndexById[key] = paramPosition
+    end
     self.nextParamPos = self.nextParamPos + 1
     return paramPosition
 end

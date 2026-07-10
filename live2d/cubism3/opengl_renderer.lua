@@ -97,6 +97,14 @@ local function set_blend_func(gl, src_rgb, dst_rgb, src_alpha, dst_alpha)
     end
 end
 
+local function same_masks(a, b)
+    if #a ~= #b then return false end
+    for i = 1, #a do
+        if a[i] ~= b[i] then return false end
+    end
+    return true
+end
+
 local function render_orders_are_total_rank(renderer, meshes)
     local count = #meshes
     if count == 0 then return false end
@@ -249,6 +257,7 @@ function OpenGLRenderer:begin_render(projection)
     gl.glDisable(GL_DEPTH_TEST)
     gl.glDisable(GL_CULL_FACE)
     gl.glEnable(GL_BLEND)
+    gl.glBlendEquationSeparate(0x8006, 0x8006) -- GL_FUNC_ADD
     gl.glUseProgram(self.shader)
     gl.glUniformMatrix4fv(self.u_projection, 1, 0, projection)
     gl.glActiveTexture(0x84C0) -- GL_TEXTURE0
@@ -279,13 +288,10 @@ function OpenGLRenderer:use_blend(blend)
     local gl = self.gl
     if blend == "normal" then
         set_blend_func(gl, GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA)
-        gl.glBlendEquationSeparate(0x8006, 0x8006) -- GL_FUNC_ADD
     elseif blend == "additive" then
         set_blend_func(gl, GL_ONE, GL_ONE, GL_ZERO, GL_ONE)
-        gl.glBlendEquationSeparate(0x8006, 0x8006) -- GL_FUNC_ADD
     elseif blend == "multiplicative" then
         set_blend_func(gl, GL_DST_COLOR, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE)
-        gl.glBlendEquationSeparate(0x8006, 0x8006) -- GL_FUNC_ADD
     end
     self._last_blend = blend
 end
@@ -402,32 +408,13 @@ function OpenGLRenderer:init_shader()
     self.a_multiply = gl.glGetAttribLocation(prog, "a_multiply")
     self.a_screen = gl.glGetAttribLocation(prog, "a_screen")
 
-    -- Create VAO and VBO
-    local vao = ffi.new("GLuint[1]")
-    local vbo = ffi.new("GLuint[1]")
-    local ibo = ffi.new("GLuint[1]")
-
-    -- Only create VAO if the function is available (GL 3.0+)
-    local has_vao = pcall(function()
-        if gl.glGenVertexArrays then
-            gl.glGenVertexArrays(1, vao)
-        end
-    end)
-
-    if vao[0] and vao[0] ~= 0 then
-        self.vao = vao[0]
-    end
-
-    gl.glGenBuffers(1, vbo)
-    gl.glGenBuffers(1, ibo)
-    self.vbo = vbo[0]
-    self.ibo = ibo[0]
 end
 
 function OpenGLRenderer:new_buffer()
     local id = ffi.new("GLuint[1]")
     self.gl.glGenBuffers(1, id)
     local buffer = id[0]
+    self._owned_buffers = self._owned_buffers or {}
     self._owned_buffers[#self._owned_buffers + 1] = buffer
     return buffer
 end
@@ -623,22 +610,38 @@ function OpenGLRenderer:render_meshes(meshes, textures, projection)
 
     local draw_order_indices = update_draw_order_indices(self, meshes)
 
-    -- Upload and draw each mesh
-    for i = 1, #draw_order_indices do
+    -- Consecutive drawables sharing a mask can reuse one stencil build without
+    -- changing Cubism's established drawable order.
+    local i = 1
+    while i <= #draw_order_indices do
         local idx = draw_order_indices[i]
         local mesh = meshes[idx + 1]
         if mesh and mesh.opacity > 0.001 then
             if #mesh.masks > 0 and gl.glStencilFunc and gl.glStencilOp and gl.glStencilMask then
-                self:draw_clipped_mesh(mesh, meshes, textures, projection)
+                local last = i
+                while last + 1 <= #draw_order_indices do
+                    local next_mesh = meshes[draw_order_indices[last + 1] + 1]
+                    if not next_mesh or next_mesh.opacity <= 0.001 or not same_masks(mesh.masks, next_mesh.masks) then
+                        break
+                    end
+                    last = last + 1
+                end
+                self:draw_clipped_mesh_group(mesh, meshes, textures, projection, draw_order_indices, i, last)
+                i = last
             else
                 self:draw_mesh(mesh, textures, projection)
             end
         end
+        i = i + 1
     end
     self:end_render()
 end
 
 function OpenGLRenderer:draw_clipped_mesh(mesh, meshes, textures, projection)
+    self:draw_clipped_mesh_group(mesh, meshes, textures, projection)
+end
+
+function OpenGLRenderer:draw_clipped_mesh_group(mesh, meshes, textures, projection, draw_order_indices, first, last)
     local gl = self.gl
 
     gl.glEnable(GL_STENCIL_TEST)
@@ -669,10 +672,19 @@ function OpenGLRenderer:draw_clipped_mesh(mesh, meshes, textures, projection)
     gl.glColorMask(1, 1, 1, 1)
     gl.glStencilMask(0x00)
     self:use_alpha_test(0.0)
-    local stencil_func = drawable.is_inverted_mask(mesh.drawable_flags) and GL_NOTEQUAL or GL_EQUAL
-    gl.glStencilFunc(stencil_func, 1, 0xFF)
     gl.glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP)
-    self:draw_mesh(mesh, textures, projection)
+    if draw_order_indices then
+        for i = first, last do
+            local target = meshes[draw_order_indices[i] + 1]
+            local stencil_func = drawable.is_inverted_mask(target.drawable_flags) and GL_NOTEQUAL or GL_EQUAL
+            gl.glStencilFunc(stencil_func, 1, 0xFF)
+            self:draw_mesh(target, textures, projection)
+        end
+    else
+        local stencil_func = drawable.is_inverted_mask(mesh.drawable_flags) and GL_NOTEQUAL or GL_EQUAL
+        gl.glStencilFunc(stencil_func, 1, 0xFF)
+        self:draw_mesh(mesh, textures, projection)
+    end
 
     gl.glStencilMask(0xFF)
     gl.glDisable(GL_STENCIL_TEST)
@@ -797,12 +809,6 @@ function OpenGLRenderer:destroy()
     local gl = self.gl
     if self.shader then
         gl.glDeleteProgram(self.shader)
-    end
-    if self.vbo then
-        gl.glDeleteBuffers(1, ffi.new("GLuint[1]", self.vbo))
-    end
-    if self.ibo then
-        gl.glDeleteBuffers(1, ffi.new("GLuint[1]", self.ibo))
     end
     for _, buffer in ipairs(self._owned_buffers or {}) do
         gl.glDeleteBuffers(1, ffi.new("GLuint[1]", buffer))
