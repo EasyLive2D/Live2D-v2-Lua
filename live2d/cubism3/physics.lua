@@ -10,66 +10,65 @@ local DEFAULT_PHYSICS_FPS = 60.0
 local MAX_ACCUMULATED_TIME = 0.25
 local MAX_SUBSTEPS = 8
 local PI = math.pi
+local TWO_PI = PI * 2
+local DEG_TO_RAD = PI / 180.0
+local abs = math.abs
+local atan2 = math.atan2
+local cos = math.cos
+local sin = math.sin
+local sqrt = math.sqrt
 
 local function direction_to_radian(from_x, from_y, to_x, to_y)
-    local result = math.atan2(to_y, to_x) - math.atan2(from_y, from_x)
-    while result < -PI do result = result + PI * 2 end
-    while result > PI do result = result - PI * 2 end
+    local result = atan2(to_y, to_x) - atan2(from_y, from_x)
+    -- Both atan2 results are already in [-PI, PI], so one wrap is enough.
+    if result < -PI then
+        result = result + TWO_PI
+    elseif result > PI then
+        result = result - TWO_PI
+    end
     return result
 end
 
 local function normalize(x, y)
-    local length = math.sqrt(x * x + y * y)
+    local length = sqrt(x * x + y * y)
     if length == 0 then return 0, 0 end
     return x / length, y / length
 end
 
-local function normalize_parameter_value(value, minimum, maximum, normalization, reflected)
-    local maximum_value = math.max(maximum, minimum)
-    value = math.min(value, maximum_value)
-    local minimum_value = math.min(maximum, minimum)
-    value = math.max(value, minimum_value)
+local function normalize_parameter_value(value, input)
+    if value > input.maximum then
+        value = input.maximum
+    elseif value < input.minimum then
+        value = input.minimum
+    end
 
-    local normalized_minimum = math.min(normalization.minimum, normalization.maximum)
-    local normalized_maximum = math.max(normalization.minimum, normalization.maximum)
-    local parameter_middle = minimum_value + (maximum_value - minimum_value) * 0.5
-    local parameter_value = value - parameter_middle
+    local parameter_value = value - input.middle
     local result
     if parameter_value > 0 then
-        local parameter_length = maximum_value - parameter_middle
-        if parameter_length == 0 then
-            result = 0
-        else
-            result = parameter_value * (normalized_maximum - normalization.default) / parameter_length
-                + normalization.default
-        end
+        result = parameter_value * input.positive_scale + input.normalization_default
     elseif parameter_value < 0 then
-        local parameter_length = minimum_value - parameter_middle
-        if parameter_length == 0 then
-            result = 0
-        else
-            result = parameter_value * (normalized_minimum - normalization.default) / parameter_length
-                + normalization.default
-        end
+        result = parameter_value * input.negative_scale + input.normalization_default
     else
-        result = normalization.default
+        result = input.normalization_default
     end
-    return reflected and result or -result
+    return result * input.normalized_weight
 end
 
-local function update_output_parameter_value(value, minimum, maximum, output_value, output)
-    local scale = output.type == "Angle" and output.scale or 0
-    local next_value = output_value * scale
-    if next_value < minimum then
-        output.value_below_minimum = math.min(output.value_below_minimum, next_value)
-        next_value = minimum
-    elseif next_value > maximum then
-        output.value_exceeded_maximum = math.max(output.value_exceeded_maximum, next_value)
-        next_value = maximum
+local function update_output_parameter_value(value, output_value, output)
+    local next_value = output_value * output.output_scale
+    if next_value < output.minimum then
+        if next_value < output.value_below_minimum then
+            output.value_below_minimum = next_value
+        end
+        next_value = output.minimum
+    elseif next_value > output.maximum then
+        if next_value > output.value_exceeded_maximum then
+            output.value_exceeded_maximum = next_value
+        end
+        next_value = output.maximum
     end
-    local weight = output.weight / MAXIMUM_WEIGHT
-    if weight >= 1.0 then return next_value end
-    return value * (1.0 - weight) + next_value * weight
+    if output.weight_ratio >= 1.0 then return next_value end
+    return value * output.inverse_weight + next_value * output.weight_ratio
 end
 
 local function make_particles(vertices)
@@ -107,36 +106,38 @@ local function make_particles(vertices)
     return particles
 end
 
-local function update_particles(particles, total_x, total_y, total_angle, wind_x, wind_y, threshold, delta)
-    local total_radian = total_angle * PI / 180.0
-    local gravity_x, gravity_y = normalize(math.sin(total_radian), math.cos(total_radian))
+local function update_particles(particles, particle_count, total_x, total_y, total_angle, wind_x, wind_y, threshold, delta)
+    local total_radian = total_angle * DEG_TO_RAD
+    -- sin/cos already form a unit vector; normalizing it again is pure cost.
+    local gravity_x, gravity_y = sin(total_radian), cos(total_radian)
     particles[1].position_x = total_x
     particles[1].position_y = total_y
 
-    for index = 2, #particles do
+    for index = 2, particle_count do
         local particle = particles[index]
         local parent = particles[index - 1]
-        particle.force_x = gravity_x * particle.acceleration + wind_x
-        particle.force_y = gravity_y * particle.acceleration + wind_y
+        local force_x = gravity_x * particle.acceleration + wind_x
+        local force_y = gravity_y * particle.acceleration + wind_y
         particle.last_x = particle.position_x
         particle.last_y = particle.position_y
 
         local delay = particle.delay * delta * 30.0
+        local delay_squared = delay * delay
         local direction_x = particle.position_x - parent.position_x
         local direction_y = particle.position_y - parent.position_y
         local radian = direction_to_radian(
             particle.last_gravity_x, particle.last_gravity_y, gravity_x, gravity_y
         ) / AIR_RESISTANCE
-        local cosine = math.cos(radian)
-        local sine = math.sin(radian)
+        local cosine = cos(radian)
+        local sine = sin(radian)
         direction_x = cosine * direction_x - direction_y * sine
         -- Keep the native SDK's in-place rotation order for compatibility.
         direction_y = sine * direction_x + direction_y * cosine
 
         particle.position_x = parent.position_x + direction_x
         particle.position_y = parent.position_y + direction_y
-        particle.position_x = particle.position_x + particle.velocity_x * delay + particle.force_x * delay * delay
-        particle.position_y = particle.position_y + particle.velocity_y * delay + particle.force_y * delay * delay
+        particle.position_x = particle.position_x + particle.velocity_x * delay + force_x * delay_squared
+        particle.position_y = particle.position_y + particle.velocity_y * delay + force_y * delay_squared
 
         direction_x, direction_y = normalize(
             particle.position_x - parent.position_x,
@@ -144,7 +145,7 @@ local function update_particles(particles, total_x, total_y, total_angle, wind_x
         )
         particle.position_x = parent.position_x + direction_x * particle.radius
         particle.position_y = parent.position_y + direction_y * particle.radius
-        if math.abs(particle.position_x) < threshold then particle.position_x = 0 end
+        if abs(particle.position_x) < threshold then particle.position_x = 0 end
         if delay ~= 0 then
             particle.velocity_x = (particle.position_x - particle.last_x) / delay * particle.mobility
             particle.velocity_y = (particle.position_y - particle.last_y) / delay * particle.mobility
@@ -160,15 +161,24 @@ function Physics.new(data)
     if type(data) ~= "table" or type(data.settings) ~= "table" then
         return nil, "invalid Physics3 data"
     end
+    local physics_fps = tonumber(data.fps) or 0
+    if physics_fps <= 0 then physics_fps = DEFAULT_PHYSICS_FPS end
     local self = setmetatable({
         data = data,
         options = { gravity = { x = 0, y = -1 }, wind = { x = 0, y = 0 } },
         settings = {},
+        settings_count = #data.settings,
+        physics_delta = 1.0 / physics_fps,
         remaining_time = 0,
         last_substep_count = 0,
         total_substep_count = 0,
         parameter_caches = {},
         parameter_input_caches = {},
+        input_slots = {},
+        cache_slots = {},
+        caches_initialized = false,
+        bound_runtime = nil,
+        bound_parameter_values = nil,
     }, Physics)
     for _, setting in ipairs(data.settings) do
         local outputs = {}
@@ -180,6 +190,9 @@ function Physics.new(data)
                 weight = output.weight,
                 type = output.type,
                 reflect = output.reflect,
+                output_scale = output.type == "Angle" and output.scale or 0,
+                weight_ratio = output.weight / MAXIMUM_WEIGHT,
+                inverse_weight = 1.0 - output.weight / MAXIMUM_WEIGHT,
                 value_below_minimum = math.huge,
                 value_exceeded_maximum = -math.huge,
             }
@@ -203,8 +216,12 @@ function Physics.new(data)
             inputs = inputs,
             outputs = outputs,
             particles = make_particles(setting.vertices),
+            particle_count = #setting.vertices,
+            input_count = #inputs,
+            output_count = #outputs,
             normalization_position = setting.normalization_position,
             normalization_angle = setting.normalization_angle,
+            movement_threshold = MOVEMENT_THRESHOLD * setting.normalization_position.maximum,
             current_outputs = current_outputs,
             previous_outputs = previous_outputs,
         }
@@ -218,10 +235,12 @@ function Physics:reset()
     self.total_substep_count = 0
     self.parameter_caches = {}
     self.parameter_input_caches = {}
-    for setting_index, setting_data in ipairs(self.data.settings) do
+    self.caches_initialized = false
+    for setting_index = 1, self.settings_count do
+        local setting_data = self.data.settings[setting_index]
         local setting = self.settings[setting_index]
         setting.particles = make_particles(setting_data.vertices)
-        for index = 1, #setting.outputs do
+        for index = 1, setting.output_count do
             setting.current_outputs[index] = 0
             setting.previous_outputs[index] = 0
         end
@@ -242,66 +261,162 @@ function Physics:set_options(options)
     end
 end
 
-function Physics:_ensure_parameter_caches(runtime)
-    for index = 0, #runtime.parameter_values - 1 do
-        local slot = index + 1
-        local value = runtime:parameter_value_by_index(index)
-        if self.parameter_input_caches[slot] == nil then
-            self.parameter_input_caches[slot] = value
-        end
-        if self.parameter_caches[slot] == nil then
-            self.parameter_caches[slot] = value
-        end
-    end
+local function prepare_input(input, normalization, minimum, maximum)
+    local minimum_value = math.min(minimum, maximum)
+    local maximum_value = math.max(minimum, maximum)
+    local normalized_minimum = math.min(normalization.minimum, normalization.maximum)
+    local normalized_maximum = math.max(normalization.minimum, normalization.maximum)
+    local middle = minimum_value + (maximum_value - minimum_value) * 0.5
+    local positive_length = maximum_value - middle
+    local negative_length = minimum_value - middle
+
+    input.minimum = minimum_value
+    input.maximum = maximum_value
+    input.middle = middle
+    input.normalization_default = normalization.default
+    input.positive_scale = positive_length == 0 and 0
+        or (normalized_maximum - normalization.default) / positive_length
+    input.negative_scale = negative_length == 0 and 0
+        or (normalized_minimum - normalization.default) / negative_length
+    input.normalized_weight = (input.reflect and 1.0 or -1.0)
+        * input.weight / MAXIMUM_WEIGHT
 end
 
-function Physics:_update_setting(runtime, setting, delta)
-    local total_x, total_y, total_angle = 0, 0, 0
-    for _, input in ipairs(setting.inputs) do
-        if input.source_parameter_index == nil then
-            input.source_parameter_index = runtime:parameter_index_of(input.source_id)
+function Physics:_bind_runtime(runtime)
+    local parameter_values = runtime.parameter_values
+    local parameter_index = runtime.parameter_index
+    local bindings = runtime.bindings
+    local minimum_values = bindings and bindings.parameter_min_values
+    local maximum_values = bindings and bindings.parameter_max_values
+    local input_slots = {}
+    local cache_slots = {}
+    local input_seen = {}
+    local cache_seen = {}
+
+    local function index_of(id)
+        if parameter_index ~= nil then return parameter_index[id] end
+        return runtime:parameter_index_of(id)
+    end
+    local function limits(index)
+        local slot = index + 1
+        local minimum = minimum_values and minimum_values[slot]
+            or runtime:parameter_minimum_by_index(index)
+        local maximum = maximum_values and maximum_values[slot]
+            or runtime:parameter_maximum_by_index(index)
+        return minimum, maximum
+    end
+    local function add_cache_slot(slot)
+        if not cache_seen[slot] then
+            cache_seen[slot] = true
+            cache_slots[#cache_slots + 1] = slot
         end
-        local index = input.source_parameter_index
-        if index ~= nil then
-            local value = self.parameter_caches[index + 1]
-            local minimum = runtime:parameter_minimum_by_index(index)
-            local maximum = runtime:parameter_maximum_by_index(index)
-            if value ~= nil and minimum ~= nil and maximum ~= nil then
-                local normalization = input.type == "Angle"
-                    and setting.normalization_angle or setting.normalization_position
-                local normalized = normalize_parameter_value(
-                    value, minimum, maximum, normalization, input.reflect
-                ) * input.weight / MAXIMUM_WEIGHT
-                if input.type == "X" then
-                    total_x = total_x + normalized
-                elseif input.type == "Y" then
-                    total_y = total_y + normalized
-                else
-                    total_angle = total_angle + normalized
+    end
+
+    for setting_index = 1, self.settings_count do
+        local setting = self.settings[setting_index]
+        for input_index = 1, setting.input_count do
+            local input = setting.inputs[input_index]
+            local index = index_of(input.source_id)
+            input.source_parameter_index = index
+            input.source_slot = nil
+            if index ~= nil then
+                local minimum, maximum = limits(index)
+                if minimum ~= nil and maximum ~= nil then
+                    local slot = index + 1
+                    input.source_slot = slot
+                    prepare_input(input, input.type == "Angle"
+                        and setting.normalization_angle or setting.normalization_position,
+                        minimum, maximum)
+                    if not input_seen[slot] then
+                        input_seen[slot] = true
+                        input_slots[#input_slots + 1] = slot
+                    end
+                    add_cache_slot(slot)
+                end
+            end
+        end
+        for output_index = 1, setting.output_count do
+            local output = setting.outputs[output_index]
+            local index = index_of(output.destination_id)
+            output.destination_parameter_index = index
+            output.destination_slot = nil
+            output.active = false
+            if index ~= nil and output.vertex_index >= 1
+                and output.vertex_index < setting.particle_count then
+                local minimum, maximum = limits(index)
+                if minimum ~= nil and maximum ~= nil then
+                    local slot = index + 1
+                    output.destination_slot = slot
+                    output.minimum = minimum
+                    output.maximum = maximum
+                    output.active = true
+                    add_cache_slot(slot)
                 end
             end
         end
     end
 
-    local radian = -total_angle * PI / 180.0
-    local cosine = math.cos(radian)
-    local sine = math.sin(radian)
+    self.bound_runtime = runtime
+    self.bound_parameter_values = parameter_values
+    self.input_slots = input_slots
+    self.cache_slots = cache_slots
+    self.caches_initialized = false
+end
+
+function Physics:_ensure_parameter_caches(runtime)
+    if self.bound_runtime ~= runtime or self.bound_parameter_values ~= runtime.parameter_values then
+        self:_bind_runtime(runtime)
+    end
+    if self.caches_initialized then return end
+
+    local parameter_values = runtime.parameter_values
+    local parameter_caches = self.parameter_caches
+    local parameter_input_caches = self.parameter_input_caches
+    for index = 1, #self.cache_slots do
+        local slot = self.cache_slots[index]
+        parameter_caches[slot] = parameter_values[slot]
+    end
+    for index = 1, #self.input_slots do
+        local slot = self.input_slots[index]
+        parameter_input_caches[slot] = parameter_values[slot]
+    end
+    self.caches_initialized = true
+end
+
+function Physics:_update_setting(setting, delta)
+    local total_x, total_y, total_angle = 0, 0, 0
+    local parameter_caches = self.parameter_caches
+    for input_index = 1, setting.input_count do
+        local input = setting.inputs[input_index]
+        local slot = input.source_slot
+        if slot ~= nil then
+            local normalized = normalize_parameter_value(parameter_caches[slot], input)
+            if input.type == "X" then
+                total_x = total_x + normalized
+            elseif input.type == "Y" then
+                total_y = total_y + normalized
+            else
+                total_angle = total_angle + normalized
+            end
+        end
+    end
+
+    local radian = -total_angle * DEG_TO_RAD
+    local cosine = cos(radian)
+    local sine = sin(radian)
     total_x = total_x * cosine - total_y * sine
     -- Keep the native SDK's in-place rotation order for compatibility.
     total_y = total_x * sine + total_y * cosine
     update_particles(
-        setting.particles, total_x, total_y, total_angle,
+        setting.particles, setting.particle_count, total_x, total_y, total_angle,
         self.options.wind.x, self.options.wind.y,
-        MOVEMENT_THRESHOLD * setting.normalization_position.maximum, delta
+        setting.movement_threshold, delta
     )
 
-    for output_index, output in ipairs(setting.outputs) do
-        if output.destination_parameter_index == nil then
-            output.destination_parameter_index = runtime:parameter_index_of(output.destination_id)
-        end
+    for output_index = 1, setting.output_count do
+        local output = setting.outputs[output_index]
         local particle_index = output.vertex_index
-        if output.destination_parameter_index ~= nil
-            and particle_index >= 1 and particle_index < #setting.particles then
+        if output.active then
             local particle = setting.particles[particle_index + 1]
             local parent = setting.particles[particle_index]
             local translation_x = particle.position_x - parent.position_x
@@ -324,33 +439,41 @@ function Physics:_update_setting(runtime, setting, delta)
             if output.reflect then value = -value end
             setting.current_outputs[output_index] = value
 
-            local index = output.destination_parameter_index
-            local minimum = runtime:parameter_minimum_by_index(index)
-            local maximum = runtime:parameter_maximum_by_index(index)
-            local parameter_value = self.parameter_caches[index + 1]
-            if minimum ~= nil and maximum ~= nil and parameter_value ~= nil then
-                self.parameter_caches[index + 1] = update_output_parameter_value(
-                    parameter_value, minimum, maximum, value, output
-                )
-            end
+            local slot = output.destination_slot
+            parameter_caches[slot] = update_output_parameter_value(
+                parameter_caches[slot], value, output
+            )
         end
     end
 end
 
 function Physics:_interpolate(runtime, weight)
-    for _, setting in ipairs(self.settings) do
-        for output_index, output in ipairs(setting.outputs) do
-            local index = output.destination_parameter_index
-            if index ~= nil then
-                local value = runtime:parameter_value_by_index(index)
-                local minimum = runtime:parameter_minimum_by_index(index)
-                local maximum = runtime:parameter_maximum_by_index(index)
-                if value ~= nil and minimum ~= nil and maximum ~= nil then
-                    local output_value = setting.previous_outputs[output_index] * (1.0 - weight)
-                        + setting.current_outputs[output_index] * weight
-                    runtime:set_parameter_by_index(index, update_output_parameter_value(
-                        value, minimum, maximum, output_value, output
-                    ))
+    local parameter_values = runtime.parameter_values
+    local inverse_weight = 1.0 - weight
+    local trace_enabled = runtime._parameter_trace ~= nil
+    local set_parameter = runtime.set_parameter_by_index
+    for setting_index = 1, self.settings_count do
+        local setting = self.settings[setting_index]
+        for output_index = 1, setting.output_count do
+            local output = setting.outputs[output_index]
+            local slot = output.destination_slot
+            if output.active then
+                local output_value = setting.previous_outputs[output_index] * inverse_weight
+                    + setting.current_outputs[output_index] * weight
+                local next_value = update_output_parameter_value(
+                    parameter_values[slot], output_value, output
+                )
+                if trace_enabled then
+                    set_parameter(runtime, output.destination_parameter_index, next_value)
+                else
+                    -- Avoid another Lua method call on the normal, untraced
+                    -- hot path while preserving the setter's final clamp.
+                    if next_value < output.minimum then
+                        next_value = output.minimum
+                    elseif next_value > output.maximum then
+                        next_value = output.maximum
+                    end
+                    parameter_values[slot] = next_value
                 end
             end
         end
@@ -362,9 +485,7 @@ function Physics:evaluate(runtime, delta)
     self.last_substep_count = 0
     self:_ensure_parameter_caches(runtime)
 
-    local physics_fps = tonumber(self.data.fps) or 0
-    if physics_fps <= 0 then physics_fps = DEFAULT_PHYSICS_FPS end
-    local physics_delta = 1.0 / physics_fps
+    local physics_delta = self.physics_delta
 
     -- The host may render the same simulation state more than once (for
     -- example after an SSAA blit failure).  The outer Cubism update restores
@@ -389,22 +510,30 @@ function Physics:evaluate(runtime, delta)
     self.remaining_time = math.min(self.remaining_time + delta, MAX_ACCUMULATED_TIME)
     local substeps = 0
     while self.remaining_time >= physics_delta and substeps < MAX_SUBSTEPS do
-        for _, setting in ipairs(self.settings) do
-            for output_index = 1, #setting.outputs do
-                setting.previous_outputs[output_index] = setting.current_outputs[output_index] or 0
-            end
+        for setting_index = 1, self.settings_count do
+            local setting = self.settings[setting_index]
+            -- Both buffers are fixed-size and the update below overwrites
+            -- every valid output. Swapping avoids copying all outputs each
+            -- physics substep.
+            setting.previous_outputs, setting.current_outputs =
+                setting.current_outputs, setting.previous_outputs
         end
 
         local input_weight = physics_delta / self.remaining_time
-        for index = 0, #runtime.parameter_values - 1 do
-            local slot = index + 1
-            local current = runtime:parameter_value_by_index(index)
-            local cached_input = self.parameter_input_caches[slot]
-            self.parameter_caches[slot] = cached_input * (1.0 - input_weight) + current * input_weight
-            self.parameter_input_caches[slot] = self.parameter_caches[slot]
+        local inverse_input_weight = 1.0 - input_weight
+        local parameter_values = runtime.parameter_values
+        local parameter_caches = self.parameter_caches
+        local parameter_input_caches = self.parameter_input_caches
+        for index = 1, #self.input_slots do
+            local slot = self.input_slots[index]
+            local cached_input = parameter_input_caches[slot]
+            local value = cached_input * inverse_input_weight
+                + parameter_values[slot] * input_weight
+            parameter_caches[slot] = value
+            parameter_input_caches[slot] = value
         end
-        for _, setting in ipairs(self.settings) do
-            self:_update_setting(runtime, setting, physics_delta)
+        for setting_index = 1, self.settings_count do
+            self:_update_setting(self.settings[setting_index], physics_delta)
         end
         self.remaining_time = self.remaining_time - physics_delta
         substeps = substeps + 1
