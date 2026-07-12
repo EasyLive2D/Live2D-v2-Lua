@@ -5,9 +5,13 @@ local ffi = require("ffi")
 local draw_order_from_raw = require("live2d.cubism3.core.art_mesh").draw_order_from_raw
 local drawable = require("live2d.cubism3.moc3.drawable")
 local image_loader = require("live2d.image_loader")
+local floor = math.floor
 
 local GL_STENCIL_TEST = 0x0B90
 local GL_ALPHA_TEST = 0x0BC0
+local GL_DEPTH_TEST = 0x0B71
+local GL_BLEND = 0x0BE2
+local GL_CULL_FACE = 0x0B44
 local GL_STENCIL_BUFFER_BIT = 0x00000400
 local GL_ALWAYS = 0x0207
 local GL_EQUAL = 0x0202
@@ -21,11 +25,11 @@ local GL_ONE_MINUS_SRC_ALPHA = 0x0303
 local GL_DST_COLOR = 0x0306
 local GL_ARRAY_BUFFER = 0x8892
 local GL_ELEMENT_ARRAY_BUFFER = 0x8893
-local GL_DYNAMIC_DRAW = 0x88E4
+local GL_STATIC_DRAW = 0x88E4
+local GL_DYNAMIC_DRAW = 0x88E8
 
 -- Vertex shader: position + uv + opacity + multiply + screen colors
 local VERTEX_SHADER = [[
-#version 120
 attribute vec2 a_position;
 attribute vec2 a_uv;
 attribute float a_opacity;
@@ -49,22 +53,29 @@ void main() {
 ]]
 
 local FRAGMENT_SHADER = [[
-#version 120
+precision mediump float;
+
 varying vec2 v_uv;
 varying float v_opacity;
 varying vec3 v_multiply;
 varying vec3 v_screen;
 
 uniform sampler2D u_texture;
+uniform vec4 u_options;
 
 void main() {
     vec4 tex = texture2D(u_texture, v_uv);
-    // Multiply blend: output = tex * multiply
-    // Screen blend: output = 1 - (1-tex)*(1-screen) = tex + screen - tex*screen
-    vec3 blended = tex.rgb * v_multiply;
-    blended = blended + v_screen - blended * v_screen;
     float alpha = tex.a * v_opacity;
-    gl_FragColor = vec4(blended * alpha, alpha);
+    if (u_options.x > 0.0 && alpha <= u_options.x) {
+        discard;
+    }
+
+    // Texture RGB is uploaded premultiplied. Keep it premultiplied after
+    // multiply/screen color so linear filtering cannot pull in black RGB from
+    // transparent texels around masks and facial parts.
+    vec3 blended = tex.rgb * v_multiply;
+    blended = blended + v_screen * tex.a - blended * v_screen;
+    gl_FragColor = vec4(blended * v_opacity, alpha);
 }
 ]]
 
@@ -84,6 +95,14 @@ local function set_blend_func(gl, src_rgb, dst_rgb, src_alpha, dst_alpha)
     else
         gl.glBlendFunc(src_rgb, dst_rgb)
     end
+end
+
+local function same_masks(a, b)
+    if #a ~= #b then return false end
+    for i = 1, #a do
+        if a[i] ~= b[i] then return false end
+    end
+    return true
 end
 
 local function render_orders_are_total_rank(renderer, meshes)
@@ -224,6 +243,7 @@ function OpenGLRenderer.new(gl, opts)
     self.vertex_capacity = 0
     self.index_data = nil
     self.index_capacity = 0
+    self._owned_buffers = {}
     self._drawing = false
     self._enabled_attribs = {}
     self._last_blend = nil
@@ -234,14 +254,23 @@ end
 
 function OpenGLRenderer:begin_render(projection)
     local gl = self.gl
+    gl.glDisable(GL_DEPTH_TEST)
+    gl.glDisable(GL_CULL_FACE)
+    gl.glEnable(GL_BLEND)
+    gl.glBlendEquationSeparate(0x8006, 0x8006) -- GL_FUNC_ADD
     gl.glUseProgram(self.shader)
     gl.glUniformMatrix4fv(self.u_projection, 1, 0, projection)
     gl.glActiveTexture(0x84C0) -- GL_TEXTURE0
     gl.glUniform1i(self.u_texture, 0)
+    gl.glUniform4f(self.u_options, 0.0, 0.0, 0.0, 0.0)
     self._drawing = true
     self._enabled_attribs = self._enabled_attribs or {}
     self._last_blend = nil
     self._last_texture = nil
+end
+
+function OpenGLRenderer:use_alpha_test(threshold)
+    self.gl.glUniform4f(self.u_options, tonumber(threshold) or 0.0, 0.0, 0.0, 0.0)
 end
 
 function OpenGLRenderer:end_render()
@@ -259,13 +288,10 @@ function OpenGLRenderer:use_blend(blend)
     local gl = self.gl
     if blend == "normal" then
         set_blend_func(gl, GL_ONE, GL_ONE_MINUS_SRC_ALPHA, GL_ONE, GL_ONE_MINUS_SRC_ALPHA)
-        gl.glBlendEquationSeparate(0x8006, 0x8006) -- GL_FUNC_ADD
     elseif blend == "additive" then
         set_blend_func(gl, GL_ONE, GL_ONE, GL_ZERO, GL_ONE)
-        gl.glBlendEquationSeparate(0x8006, 0x8006) -- GL_FUNC_ADD
     elseif blend == "multiplicative" then
         set_blend_func(gl, GL_DST_COLOR, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO, GL_ONE)
-        gl.glBlendEquationSeparate(0x8006, 0x8006) -- GL_FUNC_ADD
     end
     self._last_blend = blend
 end
@@ -375,32 +401,50 @@ function OpenGLRenderer:init_shader()
     self.shader = prog
     self.u_projection = gl.glGetUniformLocation(prog, "u_projection")
     self.u_texture = gl.glGetUniformLocation(prog, "u_texture")
+    self.u_options = gl.glGetUniformLocation(prog, "u_options")
     self.a_position = gl.glGetAttribLocation(prog, "a_position")
     self.a_uv = gl.glGetAttribLocation(prog, "a_uv")
     self.a_opacity = gl.glGetAttribLocation(prog, "a_opacity")
     self.a_multiply = gl.glGetAttribLocation(prog, "a_multiply")
     self.a_screen = gl.glGetAttribLocation(prog, "a_screen")
 
-    -- Create VAO and VBO
-    local vao = ffi.new("GLuint[1]")
-    local vbo = ffi.new("GLuint[1]")
-    local ibo = ffi.new("GLuint[1]")
+end
 
-    -- Only create VAO if the function is available (GL 3.0+)
-    local has_vao = pcall(function()
-        if gl.glGenVertexArrays then
-            gl.glGenVertexArrays(1, vao)
-        end
-    end)
+function OpenGLRenderer:new_buffer()
+    local id = ffi.new("GLuint[1]")
+    self.gl.glGenBuffers(1, id)
+    local buffer = id[0]
+    self._owned_buffers = self._owned_buffers or {}
+    self._owned_buffers[#self._owned_buffers + 1] = buffer
+    return buffer
+end
 
-    if vao[0] and vao[0] ~= 0 then
-        self.vao = vao[0]
+function OpenGLRenderer:upload_mesh_buffers(mesh, vertex_bytes, vertex_data, index_bytes, index_data)
+    local gl = self.gl
+    if mesh._gl_renderer ~= self or not mesh._gl_vbo or mesh._gl_vbo == 0 then
+        mesh._gl_renderer = self
+        mesh._gl_vbo = self:new_buffer()
+        mesh._gl_ibo = self:new_buffer()
+        mesh._gl_vertex_capacity = 0
+        mesh._gl_index_bytes = 0
     end
 
-    gl.glGenBuffers(1, vbo)
-    gl.glGenBuffers(1, ibo)
-    self.vbo = vbo[0]
-    self.ibo = ibo[0]
+    gl.glBindBuffer(GL_ARRAY_BUFFER, mesh._gl_vbo)
+    if (mesh._gl_vertex_capacity or 0) < vertex_bytes then
+        gl.glBufferData(GL_ARRAY_BUFFER, vertex_bytes, nil, GL_DYNAMIC_DRAW)
+        mesh._gl_vertex_capacity = vertex_bytes
+    end
+    if gl.glBufferSubData then
+        gl.glBufferSubData(GL_ARRAY_BUFFER, 0, vertex_bytes, vertex_data)
+    else
+        gl.glBufferData(GL_ARRAY_BUFFER, vertex_bytes, vertex_data, GL_DYNAMIC_DRAW)
+    end
+
+    gl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, mesh._gl_ibo)
+    if mesh._gl_index_bytes ~= index_bytes then
+        gl.glBufferData(GL_ELEMENT_ARRAY_BUFFER, index_bytes, index_data, GL_STATIC_DRAW)
+        mesh._gl_index_bytes = index_bytes
+    end
 end
 
 function OpenGLRenderer:set_texture_stream(path, stream)
@@ -442,7 +486,11 @@ local function texture_stream_pixels(stream, texture_path)
         local height = tonumber(stream.height or stream.Height)
         local data = stream.data or stream.rgba or stream.bytes_rgba or stream[1]
         if width and height and data ~= nil then
-            return width, height, data
+            local premultiplied = stream.premultiplied == true
+                or stream.premultiplied_alpha == true
+                or stream.premultipliedAlpha == true
+            local edge_bleed = stream.edge_bleed ~= false and stream.edgeBleed ~= false
+            return width, height, data, premultiplied, edge_bleed
         end
 
         local bytes = stream.bytes or stream.png or stream[1]
@@ -461,10 +509,63 @@ local function texture_stream_pixels(stream, texture_path)
     return nil
 end
 
+local function bleed_and_premultiply_alpha(width, height, data, edge_bleed)
+    local pixel_count = width * height
+    local out = ffi.new("uint8_t[?]", pixel_count * 4)
+    local src = ffi.cast("const uint8_t*", data)
+
+    for y = 0, height - 1 do
+        for x = 0, width - 1 do
+            local base = (y * width + x) * 4
+            local alpha = src[base + 3]
+            local red = src[base]
+            local green = src[base + 1]
+            local blue = src[base + 2]
+
+            if edge_bleed ~= false and alpha > 0 and alpha < 255 then
+                local total = 0
+                local accumulated_red = 0
+                local accumulated_green = 0
+                local accumulated_blue = 0
+                for oy = -1, 1 do
+                    for ox = -1, 1 do
+                        if ox ~= 0 or oy ~= 0 then
+                            local nx = x + ox
+                            local ny = y + oy
+                            if nx >= 0 and nx < width and ny >= 0 and ny < height then
+                                local nbase = (ny * width + nx) * 4
+                                local neighbor_alpha = src[nbase + 3]
+                                if neighbor_alpha > alpha then
+                                    accumulated_red = accumulated_red + src[nbase] * neighbor_alpha
+                                    accumulated_green = accumulated_green + src[nbase + 1] * neighbor_alpha
+                                    accumulated_blue = accumulated_blue + src[nbase + 2] * neighbor_alpha
+                                    total = total + neighbor_alpha
+                                end
+                            end
+                        end
+                    end
+                end
+                if total > 0 then
+                    red = floor((accumulated_red + total / 2) / total)
+                    green = floor((accumulated_green + total / 2) / total)
+                    blue = floor((accumulated_blue + total / 2) / total)
+                end
+            end
+
+            out[base] = floor((red * alpha + 127) / 255)
+            out[base + 1] = floor((green * alpha + 127) / 255)
+            out[base + 2] = floor((blue * alpha + 127) / 255)
+            out[base + 3] = alpha
+        end
+    end
+
+    return out
+end
+
 function OpenGLRenderer:load_texture(texture_path, texture_index)
     local gl = self.gl
 
-    local width, height, data = texture_stream_pixels(
+    local width, height, data, premultiplied, edge_bleed = texture_stream_pixels(
         self:resolve_texture_stream(texture_path, texture_index),
         texture_path
     )
@@ -476,6 +577,9 @@ function OpenGLRenderer:load_texture(texture_path, texture_index)
     end
     if type(data) == "string" then
         data = ffi.cast("const unsigned char *", data)
+    end
+    if not premultiplied then
+        data = bleed_and_premultiply_alpha(width, height, data, edge_bleed)
     end
 
     local tex_id = ffi.new("GLuint[1]")
@@ -506,22 +610,38 @@ function OpenGLRenderer:render_meshes(meshes, textures, projection)
 
     local draw_order_indices = update_draw_order_indices(self, meshes)
 
-    -- Upload and draw each mesh
-    for i = 1, #draw_order_indices do
+    -- Consecutive drawables sharing a mask can reuse one stencil build without
+    -- changing Cubism's established drawable order.
+    local i = 1
+    while i <= #draw_order_indices do
         local idx = draw_order_indices[i]
         local mesh = meshes[idx + 1]
         if mesh and mesh.opacity > 0.001 then
             if #mesh.masks > 0 and gl.glStencilFunc and gl.glStencilOp and gl.glStencilMask then
-                self:draw_clipped_mesh(mesh, meshes, textures, projection)
+                local last = i
+                while last + 1 <= #draw_order_indices do
+                    local next_mesh = meshes[draw_order_indices[last + 1] + 1]
+                    if not next_mesh or next_mesh.opacity <= 0.001 or not same_masks(mesh.masks, next_mesh.masks) then
+                        break
+                    end
+                    last = last + 1
+                end
+                self:draw_clipped_mesh_group(mesh, meshes, textures, projection, draw_order_indices, i, last)
+                i = last
             else
                 self:draw_mesh(mesh, textures, projection)
             end
         end
+        i = i + 1
     end
     self:end_render()
 end
 
 function OpenGLRenderer:draw_clipped_mesh(mesh, meshes, textures, projection)
+    self:draw_clipped_mesh_group(mesh, meshes, textures, projection)
+end
+
+function OpenGLRenderer:draw_clipped_mesh_group(mesh, meshes, textures, projection, draw_order_indices, first, last)
     local gl = self.gl
 
     gl.glEnable(GL_STENCIL_TEST)
@@ -535,6 +655,7 @@ function OpenGLRenderer:draw_clipped_mesh(mesh, meshes, textures, projection)
     gl.glStencilMask(0xFF)
     gl.glStencilFunc(GL_ALWAYS, 1, 0xFF)
     gl.glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE)
+    self:use_alpha_test(0.01)
 
     local masks = mesh.masks
     for i = 1, #masks do
@@ -550,10 +671,20 @@ function OpenGLRenderer:draw_clipped_mesh(mesh, meshes, textures, projection)
 
     gl.glColorMask(1, 1, 1, 1)
     gl.glStencilMask(0x00)
-    local stencil_func = drawable.is_inverted_mask(mesh.drawable_flags) and GL_NOTEQUAL or GL_EQUAL
-    gl.glStencilFunc(stencil_func, 1, 0xFF)
+    self:use_alpha_test(0.0)
     gl.glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP)
-    self:draw_mesh(mesh, textures, projection)
+    if draw_order_indices then
+        for i = first, last do
+            local target = meshes[draw_order_indices[i] + 1]
+            local stencil_func = drawable.is_inverted_mask(target.drawable_flags) and GL_NOTEQUAL or GL_EQUAL
+            gl.glStencilFunc(stencil_func, 1, 0xFF)
+            self:draw_mesh(target, textures, projection)
+        end
+    else
+        local stencil_func = drawable.is_inverted_mask(mesh.drawable_flags) and GL_NOTEQUAL or GL_EQUAL
+        gl.glStencilFunc(stencil_func, 1, 0xFF)
+        self:draw_mesh(mesh, textures, projection)
+    end
 
     gl.glStencilMask(0xFF)
     gl.glDisable(GL_STENCIL_TEST)
@@ -630,12 +761,7 @@ function OpenGLRenderer:draw_mesh(mesh, textures, projection)
 
     self:use_blend(drawable.blend_mode_from_flags(mesh.drawable_flags))
 
-    -- Upload geometry
-    gl.glBindBuffer(GL_ARRAY_BUFFER, self.vbo)
-    gl.glBufferData(GL_ARRAY_BUFFER, vertex_float_count * 4, vertex_data, GL_DYNAMIC_DRAW)
-
-    gl.glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, self.ibo)
-    gl.glBufferData(GL_ELEMENT_ARRAY_BUFFER, index_count * 2, index_data, GL_DYNAMIC_DRAW)
+    self:upload_mesh_buffers(mesh, vertex_float_count * 4, vertex_data, index_count * 2, index_data)
 
     -- Set vertex attributes
     local stride = 11 * 4 -- 11 floats * 4 bytes
@@ -684,12 +810,10 @@ function OpenGLRenderer:destroy()
     if self.shader then
         gl.glDeleteProgram(self.shader)
     end
-    if self.vbo then
-        gl.glDeleteBuffers(1, ffi.new("GLuint[1]", self.vbo))
+    for _, buffer in ipairs(self._owned_buffers or {}) do
+        gl.glDeleteBuffers(1, ffi.new("GLuint[1]", buffer))
     end
-    if self.ibo then
-        gl.glDeleteBuffers(1, ffi.new("GLuint[1]", self.ibo))
-    end
+    self._owned_buffers = {}
     for _, tex_id in pairs(self.textures) do
         gl.glDeleteTextures(1, ffi.new("GLuint[1]", tex_id))
     end

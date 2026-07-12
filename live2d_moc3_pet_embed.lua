@@ -10,18 +10,6 @@ local Renderer = {}
 Renderer.__index = Renderer
 
 local GL_COLOR_BUFFER_BIT = 0x00004000
-local function compute_delta_seconds(state, time_msec)
-    time_msec = tonumber(time_msec)
-    if time_msec == nil then
-        return 0
-    end
-    local last_time_msec = state.last_time_msec
-    state.last_time_msec = time_msec
-    if last_time_msec == nil or time_msec <= last_time_msec then
-        return 0
-    end
-    return math.min((time_msec - last_time_msec) / 1000.0, 0.1)
-end
 
 -- Drag (head/eye follow) easing half-life in seconds. The Cubism 2 framework
 -- drags through a smoothed target point; applying drag instantly on moc3 made
@@ -37,6 +25,19 @@ local DRAG_PARAM_SPECS = {
     { id = "ParamEyeBallX", axis = "x", scale = 1.0 },
     { id = "ParamEyeBallY", axis = "y", scale = -1.0 },
 }
+
+local function compute_delta_seconds(state, time_msec)
+    time_msec = tonumber(time_msec)
+    if time_msec == nil then
+        time_msec = os.clock() * 1000.0
+    end
+    local last_time_msec = state.last_time_msec
+    state.last_time_msec = time_msec
+    if last_time_msec == nil or time_msec <= last_time_msec then
+        return 0
+    end
+    return math.min((time_msec - last_time_msec) / 1000.0, 0.1)
+end
 
 local PARAM_ALIASES = {
     PARAM_MOUTH_OPEN_Y = "ParamMouthOpenY",
@@ -99,6 +100,7 @@ function M.new(width, height)
         drag_target_x = 0.0,
         drag_target_y = 0.0,
         pending_host_parameters = nil,
+        gc_frame_count = 0,
     }, Renderer)
     self:resize(self.width, self.height)
     return self
@@ -122,6 +124,7 @@ function Renderer:load_model(model_path, width, height, opts)
     self.drag_x, self.drag_y = 0.0, 0.0
     self.drag_target_x, self.drag_target_y = 0.0, 0.0
     self.pending_host_parameters = nil
+    self.gc_frame_count = 0
     self:resize(width or self.width, height or self.height)
     return self
 end
@@ -238,9 +241,16 @@ function Renderer:draw(opts)
     self.renderer:render(self.projection)
     opts.profile_update_draw_seconds = os.clock() - start
 
-    local gc_start = os.clock()
-    collectgarbage("step", tonumber(opts.gc_step) or 200)
-    opts.profile_gc_seconds = os.clock() - gc_start
+    self.gc_frame_count = (self.gc_frame_count or 0) + 1
+    local gc_interval = tonumber(opts.gc_interval) or 20
+    if self.gc_frame_count >= gc_interval then
+        self.gc_frame_count = 0
+        local gc_start = os.clock()
+        collectgarbage("step", tonumber(opts.gc_step) or 400)
+        opts.profile_gc_seconds = os.clock() - gc_start
+    else
+        opts.profile_gc_seconds = 0
+    end
     return self
 end
 
@@ -279,7 +289,7 @@ function Renderer:start_motion(name, no, priority, loop)
     if tonumber(priority) and tonumber(priority) >= 3 then
         self.renderer:clear_motions()
     end
-    pcall(function() self.renderer:start_motion(tostring(name), tonumber(no) or 0, 1.0, loop) end)
+    self.renderer:start_motion(tostring(name), tonumber(no) or 0, 1.0, loop)
     return self
 end
 

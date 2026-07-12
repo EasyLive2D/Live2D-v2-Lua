@@ -311,7 +311,6 @@ function DrawParamOpenGL:loadShaders2()
     if self.shaderProgramOff == 0 then return false end
 
     local aK = [[
-#version 120
 attribute vec2 a_position;
 attribute vec2 a_texCoord;
 varying vec2 v_texCoord;
@@ -325,7 +324,8 @@ void main(){
 }
 ]]
     local aM = [[
-#version 120
+precision mediump float;
+
 varying vec2       v_texCoord;
 varying vec4       v_clipPos;
 uniform sampler2D  s_texture0;
@@ -355,7 +355,6 @@ void main(){
 }
 ]]
     local aL = [[
-#version 120
 attribute vec2     a_position;
 attribute vec2     a_texCoord;
 varying vec2       v_texCoord;
@@ -371,7 +370,8 @@ void main(){
 }
 ]]
     local aJ = [[
-#version 120
+precision mediump float;
+
 varying   vec2   v_texCoord;
 varying   vec4   v_clipPos;
 uniform sampler2D  s_texture0;
@@ -435,10 +435,6 @@ function DrawParamOpenGL:createFramebuffer()
     local oldFbo = Live2DGLWrapper.getParameter(Live2DGLWrapper.FRAMEBUFFER_BINDING)
     local aJ = Live2DGLWrapper.createFramebuffer()
     Live2DGLWrapper.bindFramebuffer(Live2DGLWrapper.FRAMEBUFFER, aJ)
-    local aH = Live2DGLWrapper.createRenderbuffer()
-    Live2DGLWrapper.bindRenderbuffer(Live2DGLWrapper.RENDERBUFFER, aH)
-    Live2DGLWrapper.renderbufferStorage(Live2DGLWrapper.RENDERBUFFER, Live2DGLWrapper.RGBA4, aK, aK)
-    Live2DGLWrapper.framebufferRenderbuffer(Live2DGLWrapper.FRAMEBUFFER, Live2DGLWrapper.COLOR_ATTACHMENT0, Live2DGLWrapper.RENDERBUFFER, aH)
     local aI = Live2DGLWrapper.createTexture()
     Live2DGLWrapper.bindTexture(Live2DGLWrapper.TEXTURE_2D, aI)
     Live2DGLWrapper.texImage2D(Live2DGLWrapper.TEXTURE_2D, 0, Live2DGLWrapper.RGBA, aK, aK, 0, Live2DGLWrapper.RGBA, Live2DGLWrapper.UNSIGNED_BYTE, nil)
@@ -448,9 +444,8 @@ function DrawParamOpenGL:createFramebuffer()
     Live2DGLWrapper.texParameteri(Live2DGLWrapper.TEXTURE_2D, Live2DGLWrapper.TEXTURE_WRAP_T, Live2DGLWrapper.CLAMP_TO_EDGE)
     Live2DGLWrapper.framebufferTexture2D(Live2DGLWrapper.FRAMEBUFFER, Live2DGLWrapper.COLOR_ATTACHMENT0, Live2DGLWrapper.TEXTURE_2D, aI, 0)
     Live2DGLWrapper.bindTexture(Live2DGLWrapper.TEXTURE_2D, 0)
-    Live2DGLWrapper.bindRenderbuffer(Live2DGLWrapper.RENDERBUFFER, 0)
     Live2DGLWrapper.bindFramebuffer(Live2DGLWrapper.FRAMEBUFFER, oldFbo)
-    self.framebufferObject = FrameBufferObject.new(aJ, aH, aI)
+    self.framebufferObject = FrameBufferObject.new(aJ, nil, aI)
 end
 
 function DrawParamOpenGL:dispose()

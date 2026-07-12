@@ -68,6 +68,7 @@ function Renderer:load_model(model_path, width, height, opts)
     self:dispose_model()
     self.width = tonumber(width) or self.width
     self.height = tonumber(height) or self.height
+    self.gc_frame_count = 0
     local platformManager = get_platform_manager()
     platformManager:setResourceStreams(opts.resource_streams or opts.resourceStreams)
     platformManager:setTextureStreams(opts.texture_streams or opts.textureStreams)
@@ -214,9 +215,13 @@ function Renderer:draw(opts)
     end
     model:Draw()
 
-    -- Keep unrelated short-lived Lua/FFI allocations bounded when the host
-    -- renders faster than display refresh; mesh upload buffers are reused.
-    collectgarbage("step", tonumber(opts.gc_step) or 200)
+    -- Keep unrelated short-lived Lua/FFI allocations bounded without forcing a
+    -- GC slice on every displayed frame.
+    self.gc_frame_count = (self.gc_frame_count or 0) + 1
+    if self.gc_frame_count >= (tonumber(opts.gc_interval) or 20) then
+        self.gc_frame_count = 0
+        collectgarbage("step", tonumber(opts.gc_step) or 400)
+    end
     return self
 end
 
@@ -294,6 +299,7 @@ function M.new(width, height, opts)
         height = tonumber(height) or 650,
         model = nil,
         model_path = nil,
+        gc_frame_count = 0,
     }, Renderer)
     local pm = get_platform_manager()
     pm:setResourceStreams(opts.resource_streams or opts.resourceStreams)

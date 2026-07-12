@@ -1,6 +1,9 @@
 local L2DMatrix44 = {}
 L2DMatrix44.__index = L2DMatrix44
 
+local mulResult = {}
+for i = 1, 16 do mulResult[i] = 0 end
+
 function L2DMatrix44.new()
     local self = setmetatable({}, L2DMatrix44)
     self.matrixElements = {}
@@ -44,8 +47,13 @@ function L2DMatrix44:invertTransformY(src)
 end
 
 function L2DMatrix44:multTranslate(shiftX, shiftY)
-    local tr1 = {1,0,0,0,0,1,0,0,0,0,1,0,shiftX,shiftY,0,1}
-    L2DMatrix44.mul(tr1, self.matrixElements, self.matrixElements)
+    local m = self.matrixElements
+    for column = 0, 3 do
+        local offset = column * 4
+        local w = m[offset + 4]
+        m[offset + 1] = m[offset + 1] + shiftX * w
+        m[offset + 2] = m[offset + 2] + shiftY * w
+    end
 end
 
 function L2DMatrix44:translate(x, y)
@@ -62,8 +70,12 @@ function L2DMatrix44:translateY(y)
 end
 
 function L2DMatrix44:multScale(scaleX, scaleY)
-    local tr1 = {scaleX,0,0,0,0,scaleY,0,0,0,0,1,0,0,0,0,1}
-    L2DMatrix44.mul(tr1, self.matrixElements, self.matrixElements)
+    local m = self.matrixElements
+    for column = 0, 3 do
+        local offset = column * 4
+        m[offset + 1] = m[offset + 1] * scaleX
+        m[offset + 2] = m[offset + 2] * scaleY
+    end
 end
 
 function L2DMatrix44:scale(scaleX, scaleY)
@@ -72,17 +84,18 @@ function L2DMatrix44:scale(scaleX, scaleY)
 end
 
 function L2DMatrix44.mul(a, b, dst)
-    local resultMatrix = {}
-    for i = 1, 16 do resultMatrix[i] = 0 end
     local matrixOrder = 4
     for i = 1, matrixOrder do
         for j = 1, matrixOrder do
+            local resultIndex = i + (j - 1) * 4
+            local value = 0
             for k = 1, matrixOrder do
-                resultMatrix[i + (j - 1) * 4] = resultMatrix[i + (j - 1) * 4] + a[i + (k - 1) * 4] * b[k + (j - 1) * 4]
+                value = value + a[i + (k - 1) * 4] * b[k + (j - 1) * 4]
             end
+            mulResult[resultIndex] = value
         end
     end
-    for i = 1, 16 do dst[i] = resultMatrix[i] end
+    for i = 1, 16 do dst[i] = mulResult[i] end
 end
 
 return L2DMatrix44

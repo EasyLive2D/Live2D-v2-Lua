@@ -41,10 +41,18 @@ local function new_fake_gl()
     gl.glBlendEquationSeparate = function(...) record("glBlendEquationSeparate", ...) end
     gl.glBindBuffer = function(...) record("glBindBuffer", ...) end
     gl.glBufferData = function(...) record("glBufferData", ...) end
+    gl.glBufferSubData = function(...) record("glBufferSubData", ...) end
+    gl.glGenBuffers = function(count, out)
+        for i = 0, count - 1 do out[i] = #calls + i + 1 end
+    end
     gl.glUniformMatrix4fv = function(...) record("glUniformMatrix4fv", ...) end
+    gl.glUniform4f = function(...) record("glUniform4f", ...) end
     gl.glActiveTexture = function(...) record("glActiveTexture", ...) end
     gl.glBindTexture = function(...) record("glBindTexture", ...) end
     gl.glUniform1i = function(...) record("glUniform1i", ...) end
+    gl.glEnableVertexAttribArray = function(...) record("glEnableVertexAttribArray", ...) end
+    gl.glDisableVertexAttribArray = function(...) record("glDisableVertexAttribArray", ...) end
+    gl.glVertexAttribPointer = function(...) record("glVertexAttribPointer", ...) end
     gl.glDrawElements = function(...) record("glDrawElements", ...) end
     gl.glGetAttribLocation = function() return -1 end
 
@@ -163,8 +171,8 @@ for _, shader in pairs(shader_gl.shader_sources) do
 end
 check("shader applies screen color before premultiplying alpha",
     fragment_source ~= nil
-    and fragment_source:find("blended = blended + v_screen - blended * v_screen", 1, true) ~= nil
-    and fragment_source:find("gl_FragColor = vec4(blended * alpha, alpha)", 1, true) ~= nil,
+    and fragment_source:find("blended = blended + v_screen * tex.a - blended * v_screen", 1, true) ~= nil
+    and fragment_source:find("gl_FragColor = vec4(blended * v_opacity, alpha)", 1, true) ~= nil,
     fragment_source or "fragment shader was not captured")
 
 local projection = ffi.new("float[16]", {
@@ -218,6 +226,29 @@ check("stencil is disabled after masked draw",
 check("zero-opacity masks still draw into stencil",
     zero_opacity_mask.opacity == 0.0 and count_calls(gl.calls, "glDrawElements") >= 2,
     "mask opacity should be restored after stencil draw")
+
+local grouped_gl = new_fake_gl()
+local grouped_renderer = setmetatable({
+    gl = grouped_gl,
+    shader = 1,
+    u_projection = 4,
+    u_texture = 5,
+    u_options = 6,
+    textures = {},
+}, { __index = OpenGLRenderer })
+local grouped_mask = mesh({})
+grouped_mask.opacity = 0
+local grouped_first = mesh({ 0 })
+grouped_first.render_order = 1
+local grouped_second = mesh({ 0 })
+grouped_second.render_order = 2
+grouped_renderer:render_meshes({ grouped_mask, grouped_first, grouped_second }, nil, projection)
+check("consecutive equal masks reuse stencil build",
+    count_calls(grouped_gl.calls, "glClear") == 1,
+    "expected one stencil clear")
+check("grouped clipping preserves all target draws",
+    count_calls(grouped_gl.calls, "glDrawElements") == 3,
+    "expected one mask and two target draws")
 
 local order_gl = new_fake_gl()
 local order_renderer = setmetatable({

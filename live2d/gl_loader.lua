@@ -5,6 +5,10 @@
 local ffi = require("ffi")
 local is_win = ffi.os == "Windows"
 local is_mac = ffi.os == "OSX"
+local is_android = false
+if not is_win and not is_mac then
+    is_android = pcall(ffi.load, "android")
+end
 
 -- Calling convention: __stdcall on Windows, default (blank) everywhere else.
 local CC = is_win and "__stdcall " or ""
@@ -19,6 +23,8 @@ elseif is_mac then
         "OpenGL.framework/OpenGL",
         "OpenGL",
     }
+elseif is_android then
+    gl_lib_names = {"GLESv2", "GLESv3", "GL", "GL.so.1", "GL.so"}
 else
     gl_lib_names = {"GL", "GL.so.1", "GL.so"}
 end
@@ -94,10 +100,12 @@ ffi.cdef[[
 -- entry point directly from OpenGL.framework, so no procaddress shim is needed
 -- — but the symbols still have to be declared in cdef so ffi.load can resolve
 -- them. We declare the prototypes below in the macOS branch.
+local egl_lib = nil
 if is_win then
     ffi.cdef[[ void *wglGetProcAddress(const char *name); ]]
 elseif not is_mac then
-    ffi.cdef[[ void *glXGetProcAddress(const char *name); ]]
+    ffi.cdef[[ void *glXGetProcAddress(const char *name); void *eglGetProcAddress(const char *name); ]]
+    pcall(function() egl_lib = ffi.load("EGL") end)
 end
 
 if is_mac then
@@ -122,6 +130,7 @@ if is_mac then
         void glDeleteBuffers(GLsizei n, const GLuint *buffers);
         void glBindBuffer(GLenum target, GLuint buffer);
         void glBufferData(GLenum target, GLsizeiptr size, const void *data, GLenum usage);
+        void glBufferSubData(GLenum target, GLintptr offset, GLsizeiptr size, const void *data);
         void glEnableVertexAttribArray(GLuint index);
         void glDisableVertexAttribArray(GLuint index);
         void glVertexAttribPointer(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);
@@ -166,6 +175,7 @@ ffi.cdef("typedef void (" .. CC .. "*PFNGLGENBUFFERSPROC)(GLsizei n, GLuint *buf
 ffi.cdef("typedef void (" .. CC .. "*PFNGLDELETEBUFFERSPROC)(GLsizei n, const GLuint *buffers);")
 ffi.cdef("typedef void (" .. CC .. "*PFNGLBINDBUFFERPROC)(GLenum target, GLuint buffer);")
 ffi.cdef("typedef void (" .. CC .. "*PFNGLBUFFERDATAPROC)(GLenum target, GLsizeiptr size, const void *data, GLenum usage);")
+ffi.cdef("typedef void (" .. CC .. "*PFNGLBUFFERSUBDATAPROC)(GLenum target, GLintptr offset, GLsizeiptr size, const void *data);")
 ffi.cdef("typedef void (" .. CC .. "*PFNGLENABLEVERTEXATTRIBARRAYPROC)(GLuint index);")
 ffi.cdef("typedef void (" .. CC .. "*PFNGLDISABLEVERTEXATTRIBARRAYPROC)(GLuint index);")
 ffi.cdef("typedef void (" .. CC .. "*PFNGLVERTEXATTRIBPOINTERPROC)(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void *pointer);")
@@ -188,6 +198,20 @@ ffi.cdef("typedef void (" .. CC .. "*PFNGLDELETERENDERBUFFERSPROC)(GLsizei n, co
 ffi.cdef("typedef void (" .. CC .. "*PFNGLGENERATEMIPMAPPROC)(GLenum target);")
 
 local gl = setmetatable({}, { __index = gl_lib })
+if is_android then
+    -- OpenGL ES 2.0 has no fixed-function alpha test or immediate-mode APIs.
+    -- Mark them absent so feature checks do not try to resolve missing symbols.
+    gl.glAlphaFunc = false
+    gl.glBegin = false
+    gl.glEnd = false
+    gl.glVertex2f = false
+    gl.glColor4f = false
+    gl.glMatrixMode = false
+    gl.glPushMatrix = false
+    gl.glPopMatrix = false
+    gl.glLoadIdentity = false
+    gl.glOrtho = false
+end
 local extensions_loaded = false
 
 local function loadGL(name, cast_type)
@@ -205,12 +229,25 @@ local function loadGL(name, cast_type)
     if is_win then
         ptr = gl_lib.wglGetProcAddress(name)
     else
-        ptr = gl_lib.glXGetProcAddress(name)
+        local ok
+        ok, ptr = pcall(function() return gl_lib.glXGetProcAddress(name) end)
+        if not ok or ptr == nil then
+            ok, ptr = pcall(function() return gl_lib[name] end)
+        end
+        if (not ok or ptr == nil) and egl_lib ~= nil then
+            ok, ptr = pcall(function() return egl_lib.eglGetProcAddress(name) end)
+        end
     end
     if ptr == nil then
         error("Failed to load GL function: " .. name)
     end
     return ffi.cast(cast_type, ptr)
+end
+
+local function loadOptionalGL(name, cast_type)
+    local ok, fn = pcall(loadGL, name, cast_type)
+    if ok then return fn end
+    return false
 end
 
 function gl.ensureExtensions()
@@ -235,11 +272,12 @@ function gl.ensureExtensions()
     gl.glDeleteBuffers = loadGL("glDeleteBuffers", "PFNGLDELETEBUFFERSPROC")
     gl.glBindBuffer = loadGL("glBindBuffer", "PFNGLBINDBUFFERPROC")
     gl.glBufferData = loadGL("glBufferData", "PFNGLBUFFERDATAPROC")
+    gl.glBufferSubData = loadOptionalGL("glBufferSubData", "PFNGLBUFFERSUBDATAPROC")
     gl.glEnableVertexAttribArray = loadGL("glEnableVertexAttribArray", "PFNGLENABLEVERTEXATTRIBARRAYPROC")
     gl.glDisableVertexAttribArray = loadGL("glDisableVertexAttribArray", "PFNGLDISABLEVERTEXATTRIBARRAYPROC")
     gl.glVertexAttribPointer = loadGL("glVertexAttribPointer", "PFNGLVERTEXATTRIBPOINTERPROC")
-    gl.glGenVertexArrays = loadGL("glGenVertexArrays", "PFNGLGENVERTEXARRAYSPROC")
-    gl.glBindVertexArray = loadGL("glBindVertexArray", "PFNGLBINDVERTEXARRAYPROC")
+    gl.glGenVertexArrays = loadOptionalGL("glGenVertexArrays", "PFNGLGENVERTEXARRAYSPROC")
+    gl.glBindVertexArray = loadOptionalGL("glBindVertexArray", "PFNGLBINDVERTEXARRAYPROC")
     gl.glUniform1i = loadGL("glUniform1i", "PFNGLUNIFORM1IPROC")
     gl.glUniform4f = loadGL("glUniform4f", "PFNGLUNIFORM4FPROC")
     gl.glUniformMatrix4fv = loadGL("glUniformMatrix4fv", "PFNGLUNIFORMMATRIX4FVPROC")

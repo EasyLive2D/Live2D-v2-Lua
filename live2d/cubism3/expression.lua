@@ -101,12 +101,16 @@ local ExpressionManager = {}
 ExpressionManager.__index = ExpressionManager
 
 function ExpressionManager.new()
-    return setmetatable({ players = {}, base_values = {} }, ExpressionManager)
+    return setmetatable({ players = {}, base_values = {}, values = {} }, ExpressionManager)
+end
+
+local function clear_table(values)
+    for key in pairs(values) do values[key] = nil end
 end
 
 function ExpressionManager:play(expression)
     if #self.players == 0 then
-        self.base_values = {}
+        clear_table(self.base_values)
     end
     for _, player in ipairs(self.players) do
         player:start_fade_out()
@@ -123,28 +127,36 @@ function ExpressionManager:stop_all()
 end
 
 function ExpressionManager:clear()
-    self.players = {}
-    self.base_values = {}
+    clear_table(self.players)
+    clear_table(self.base_values)
+    clear_table(self.values)
 end
 
 function ExpressionManager:tick(delta_seconds)
-    local kept = {}
-    for _, player in ipairs(self.players) do
+    local players = self.players
+    local kept_count = 0
+    for i = 1, #players do
+        local player = players[i]
         player:tick(delta_seconds)
         if not player:is_finished() then
-            kept[#kept + 1] = player
+            kept_count = kept_count + 1
+            players[kept_count] = player
         end
     end
-    self.players = kept
-    if #self.players == 0 then
-        self.base_values = {}
+    for i = kept_count + 1, #players do
+        players[i] = nil
+    end
+    if kept_count == 0 then
+        clear_table(self.base_values)
+        clear_table(self.values)
     end
 end
 
 function ExpressionManager:apply(runtime)
     if #self.players == 0 then return end
 
-    local values = {}
+    local values = self.values
+    clear_table(values)
     for _, player in ipairs(self.players) do
         local weight = player:fade_weight()
         for _, parameter in ipairs(player.expression.parameters or {}) do

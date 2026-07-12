@@ -133,6 +133,7 @@ function ModelRuntime.new(model, canvas, art_meshes, art_mesh_keyforms, deformer
         _pose_faded = {},
         _composed_deformers = {},
         _render_orders = {},
+        physics = nil,
     }, ModelRuntime)
 
     local ok = self:update_meshes()
@@ -428,6 +429,26 @@ function ModelRuntime:part_selection_opacity(part_index)
         return override
     end
     return self.parts:interpolate_opacity(part_index, self.bindings, self.parameter_values) or 1.0
+end
+
+function ModelRuntime:set_physics(physics)
+    self.physics = physics
+    return self
+end
+
+function ModelRuntime:get_physics()
+    return self.physics
+end
+
+function ModelRuntime:update_physics(delta_seconds)
+    if self.physics == nil then return false end
+    return self.physics:evaluate(self, delta_seconds)
+end
+
+function ModelRuntime:reset_physics()
+    if self.physics == nil then return false end
+    self.physics:reset()
+    return true
 end
 
 function ModelRuntime:part_drawable_opacity(part_index)

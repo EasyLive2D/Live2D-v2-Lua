@@ -28,6 +28,8 @@ local ModelRuntime = require("live2d.cubism3.runtime")
 local MotionPlayer = require("live2d.cubism3.motion")
 local OpenGLRenderer = require("live2d.cubism3.opengl_renderer")
 local pose3 = require("live2d.cubism3.json.pose3")
+local physics3 = require("live2d.cubism3.json.physics3")
+local Physics = require("live2d.cubism3.physics")
 local motion3 = require("live2d.cubism3.json.motion3")
 local expression_runtime = require("live2d.cubism3.expression")
 local DemoSelector = require("live2d.cubism3.demo_selector")
@@ -122,6 +124,19 @@ if not runtime then
     error("Failed to create ModelRuntime")
 end
 print("  Meshes: " .. #runtime.meshes)
+
+if model_data.file_references.physics then
+    local physics_path = base .. model_data.file_references.physics
+    print("Loading physics: " .. physics_path)
+    local physics_file = assert(io.open(physics_path, "r"))
+    local physics_data, physics_err = physics3.parse(physics_file:read("*all"))
+    physics_file:close()
+    if not physics_data then error("Physics parse: " .. tostring(physics_err)) end
+    local physics, create_err = Physics.new(physics_data)
+    if not physics then error("Physics create: " .. tostring(create_err)) end
+    runtime:set_physics(physics)
+    print("  Physics settings: " .. #physics.settings)
+end
 
 -- Setup textures
 print("Loading textures...")
@@ -233,6 +248,18 @@ local function isInsideWindow(x, y)
     return x >= 0 and x < W and y >= 0 and y < H
 end
 
+local function applyMouseGaze()
+    local mouseX, mouseY = sdl2.getMouseState()
+    if not isInsideWindow(mouseX, mouseY) then return end
+
+    local x = (mouseX / W - 0.5) * 2.0
+    local y = (mouseY / H - 0.5) * -2.0
+    runtime:set_parameter("ParamAngleX", x * 30.0)
+    runtime:set_parameter("ParamAngleY", y * 30.0)
+    runtime:set_parameter("ParamEyeBallX", x)
+    runtime:set_parameter("ParamEyeBallY", y)
+end
+
 local function playMotion(motionData, selectedIndex)
     if motionData == nil then return end
     motionIndex = selectedIndex or motionIndex
@@ -298,6 +325,10 @@ while running do
 
     expressionManager:tick(delta)
     expressionManager:apply(runtime)
+
+    applyMouseGaze()
+
+    runtime:update_physics(delta)
 
     -- Apply pose
     runtime:apply_pose(delta)

@@ -11,9 +11,11 @@ local model3 = require("live2d.cubism3.json.model3")
 local motion3 = require("live2d.cubism3.json.motion3")
 local expression3 = require("live2d.cubism3.json.expression3")
 local pose3 = require("live2d.cubism3.json.pose3")
+local physics3 = require("live2d.cubism3.json.physics3")
 local ModelRuntime = require("live2d.cubism3.runtime")
 local MotionPlayer = require("live2d.cubism3.motion")
 local expression_runtime = require("live2d.cubism3.expression")
+local Physics = require("live2d.cubism3.physics")
 
 local M = {}
 local Renderer = {}
@@ -161,6 +163,13 @@ function Renderer:load_model(model_path, opts)
         pose_data = assert_parsed("pose3.json", pose3.parse(self:read_resource(join_path(base, references.pose))))
     end
 
+    local physics_data = nil
+    if references.physics ~= nil then
+        physics_data = assert_parsed(
+            "physics3.json", physics3.parse(self:read_resource(join_path(base, references.physics)))
+        )
+    end
+
     local canvas = assert_parsed("moc3 canvas", moc3.canvas.parse(moc_bytes))
     local art_meshes = assert_parsed("moc3 art meshes", moc3.art_meshes.parse(moc_bytes))
     local keyforms = assert_parsed("moc3 keyforms", moc3.keyforms.parse(moc_bytes))
@@ -179,6 +188,11 @@ function Renderer:load_model(model_path, opts)
     if runtime == nil then
         error("failed to create Cubism3 runtime", 2)
     end
+    if physics_data ~= nil then
+        local physics, physics_err = Physics.new(physics_data)
+        if physics == nil then error("failed to create Cubism3 physics: " .. tostring(physics_err), 2) end
+        runtime:set_physics(physics)
+    end
 
     self.model_path = normalized_model_path
     self.base_path = base
@@ -186,6 +200,10 @@ function Renderer:load_model(model_path, opts)
     self.runtime = runtime
     self.saved_parameter_values = nil
     self.textures = references.textures or {}
+    self.texture_paths = {}
+    for i, texture in ipairs(self.textures) do
+        self.texture_paths[i] = join_path(base, texture)
+    end
     self.motion_cache = {}
     self.active_motions = {}
     self.expression_cache = {}
@@ -201,6 +219,10 @@ function Renderer:get_model_data()
     return self.model_data
 end
 
+function Renderer:get_physics()
+    return require_runtime(self):get_physics()
+end
+
 function Renderer:get_meshes()
     return require_runtime(self).meshes
 end
@@ -210,11 +232,7 @@ function Renderer:get_textures()
 end
 
 function Renderer:get_texture_paths()
-    local result = {}
-    for i, texture in ipairs(self.textures or {}) do
-        result[i] = join_path(self.base_path, texture)
-    end
-    return result
+    return self.texture_paths
 end
 
 function Renderer:get_parameter(param_id)
@@ -441,15 +459,20 @@ function Renderer:update(delta_seconds)
     if self.saved_parameter_values ~= nil then
         runtime:load_parameter_snapshot(self.saved_parameter_values)
     end
-    local kept = {}
-    for _, player in ipairs(self.active_motions) do
+    local motions = self.active_motions
+    local kept_count = 0
+    for i = 1, #motions do
+        local player = motions[i]
         player:tick(delta_seconds)
         player:apply(runtime)
         if not player:is_finished() then
-            kept[#kept + 1] = player
+            kept_count = kept_count + 1
+            motions[kept_count] = player
         end
     end
-    self.active_motions = kept
+    for i = kept_count + 1, #motions do
+        motions[i] = nil
+    end
     self.expression_manager:tick(delta_seconds)
     self.expression_manager:apply(runtime)
     self.saved_parameter_values = runtime:save_parameter_snapshot(self.saved_parameter_values)
@@ -457,6 +480,7 @@ function Renderer:update(delta_seconds)
         self.pre_override_hook(runtime, delta_seconds)
     end
     runtime:apply_parameter_overrides()
+    runtime:update_physics(delta_seconds)
     runtime:apply_pose(delta_seconds)
     runtime:update_meshes()
     return self
@@ -489,6 +513,7 @@ function Renderer:dispose()
     self.model_path = nil
     self.base_path = nil
     self.textures = {}
+    self.texture_paths = {}
     self.motion_cache = {}
     self.active_motions = {}
     self.expression_cache = {}
@@ -507,6 +532,7 @@ function M.new(opts)
         resource_streams = {},
         texture_streams = {},
         textures = {},
+        texture_paths = {},
         motion_cache = {},
         active_motions = {},
         expression_cache = {},
@@ -593,5 +619,7 @@ M.model3 = model3
 M.motion3 = motion3
 M.expression3 = expression3
 M.pose3 = pose3
+M.physics3 = physics3
+M.Physics = Physics
 
 return M
