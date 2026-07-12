@@ -6,13 +6,35 @@ local motion3 = require("live2d.cubism3.json.motion3")
 local MotionPlayer = {}
 MotionPlayer.__index = MotionPlayer
 
-function MotionPlayer.new(motion, loop)
+-- The Cubism SDK defaults motion fades to 1 second when neither the
+-- motion3.json meta nor the model3.json motion reference specifies one.
+-- Fading (re-applied on every loop wrap) is what keeps looping idle motions
+-- from snapping back to their first keyframe.
+local DEFAULT_FADE_SECONDS = 1.0
+
+local function resolved_fade_seconds(override, meta_value)
+    local fade = tonumber(override)
+    if fade == nil then
+        fade = tonumber(meta_value)
+    end
+    if fade == nil then
+        fade = DEFAULT_FADE_SECONDS
+    end
+    if fade < 0 then
+        fade = 0
+    end
+    return fade
+end
+
+function MotionPlayer.new(motion, loop, fade_in_override, fade_out_override)
     return setmetatable({
         motion = motion,
         time = 0.0,
         weight = 1.0,
         loop = loop,
         finished = false,
+        fade_in_seconds = resolved_fade_seconds(fade_in_override, motion.meta.FadeInTime),
+        fade_out_seconds = resolved_fade_seconds(fade_out_override, motion.meta.FadeOutTime),
     }, MotionPlayer)
 end
 
@@ -56,10 +78,8 @@ end
 function MotionPlayer:apply(runtime)
     local duration = self.motion.meta.Duration or 0
     local end_time = self:should_loop() and -1.0 or duration
-    local fade_in_seconds = tonumber(self.motion.meta.FadeInTime) or 0
-    local fade_out_seconds = tonumber(self.motion.meta.FadeOutTime) or 0
-    if fade_in_seconds < 0 then fade_in_seconds = 0 end
-    if fade_out_seconds < 0 then fade_out_seconds = 0 end
+    local fade_in_seconds = self.fade_in_seconds or 0
+    local fade_out_seconds = self.fade_out_seconds or 0
     local fade_in = motion3.motion_fade_in_weight(self.time, 0, fade_in_seconds)
     local fade_out = motion3.motion_fade_out_weight(self.time, end_time, fade_out_seconds)
 

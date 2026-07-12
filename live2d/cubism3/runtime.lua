@@ -341,6 +341,29 @@ function ModelRuntime:reset_parameters()
     end
 end
 
+-- Snapshot helpers mirroring the SDK's SaveParameters/LoadParameters: the
+-- motion-driven base pose is saved each frame and restored before the next
+-- motion update, so per-frame add-ons (drag follow, host writes, overrides)
+-- never accumulate into the values motions fade from.
+function ModelRuntime:save_parameter_snapshot(out)
+    local values = self.parameter_values
+    out = out or {}
+    for i = 1, #values do
+        out[i] = values[i]
+    end
+    return out
+end
+
+function ModelRuntime:load_parameter_snapshot(snapshot)
+    local values = self.parameter_values
+    for i = 1, #values do
+        local value = snapshot[i]
+        if value ~= nil then
+            values[i] = value
+        end
+    end
+end
+
 function ModelRuntime:part_index_of(id)
     return self.part_index[id]
 end
