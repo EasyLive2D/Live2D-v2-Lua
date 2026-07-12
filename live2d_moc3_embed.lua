@@ -184,6 +184,7 @@ function Renderer:load_model(model_path, opts)
     self.base_path = base
     self.model_data = model_data
     self.runtime = runtime
+    self.saved_parameter_values = nil
     self.textures = references.textures or {}
     self.motion_cache = {}
     self.active_motions = {}
@@ -240,6 +241,7 @@ end
 
 function Renderer:reset_parameters()
     require_runtime(self):reset_parameters()
+    self.saved_parameter_values = nil
     return self
 end
 
@@ -361,7 +363,21 @@ function Renderer:load_motion(group, no)
 end
 
 function Renderer:start_motion(group, no, weight, loop)
-    local player = MotionPlayer.new(self:load_motion(group, no), loop)
+    local motion = self:load_motion(group, no)
+    -- model3.json motion references may override the motion3.json fades
+    local reference
+    local references = self.model_data and self.model_data.file_references
+    local groups = references and references.motions or {}
+    local entry = groups[group]
+    if entry ~= nil then
+        reference = entry[(tonumber(no) or 0) + 1]
+    end
+    local player = MotionPlayer.new(
+        motion,
+        loop,
+        reference and reference.FadeInTime,
+        reference and reference.FadeOutTime
+    )
     if weight ~= nil then player:set_weight(tonumber(weight) or 1.0) end
     self.active_motions[#self.active_motions + 1] = player
     return self
@@ -420,6 +436,11 @@ end
 function Renderer:update(delta_seconds)
     local runtime = require_runtime(self)
     delta_seconds = tonumber(delta_seconds) or 0
+    -- Restore the motion-driven base pose (SDK LoadParameters) so add-ons
+    -- applied after the snapshot below never leak into motion fade blending.
+    if self.saved_parameter_values ~= nil then
+        runtime:load_parameter_snapshot(self.saved_parameter_values)
+    end
     local kept = {}
     for _, player in ipairs(self.active_motions) do
         player:tick(delta_seconds)
@@ -431,6 +452,10 @@ function Renderer:update(delta_seconds)
     self.active_motions = kept
     self.expression_manager:tick(delta_seconds)
     self.expression_manager:apply(runtime)
+    self.saved_parameter_values = runtime:save_parameter_snapshot(self.saved_parameter_values)
+    if self.pre_override_hook ~= nil then
+        self.pre_override_hook(runtime, delta_seconds)
+    end
     runtime:apply_parameter_overrides()
     runtime:apply_pose(delta_seconds)
     runtime:update_meshes()
@@ -459,6 +484,7 @@ end
 
 function Renderer:dispose()
     self.runtime = nil
+    self.saved_parameter_values = nil
     self.model_data = nil
     self.model_path = nil
     self.base_path = nil

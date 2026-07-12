@@ -10,6 +10,33 @@ local Renderer = {}
 Renderer.__index = Renderer
 
 local GL_COLOR_BUFFER_BIT = 0x00004000
+local function compute_delta_seconds(state, time_msec)
+    time_msec = tonumber(time_msec)
+    if time_msec == nil then
+        return 0
+    end
+    local last_time_msec = state.last_time_msec
+    state.last_time_msec = time_msec
+    if last_time_msec == nil or time_msec <= last_time_msec then
+        return 0
+    end
+    return math.min((time_msec - last_time_msec) / 1000.0, 0.1)
+end
+
+-- Drag (head/eye follow) easing half-life in seconds. The Cubism 2 framework
+-- drags through a smoothed target point; applying drag instantly on moc3 made
+-- the whole body snap between poses whenever the tracking target changed.
+local DRAG_SMOOTHING_HALF_LIFE = 0.1
+
+-- Drag offsets are ADDED on top of motion-driven values each frame (the
+-- standard Cubism update order), so idle motions keep their sway instead of
+-- being frozen by persistent parameter overrides.
+local DRAG_PARAM_SPECS = {
+    { id = "ParamAngleX", axis = "x", scale = 30.0 },
+    { id = "ParamAngleY", axis = "y", scale = -30.0 },
+    { id = "ParamEyeBallX", axis = "x", scale = 1.0 },
+    { id = "ParamEyeBallY", axis = "y", scale = -1.0 },
+}
 
 local PARAM_ALIASES = {
     PARAM_MOUTH_OPEN_Y = "ParamMouthOpenY",
@@ -67,6 +94,11 @@ function M.new(width, height)
         renderer = moc3.new({ gl = gl }),
         projection = nil,
         last_time_msec = nil,
+        drag_x = 0.0,
+        drag_y = 0.0,
+        drag_target_x = 0.0,
+        drag_target_y = 0.0,
+        pending_host_parameters = nil,
     }, Renderer)
     self:resize(self.width, self.height)
     return self
@@ -83,9 +115,59 @@ function Renderer:load_model(model_path, width, height, opts)
         texture_streams = opts.texture_streams or opts.textureStreams or {},
     })
     self.renderer:load_model(model_path, opts)
+    self.renderer.pre_override_hook = function(runtime, delta_seconds)
+        self:_apply_host_state(runtime, delta_seconds)
+    end
     self.last_time_msec = nil
+    self.drag_x, self.drag_y = 0.0, 0.0
+    self.drag_target_x, self.drag_target_y = 0.0, 0.0
+    self.pending_host_parameters = nil
     self:resize(width or self.width, height or self.height)
     return self
+end
+
+-- Applied from inside Renderer:update, after motions/expressions and before
+-- pose, so host writes land on top of motion values for exactly one frame.
+function Renderer:_apply_host_state(runtime, delta_seconds)
+    local pending = self.pending_host_parameters
+    if pending ~= nil then
+        self.pending_host_parameters = nil
+        for i = 1, #pending do
+            local entry = pending[i]
+            local index = runtime:parameter_index_of(entry.id)
+            if index ~= nil then
+                local value = entry.value
+                if entry.weight < 1.0 then
+                    local current = runtime:parameter_value_by_index(index) or 0
+                    value = current + (value - current) * entry.weight
+                end
+                runtime:set_parameter_by_index(index, value)
+            end
+        end
+    end
+
+    local target_x, target_y = self.drag_target_x, self.drag_target_y
+    local drag_x, drag_y = self.drag_x, self.drag_y
+    if target_x ~= drag_x or target_y ~= drag_y then
+        local dt = tonumber(delta_seconds) or 0
+        local ease = 1.0 - 0.5 ^ (dt / DRAG_SMOOTHING_HALF_LIFE)
+        drag_x = drag_x + (target_x - drag_x) * ease
+        drag_y = drag_y + (target_y - drag_y) * ease
+        if math.abs(target_x - drag_x) < 0.001 then drag_x = target_x end
+        if math.abs(target_y - drag_y) < 0.001 then drag_y = target_y end
+        self.drag_x, self.drag_y = drag_x, drag_y
+    end
+    if drag_x ~= 0.0 or drag_y ~= 0.0 then
+        for i = 1, #DRAG_PARAM_SPECS do
+            local spec = DRAG_PARAM_SPECS[i]
+            local index = runtime:parameter_index_of(spec.id)
+            if index ~= nil then
+                local amount = (spec.axis == "x" and drag_x or drag_y) * spec.scale
+                local current = runtime:parameter_value_by_index(index) or 0
+                runtime:set_parameter_by_index(index, current + amount)
+            end
+        end
+    end
 end
 
 function Renderer:resize(width, height)
@@ -108,24 +190,26 @@ function Renderer:set_scale(scale)
     return self:resize(self.width, self.height)
 end
 
-function Renderer:set_parameter(param_id, value, _weight)
+function Renderer:set_parameter(param_id, value, weight)
     if self.renderer == nil then return self end
-    local id = parameter_id(param_id)
-    if self.renderer.set_parameter_override ~= nil then
-        pcall(function() self.renderer:set_parameter_override(id, tonumber(value) or 0) end)
-    else
-        pcall(function() self.renderer:set_parameter(id, tonumber(value) or 0) end)
+    local pending = self.pending_host_parameters
+    if pending == nil then
+        pending = {}
+        self.pending_host_parameters = pending
     end
+    pending[#pending + 1] = {
+        id = parameter_id(param_id),
+        value = tonumber(value) or 0,
+        weight = clamp(tonumber(weight) or 1.0, 0.0, 1.0),
+    }
     return self
 end
 
 function Renderer:drag(x, y)
     local nx = ((tonumber(x) or 0) / math.max(self.width, 1) - 0.5) * 2.0
     local ny = ((tonumber(y) or 0) / math.max(self.height, 1) - 0.5) * 2.0
-    self:set_parameter("ParamAngleX", clamp(nx * 30, -30, 30), 1)
-    self:set_parameter("ParamAngleY", clamp(-ny * 30, -30, 30), 1)
-    self:set_parameter("ParamEyeBallX", clamp(nx, -1, 1), 1)
-    self:set_parameter("ParamEyeBallY", clamp(-ny, -1, 1), 1)
+    self.drag_target_x = clamp(nx, -1, 1)
+    self.drag_target_y = clamp(ny, -1, 1)
     return self
 end
 
@@ -148,12 +232,7 @@ function Renderer:draw(opts)
         end
     end
 
-    local time_msec = tonumber(opts.time_msec) or 0
-    local delta = 1 / 60
-    if self.last_time_msec ~= nil and time_msec > self.last_time_msec then
-        delta = math.min((time_msec - self.last_time_msec) / 1000.0, 0.1)
-    end
-    self.last_time_msec = time_msec
+    local delta = compute_delta_seconds(self, opts.time_msec)
 
     self.renderer:update(delta)
     self.renderer:render(self.projection)
