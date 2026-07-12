@@ -11,8 +11,13 @@ Renderer.__index = Renderer
 
 local GL_COLOR_BUFFER_BIT = 0x00004000
 
-local function compute_delta_seconds(state, time_msec)
+local function compute_delta_seconds(state, time_msec, explicit_delta)
     time_msec = tonumber(time_msec)
+    explicit_delta = tonumber(explicit_delta)
+    if explicit_delta ~= nil then
+        if time_msec ~= nil then state.last_time_msec = time_msec end
+        return math.max(0, math.min(explicit_delta, 0.1))
+    end
     if time_msec == nil then
         time_msec = os.clock() * 1000.0
     end
@@ -123,11 +128,11 @@ function Renderer:set_scale(scale)
     return self:resize(self.width, self.height)
 end
 
-function Renderer:set_parameter(param_id, value, _weight)
+function Renderer:set_parameter(param_id, value, _weight, source)
     if self.renderer == nil then return self end
     local id = parameter_id(param_id)
     if self.renderer.set_parameter_override ~= nil then
-        pcall(function() self.renderer:set_parameter_override(id, tonumber(value) or 0) end)
+        pcall(function() self.renderer:set_parameter_override(id, tonumber(value) or 0, source) end)
     else
         pcall(function() self.renderer:set_parameter(id, tonumber(value) or 0) end)
     end
@@ -137,38 +142,37 @@ end
 function Renderer:drag(x, y)
     local nx = ((tonumber(x) or 0) / math.max(self.width, 1) - 0.5) * 2.0
     local ny = ((tonumber(y) or 0) / math.max(self.height, 1) - 0.5) * 2.0
-    self:set_parameter("ParamAngleX", clamp(nx * 30, -30, 30), 1)
-    self:set_parameter("ParamAngleY", clamp(-ny * 30, -30, 30), 1)
-    self:set_parameter("ParamEyeBallX", clamp(nx, -1, 1), 1)
-    self:set_parameter("ParamEyeBallY", clamp(-ny, -1, 1), 1)
+    self:set_parameter("ParamAngleX", clamp(nx * 30, -30, 30), 1, "mouse")
+    self:set_parameter("ParamAngleY", clamp(-ny * 30, -30, 30), 1, "mouse")
+    self:set_parameter("ParamEyeBallX", clamp(nx, -1, 1), 1, "mouse")
+    self:set_parameter("ParamEyeBallY", clamp(-ny, -1, 1), 1, "mouse")
     return self
 end
 
-function Renderer:draw(opts)
+function Renderer:update_frame(opts)
     opts = opts or {}
     if self.renderer == nil or self.renderer:get_runtime() == nil then return self end
-
-    if opts.clear ~= false then
-        gl.glClearColor(tonumber(opts.r) or 0, tonumber(opts.g) or 0, tonumber(opts.b) or 0, tonumber(opts.a) or 0)
-        gl.glClear(GL_COLOR_BUFFER_BIT)
-    end
 
     local start = os.clock()
     if opts.parameters ~= nil then
         for i = 1, #opts.parameters do
             local entry = opts.parameters[i]
             if entry ~= nil and entry.id ~= nil then
-                self:set_parameter(entry.id, entry.value, entry.weight)
+                self:set_parameter(entry.id, entry.value, entry.weight, "host")
             end
         end
     end
 
-    local delta = compute_delta_seconds(self, opts.time_msec)
+    local delta = compute_delta_seconds(self, opts.time_msec, opts.delta_seconds)
+    self.renderer:update(delta, {
+        frame_number = opts.frame_number,
+        time_msec = opts.time_msec,
+        trace_parameters = opts.trace_parameters,
+    })
+    opts.profile_update_seconds = os.clock() - start
 
-    self.renderer:update(delta)
-    self.renderer:render(self.projection)
-    opts.profile_update_draw_seconds = os.clock() - start
-
+    -- Garbage collection belongs to the update boundary.  Rendering the same
+    -- state more than once (for SSAA recovery) must remain side-effect free.
     self.gc_frame_count = (self.gc_frame_count or 0) + 1
     local gc_interval = tonumber(opts.gc_interval) or 20
     if self.gc_frame_count >= gc_interval then
@@ -179,6 +183,27 @@ function Renderer:draw(opts)
     else
         opts.profile_gc_seconds = 0
     end
+    return self
+end
+
+function Renderer:render_frame(opts)
+    opts = opts or {}
+    if self.renderer == nil or self.renderer:get_runtime() == nil then return self end
+    if opts.clear ~= false then
+        gl.glClearColor(tonumber(opts.r) or 0, tonumber(opts.g) or 0, tonumber(opts.b) or 0, tonumber(opts.a) or 0)
+        gl.glClear(GL_COLOR_BUFFER_BIT)
+    end
+    local start = os.clock()
+    self.renderer:render(self.projection)
+    opts.profile_render_seconds = os.clock() - start
+    return self
+end
+
+function Renderer:draw(opts)
+    self:update_frame(opts)
+    self:render_frame(opts)
+    opts.profile_update_draw_seconds = (tonumber(opts.profile_update_seconds) or 0)
+        + (tonumber(opts.profile_render_seconds) or 0)
     return self
 end
 

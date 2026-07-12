@@ -243,14 +243,14 @@ function Renderer:get_parameter_by_index(index)
 end
 
 function Renderer:set_parameter(param_id, value)
-    if not require_runtime(self):set_parameter(param_id, tonumber(value) or 0) then
+    if not require_runtime(self):set_base_parameter(param_id, tonumber(value) or 0) then
         error("unknown parameter: " .. tostring(param_id), 2)
     end
     return self
 end
 
 function Renderer:set_parameter_by_index(index, value)
-    if not require_runtime(self):set_parameter_by_index(tonumber(index) or 0, tonumber(value) or 0) then
+    if not require_runtime(self):set_base_parameter_by_index(tonumber(index) or 0, tonumber(value) or 0) then
         error("unknown parameter index: " .. tostring(index), 2)
     end
     return self
@@ -278,28 +278,28 @@ function Renderer:get_parameter_normalized_by_index(index)
 end
 
 function Renderer:set_parameter_normalized(param_id, value)
-    if not require_runtime(self):set_parameter_normalized(param_id, tonumber(value) or 0) then
+    if not require_runtime(self):set_base_parameter_normalized(param_id, tonumber(value) or 0) then
         error("unknown parameter: " .. tostring(param_id), 2)
     end
     return self
 end
 
 function Renderer:set_parameter_normalized_by_index(index, value)
-    if not require_runtime(self):set_parameter_normalized_by_index(tonumber(index) or 0, tonumber(value) or 0) then
+    if not require_runtime(self):set_base_parameter_normalized_by_index(tonumber(index) or 0, tonumber(value) or 0) then
         error("unknown parameter index: " .. tostring(index), 2)
     end
     return self
 end
 
-function Renderer:set_parameter_override(param_id, value)
-    if not require_runtime(self):set_parameter_override(param_id, tonumber(value) or 0) then
+function Renderer:set_parameter_override(param_id, value, source)
+    if not require_runtime(self):set_parameter_override(param_id, tonumber(value) or 0, source) then
         error("unknown parameter: " .. tostring(param_id), 2)
     end
     return self
 end
 
-function Renderer:set_parameter_override_by_index(index, value)
-    if not require_runtime(self):set_parameter_override_by_index(tonumber(index) or 0, tonumber(value) or 0) then
+function Renderer:set_parameter_override_by_index(index, value, source)
+    if not require_runtime(self):set_parameter_override_by_index(tonumber(index) or 0, tonumber(value) or 0, source) then
         error("unknown parameter index: " .. tostring(index), 2)
     end
     return self
@@ -435,9 +435,17 @@ function Renderer:clear_expression()
     return self:clear_expressions()
 end
 
-function Renderer:update(delta_seconds)
+function Renderer:update(delta_seconds, frame_context)
     local runtime = require_runtime(self)
     delta_seconds = tonumber(delta_seconds) or 0
+    frame_context = frame_context or {}
+    runtime:configure_parameter_trace(frame_context.trace_parameters)
+    runtime:begin_parameter_frame(frame_context.frame_number, frame_context.time_msec, delta_seconds)
+
+    runtime:set_parameter_write_source("frame_restore")
+    runtime:load_parameters()
+
+    runtime:set_parameter_write_source("motion")
     local motions = self.active_motions
     local kept_count = 0
     for i = 1, #motions do
@@ -452,11 +460,22 @@ function Renderer:update(delta_seconds)
     for i = kept_count + 1, #motions do
         motions[i] = nil
     end
+    runtime:save_parameters()
+
+    runtime:set_parameter_write_source("expression")
     self.expression_manager:tick(delta_seconds)
     self.expression_manager:apply(runtime)
+
+    runtime:set_parameter_write_source("override")
     runtime:apply_parameter_overrides()
+
+    runtime:set_parameter_write_source("physics")
     runtime:update_physics(delta_seconds)
+
+    runtime:set_parameter_write_source("pose")
     runtime:apply_pose(delta_seconds)
+
+    runtime:set_parameter_write_source("model_update")
     runtime:update_meshes()
     return self
 end

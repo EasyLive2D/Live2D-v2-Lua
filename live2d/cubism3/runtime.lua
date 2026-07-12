@@ -63,9 +63,11 @@ function ModelRuntime.new(model, canvas, art_meshes, art_mesh_keyforms, deformer
         draw_order_groups = nil
     end
     local parameter_values = {}
+    local saved_parameter_values = {}
     local defaults = bindings.parameter_default_values
     for i = 1, #defaults do
         parameter_values[i] = defaults[i]
+        saved_parameter_values[i] = defaults[i]
     end
 
     -- Build parameter index map
@@ -117,7 +119,9 @@ function ModelRuntime.new(model, canvas, art_meshes, art_mesh_keyforms, deformer
         draw_order_groups = draw_order_groups,
         parameter_index = parameter_index,
         parameter_values = parameter_values,
+        saved_parameter_values = saved_parameter_values,
         parameter_overrides = {},
+        parameter_override_sources = {},
         part_index = part_index,
         part_opacity_overrides = part_opacity_overrides,
         part_opacities = part_opacities,
@@ -134,6 +138,8 @@ function ModelRuntime.new(model, canvas, art_meshes, art_mesh_keyforms, deformer
         _composed_deformers = {},
         _render_orders = {},
         physics = nil,
+        _parameter_write_source = "direct",
+        _parameter_trace = nil,
     }, ModelRuntime)
 
     local ok = self:update_meshes()
@@ -236,11 +242,29 @@ function ModelRuntime:set_parameter(id, value)
 end
 
 function ModelRuntime:set_parameter_by_index(index, value)
-    local slot = self.parameter_values[index + 1]
-    if slot == nil then return false end
+    local slot = index + 1
+    local before = self.parameter_values[slot]
+    if before == nil then return false end
     local minimum = self.bindings.parameter_min_values[index + 1] or -math.huge
     local maximum = self.bindings.parameter_max_values[index + 1] or math.huge
-    self.parameter_values[index + 1] = parameter_utils.clamp_parameter_value(value, minimum, maximum)
+    local after = parameter_utils.clamp_parameter_value(value, minimum, maximum)
+    self.parameter_values[slot] = after
+    self:_trace_parameter_write(index, before, after)
+    return true
+end
+
+-- Public/direct parameter writes are part of the model's persistent base
+-- state.  Motion and physics still use set_parameter_by_index directly so
+-- their transient results are not fed back into the next frame.
+function ModelRuntime:set_base_parameter(id, value)
+    local idx = self:parameter_index_of(id)
+    if idx == nil then return false end
+    return self:set_base_parameter_by_index(idx, value)
+end
+
+function ModelRuntime:set_base_parameter_by_index(index, value)
+    if not self:set_parameter_by_index(index, value) then return false end
+    self.saved_parameter_values[index + 1] = self.parameter_values[index + 1]
     return true
 end
 
@@ -254,6 +278,18 @@ function ModelRuntime:set_parameter_normalized_by_index(index, value)
     local raw = self:raw_parameter_value_from_normalized_index(index, value)
     if raw == nil then return false end
     return self:set_parameter_by_index(index, raw)
+end
+
+function ModelRuntime:set_base_parameter_normalized(id, value)
+    local idx = self:parameter_index_of(id)
+    if idx == nil then return false end
+    return self:set_base_parameter_normalized_by_index(idx, value)
+end
+
+function ModelRuntime:set_base_parameter_normalized_by_index(index, value)
+    local raw = self:raw_parameter_value_from_normalized_index(index, value)
+    if raw == nil then return false end
+    return self:set_base_parameter_by_index(index, raw)
 end
 
 function ModelRuntime:parameter_override_value(id)
@@ -280,18 +316,19 @@ function ModelRuntime:parameter_override_normalized_value_by_index(index)
     return normalized_parameter_value(value, minimum, maximum)
 end
 
-function ModelRuntime:set_parameter_override(id, value)
+function ModelRuntime:set_parameter_override(id, value, source)
     local idx = self:parameter_index_of(id)
     if idx == nil then return false end
-    return self:set_parameter_override_by_index(idx, value)
+    return self:set_parameter_override_by_index(idx, value, source)
 end
 
-function ModelRuntime:set_parameter_override_by_index(index, value)
+function ModelRuntime:set_parameter_override_by_index(index, value, source)
     if self.parameter_values[index + 1] == nil then return false end
     local minimum = self:parameter_minimum_by_index(index)
     local maximum = self:parameter_maximum_by_index(index)
     if minimum == nil or maximum == nil then return false end
     self.parameter_overrides[index + 1] = parameter_utils.clamp_parameter_value(tonumber(value) or 0, minimum, maximum)
+    self.parameter_override_sources[index + 1] = tostring(source or "override")
     return true
 end
 
@@ -316,29 +353,106 @@ end
 function ModelRuntime:clear_parameter_override_by_index(index)
     if self.parameter_values[index + 1] == nil then return false end
     self.parameter_overrides[index + 1] = nil
+    self.parameter_override_sources[index + 1] = nil
     return true
 end
 
 function ModelRuntime:clear_parameter_overrides()
     for i = 1, #self.parameter_values do
         self.parameter_overrides[i] = nil
+        self.parameter_override_sources[i] = nil
     end
 end
 
 function ModelRuntime:apply_parameter_overrides()
+    local phase_source = self._parameter_write_source
     for index = 0, #self.parameter_values - 1 do
         local value = self.parameter_overrides[index + 1]
         if value ~= nil then
+            self._parameter_write_source = self.parameter_override_sources[index + 1] or phase_source
             self:set_parameter_by_index(index, value)
         end
+    end
+    self._parameter_write_source = phase_source
+end
+
+-- Cubism's per-frame parameter contract: restore the state saved after the
+-- previous motion pass, then save the new motion result before transient
+-- expression/tracking/physics writes.  Physics output must never become the
+-- next frame's base input.
+function ModelRuntime:load_parameters()
+    for index = 0, #self.saved_parameter_values - 1 do
+        self:set_parameter_by_index(index, self.saved_parameter_values[index + 1])
+    end
+end
+
+function ModelRuntime:save_parameters()
+    for i = 1, #self.parameter_values do
+        self.saved_parameter_values[i] = self.parameter_values[i]
     end
 end
 
 function ModelRuntime:reset_parameters()
     local defaults = self.bindings.parameter_default_values
-    for i = 1, #defaults do
-        self.parameter_values[i] = defaults[i]
+    for index = 0, #defaults - 1 do
+        self:set_parameter_by_index(index, defaults[index + 1])
+        self.saved_parameter_values[index + 1] = self.parameter_values[index + 1]
     end
+end
+
+local function trace_tokens(filter)
+    local tokens = {}
+    for token in tostring(filter or ""):gmatch("[^,%s]+") do
+        tokens[#tokens + 1] = token:lower()
+    end
+    return tokens
+end
+
+function ModelRuntime:configure_parameter_trace(filter)
+    local text = tostring(filter or "")
+    if text == "" or text == "0" or text:lower() == "false" then
+        self._parameter_trace = nil
+        return
+    end
+    if text == "1" or text:lower() == "true" then
+        text = "leg,knee,foot,bodyangley,param33"
+    end
+    local current = self._parameter_trace
+    if current ~= nil and current.filter == text then return end
+    self._parameter_trace = { filter = text, tokens = trace_tokens(text), counts = {} }
+end
+
+function ModelRuntime:begin_parameter_frame(frame_number, time_msec, delta_seconds)
+    local trace = self._parameter_trace
+    if trace == nil then return end
+    trace.frame = tonumber(frame_number) or 0
+    trace.time_msec = tonumber(time_msec) or 0
+    trace.delta = tonumber(delta_seconds) or 0
+    trace.counts = {}
+end
+
+function ModelRuntime:set_parameter_write_source(source)
+    self._parameter_write_source = tostring(source or "unknown")
+end
+
+function ModelRuntime:_trace_parameter_write(index, before, after)
+    local trace = self._parameter_trace
+    if trace == nil then return end
+    local id = tostring(self.ids.parameters[index + 1] or index)
+    local lower_id = id:lower()
+    local matched = #trace.tokens == 0
+    for _, token in ipairs(trace.tokens) do
+        if lower_id:find(token, 1, true) ~= nil then matched = true break end
+    end
+    if not matched then return end
+    local count = (trace.counts[id] or 0) + 1
+    trace.counts[id] = count
+    print(string.format(
+        "[Live2DParam] frame=%d time_ms=%.3f dt=%.6f id=%s source=%s before=%.6f after=%.6f writes=%d",
+        trace.frame or 0, trace.time_msec or 0, trace.delta or 0, id,
+        tostring(self._parameter_write_source or "unknown"), tonumber(before) or 0,
+        tonumber(after) or 0, count
+    ))
 end
 
 function ModelRuntime:part_index_of(id)

@@ -28,14 +28,14 @@ from lupa.luajit21 import LuaError, LuaRuntime
 
 
 ROOT = Path(__file__).resolve().parents[1]
-MODEL_PATH = "resources/Hiyori/Hiyori.model3.json"
-MODEL_DIR = ROOT / "resources" / "Hiyori"
+MODEL_PATH = "resources/Rana/adv_live2d_rana_003_live_01.model3.json"
+MODEL_DIR = ROOT / "resources" / "Rana"
 
 
 class Live2DWidget(QOpenGLWidget):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Live2D Hiyori - PySide6 + lupa")
+        self.setWindowTitle("Live2D Rana - PySide6 + lupa")
         self.setMouseTracking(True)
         self.setMinimumSize(500, 700)
 
@@ -52,7 +52,9 @@ class Live2DWidget(QOpenGLWidget):
 
         self._timer = QTimer(self)
         self._timer.timeout.connect(self.update)
-        self._timer.start(16)
+        # --- 修改点 1 ---
+        # 1000ms / 240fps = 4.16ms，这里取整设为 4 毫秒以达到最高 240FPS 的刷新率
+        self._timer.start(4)
 
     def initializeGL(self) -> None:
         os.chdir(ROOT)
@@ -205,7 +207,9 @@ def _make_gl_format() -> QSurfaceFormat:
     fmt.setVersion(2, 1)
     fmt.setDepthBufferSize(24)
     fmt.setStencilBufferSize(8)
-    fmt.setSwapInterval(1)
+    # --- 修改点 2 ---
+    # 将交换间隔（Swap Interval）从 1 改为 0，关闭垂直同步（V-Sync），允许突破显示器默认刷新率锁定。
+    fmt.setSwapInterval(0)
     return fmt
 
 

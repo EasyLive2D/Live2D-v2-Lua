@@ -6,7 +6,9 @@ Physics.__index = Physics
 local AIR_RESISTANCE = 5.0
 local MAXIMUM_WEIGHT = 100.0
 local MOVEMENT_THRESHOLD = 0.001
-local MAX_DELTA_TIME = 5.0
+local DEFAULT_PHYSICS_FPS = 60.0
+local MAX_ACCUMULATED_TIME = 0.25
+local MAX_SUBSTEPS = 8
 local PI = math.pi
 
 local function direction_to_radian(from_x, from_y, to_x, to_y)
@@ -163,6 +165,8 @@ function Physics.new(data)
         options = { gravity = { x = 0, y = -1 }, wind = { x = 0, y = 0 } },
         settings = {},
         remaining_time = 0,
+        last_substep_count = 0,
+        total_substep_count = 0,
         parameter_caches = {},
         parameter_input_caches = {},
     }, Physics)
@@ -210,6 +214,8 @@ end
 
 function Physics:reset()
     self.remaining_time = 0
+    self.last_substep_count = 0
+    self.total_substep_count = 0
     self.parameter_caches = {}
     self.parameter_input_caches = {}
     for setting_index, setting_data in ipairs(self.data.settings) do
@@ -353,13 +359,36 @@ end
 
 function Physics:evaluate(runtime, delta)
     delta = tonumber(delta) or 0
-    if delta <= 0 then return false end
-    self.remaining_time = self.remaining_time + delta
-    if self.remaining_time > MAX_DELTA_TIME then self.remaining_time = 0 end
+    self.last_substep_count = 0
     self:_ensure_parameter_caches(runtime)
 
-    local physics_delta = self.data.fps > 0 and 1.0 / self.data.fps or delta
-    while self.remaining_time >= physics_delta do
+    local physics_fps = tonumber(self.data.fps) or 0
+    if physics_fps <= 0 then physics_fps = DEFAULT_PHYSICS_FPS end
+    local physics_delta = 1.0 / physics_fps
+
+    -- The host may render the same simulation state more than once (for
+    -- example after an SSAA blit failure).  The outer Cubism update restores
+    -- motion parameters before it calls physics, so returning early here
+    -- would expose that restored pose for one render and make physics-driven
+    -- parts snap back to their base values.  Reapply the last interpolated
+    -- state without advancing the pendulum instead.
+    if delta <= 0 then
+        self:_interpolate(runtime, math.min(self.remaining_time / physics_delta, 1.0))
+        return true
+    end
+
+    -- A long suspension is not useful simulation input.  Dropping it avoids
+    -- a catch-up burst while preserving the last visible physics pose.
+    if delta > MAX_ACCUMULATED_TIME then
+        local interpolation_weight = math.min(self.remaining_time / physics_delta, 1.0)
+        self.remaining_time = 0
+        self:_interpolate(runtime, interpolation_weight)
+        return true
+    end
+
+    self.remaining_time = math.min(self.remaining_time + delta, MAX_ACCUMULATED_TIME)
+    local substeps = 0
+    while self.remaining_time >= physics_delta and substeps < MAX_SUBSTEPS do
         for _, setting in ipairs(self.settings) do
             for output_index = 1, #setting.outputs do
                 setting.previous_outputs[output_index] = setting.current_outputs[output_index] or 0
@@ -378,9 +407,18 @@ function Physics:evaluate(runtime, delta)
             self:_update_setting(runtime, setting, physics_delta)
         end
         self.remaining_time = self.remaining_time - physics_delta
+        substeps = substeps + 1
     end
 
-    self:_interpolate(runtime, self.remaining_time / physics_delta)
+    self.last_substep_count = substeps
+    self.total_substep_count = self.total_substep_count + substeps
+    if substeps >= MAX_SUBSTEPS and self.remaining_time >= physics_delta then
+        -- Drop only excess backlog.  Keeping at most one step preserves a
+        -- continuous interpolation endpoint without a death spiral.
+        self.remaining_time = math.min(self.remaining_time, physics_delta)
+    end
+
+    self:_interpolate(runtime, math.min(self.remaining_time / physics_delta, 1.0))
     return true
 end
 
