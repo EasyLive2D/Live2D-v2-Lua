@@ -270,6 +270,8 @@ function LAppModel:SetExpression(name)
                 break
             end
         end
+    else
+        self:touchExpression(name)
     end
     local motion = self.expressions[name]
     if motion == nil then return end
@@ -282,7 +284,11 @@ function LAppModel:SetExpression(name)
 end
 
 function LAppModel:PreloadExpression(name)
-    if name == nil or name == "" or self.expressions[name] ~= nil then return end
+    if name == nil or name == "" then return end
+    if self.expressions[name] ~= nil then
+        self:touchExpression(name)
+        return
+    end
     for j = 0, self.modelSetting:getExpressionNum() - 1 do
         if self.modelSetting:getExpressionName(j) == name then
             self:loadExpression(name, self.modelHomeDir .. self.modelSetting:getExpressionFile(j))
@@ -309,7 +315,7 @@ function LAppModel:StartMotion(name, no, priority, onStartMotionHandler, onFinis
     if self.motions[motion_key] == nil then
         mtn = self:loadMotion(motion_key, self.modelHomeDir .. motion_name)
     else
-        mtn = self.motions[motion_key]
+        mtn = self:touchMotion(motion_key)
     end
 
     self.finishCallback = onFinishMotionHandler
@@ -391,6 +397,8 @@ function LAppModel:_preloadMotionGroup(name)
             local motion = self:loadMotion(motion_key, self.modelHomeDir .. file)
             motion:setFadeIn(self.modelSetting:getMotionFadeIn(name, i))
             motion:setFadeOut(self.modelSetting:getMotionFadeOut(name, i))
+        elseif self.motions[motion_key] ~= nil then
+            self:touchMotion(motion_key)
         end
     end
 end

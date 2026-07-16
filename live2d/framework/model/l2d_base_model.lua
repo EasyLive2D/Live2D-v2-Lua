@@ -11,6 +11,24 @@ L2DBaseModel.__index = L2DBaseModel
 
 L2DBaseModel.texCount = 0
 
+local DEFAULT_MOTION_CACHE_LIMIT = 8
+local DEFAULT_EXPRESSION_CACHE_LIMIT = 4
+
+local function cache_store(cache, order, key, value, limit)
+    for i = #order, 1, -1 do
+        if order[i] == key then
+            table.remove(order, i)
+            break
+        end
+    end
+    cache[key] = value
+    order[#order + 1] = key
+    while #order > limit do
+        local evicted = table.remove(order, 1)
+        cache[evicted] = nil
+    end
+end
+
 function L2DBaseModel.new()
     local self = setmetatable({}, L2DBaseModel)
     self.live2DModel = nil
@@ -25,6 +43,10 @@ function L2DBaseModel.new()
     self.expressionManager = L2DMotionManager.new()
     self.motions = {}
     self.expressions = {}
+    self.motionCacheOrder = {}
+    self.expressionCacheOrder = {}
+    self.motionCacheLimit = DEFAULT_MOTION_CACHE_LIMIT
+    self.expressionCacheLimit = DEFAULT_EXPRESSION_CACHE_LIMIT
     return self
 end
 
@@ -52,7 +74,15 @@ function L2DBaseModel:loadMotion(name, path)
     local buf = pm:loadBytes(path)
     local motion = Live2DMotion.loadMotion(buf)
     if name ~= nil then
-        self.motions[name] = motion
+        cache_store(self.motions, self.motionCacheOrder, name, motion, self.motionCacheLimit)
+    end
+    return motion
+end
+
+function L2DBaseModel:touchMotion(name)
+    local motion = self.motions[name]
+    if motion ~= nil then
+        cache_store(self.motions, self.motionCacheOrder, name, motion, self.motionCacheLimit)
     end
     return motion
 end
@@ -61,8 +91,29 @@ function L2DBaseModel:loadExpression(name, path)
     local pm = Live2DFramework.getPlatformManager()
     if name ~= nil then
         local buf = pm:loadBytes(path)
-        self.expressions[name] = L2DExpressionMotion.loadJson(buf)
+        local expression = L2DExpressionMotion.loadJson(buf)
+        cache_store(
+            self.expressions,
+            self.expressionCacheOrder,
+            name,
+            expression,
+            self.expressionCacheLimit
+        )
     end
+end
+
+function L2DBaseModel:touchExpression(name)
+    local expression = self.expressions[name]
+    if expression ~= nil then
+        cache_store(
+            self.expressions,
+            self.expressionCacheOrder,
+            name,
+            expression,
+            self.expressionCacheLimit
+        )
+    end
+    return expression
 end
 
 function L2DBaseModel:loadPose(path)

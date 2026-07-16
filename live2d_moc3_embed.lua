@@ -22,6 +22,23 @@ local Renderer = {}
 Renderer.__index = Renderer
 
 local current_renderer = nil
+local DEFAULT_MOTION_CACHE_LIMIT = 8
+local DEFAULT_EXPRESSION_CACHE_LIMIT = 4
+
+local function cache_store(cache, order, key, value, limit)
+    for i = #order, 1, -1 do
+        if order[i] == key then
+            table.remove(order, i)
+            break
+        end
+    end
+    cache[key] = value
+    order[#order + 1] = key
+    while #order > limit do
+        local evicted = table.remove(order, 1)
+        cache[evicted] = nil
+    end
+end
 
 local function normalize_path(path)
     return (tostring(path or ""):gsub("\\", "/"))
@@ -204,8 +221,10 @@ function Renderer:load_model(model_path, opts)
         self.texture_paths[i] = join_path(base, texture)
     end
     self.motion_cache = {}
+    self.motion_cache_order = {}
     self.active_motions = {}
     self.expression_cache = {}
+    self.expression_cache_order = {}
     self.expression_manager = expression_runtime.ExpressionManager.new()
     return self
 end
@@ -372,10 +391,18 @@ function Renderer:load_motion(group, no)
     end
 
     local motion_path = join_path(self.base_path, motion_ref.File)
-    if self.motion_cache[motion_path] == nil then
-        self.motion_cache[motion_path] = assert_parsed("motion3.json", motion3.parse(self:read_resource(motion_path)))
+    local motion = self.motion_cache[motion_path]
+    if motion == nil then
+        motion = assert_parsed("motion3.json", motion3.parse(self:read_resource(motion_path)))
     end
-    return self.motion_cache[motion_path]
+    cache_store(
+        self.motion_cache,
+        self.motion_cache_order,
+        motion_path,
+        motion,
+        self.motion_cache_limit
+    )
+    return motion
 end
 
 function Renderer:start_motion(group, no, weight, loop)
@@ -411,13 +438,21 @@ function Renderer:load_expression(name_or_index)
     end
 
     local expression_path = join_path(self.base_path, reference.File)
-    if self.expression_cache[expression_path] == nil then
-        self.expression_cache[expression_path] = assert_parsed(
+    local expression = self.expression_cache[expression_path]
+    if expression == nil then
+        expression = assert_parsed(
             "exp3.json",
             expression3.parse(self:read_resource(expression_path))
         )
     end
-    return self.expression_cache[expression_path]
+    cache_store(
+        self.expression_cache,
+        self.expression_cache_order,
+        expression_path,
+        expression,
+        self.expression_cache_limit
+    )
+    return expression
 end
 
 function Renderer:set_expression(name_or_index, weight)
@@ -508,8 +543,10 @@ function Renderer:dispose()
     self.textures = {}
     self.texture_paths = {}
     self.motion_cache = {}
+    self.motion_cache_order = {}
     self.active_motions = {}
     self.expression_cache = {}
+    self.expression_cache_order = {}
     self.expression_manager = expression_runtime.ExpressionManager.new()
     if self.gl_renderer ~= nil and self.gl_renderer.destroy ~= nil then
         pcall(function() self.gl_renderer:destroy() end)
@@ -527,8 +564,12 @@ function M.new(opts)
         textures = {},
         texture_paths = {},
         motion_cache = {},
+        motion_cache_order = {},
+        motion_cache_limit = DEFAULT_MOTION_CACHE_LIMIT,
         active_motions = {},
         expression_cache = {},
+        expression_cache_order = {},
+        expression_cache_limit = DEFAULT_EXPRESSION_CACHE_LIMIT,
         expression_manager = expression_runtime.ExpressionManager.new(),
         gl = opts.gl,
     }, Renderer)
