@@ -5,6 +5,7 @@ local Id = require("live2d.core.id.id")
 local ModelContext = require("live2d.core.model_context")
 local L2DMatrix44 = require("live2d.framework.matrix.l2d_matrix44")
 local ClippingManagerOpenGL = require("live2d.core.graphics.clipping_manager_opengl")
+local moc3_embed = require("live2d_moc3_embed")
 
 local passed, total = 0, 0
 local function check(name, ok, msg)
@@ -50,6 +51,44 @@ local clipping = ClippingManagerOpenGL.new({
 })
 clipping:init({}, {}, {})
 check("unmasked moc skips clipping framebuffer", framebuffer_creations == 0)
+
+local renderer = moc3_embed.new()
+renderer:load_model("resources/Hiyori/Hiyori.model3.json")
+local runtime = renderer:get_runtime()
+local composed = runtime._composed_deformers
+local deformer_buffers = {}
+for i = 1, #composed do
+    local deformer = composed[i]
+    deformer_buffers[i] = {
+        deformer = deformer,
+        grid = deformer.grid,
+        first_grid_point = deformer.grid and deformer.grid[1] or nil,
+        origin = deformer.origin,
+        multiply_color = deformer.multiply_color,
+        screen_color = deformer.screen_color,
+        local_multiply_color = deformer._local_multiply_color,
+        local_screen_color = deformer._local_screen_color,
+        rotation = deformer._rotation,
+    }
+end
+runtime:set_base_parameter("ParamAngleX", 17)
+renderer:update(1 / 60)
+local buffers_reused = composed == runtime._composed_deformers
+for i = 1, #composed do
+    local deformer = composed[i]
+    local before = deformer_buffers[i]
+    buffers_reused = buffers_reused
+        and deformer == before.deformer
+        and deformer.grid == before.grid
+        and (not deformer.grid or deformer.grid[1] == before.first_grid_point)
+        and deformer.origin == before.origin
+        and deformer.multiply_color == before.multiply_color
+        and deformer.screen_color == before.screen_color
+        and deformer._local_multiply_color == before.local_multiply_color
+        and deformer._local_screen_color == before.local_screen_color
+        and deformer._rotation == before.rotation
+end
+check("Cubism3 deformer update reuses frame buffers", buffers_reused)
 
 print(string.format("\n=== Results: %d/%d passed ===", passed, total))
 if passed ~= total then os.exit(1) end

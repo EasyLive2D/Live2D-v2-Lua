@@ -46,6 +46,7 @@ local ROTATION_PROBE_STEP_WARP_PARENT = -0.1
 local ROTATION_PROBE_STEP_ROTATION_PARENT = -10.0
 local IDENTITY_MULTIPLY = { 1, 1, 1 }
 local ZERO_SCREEN = { 0, 0, 0 }
+local EMPTY_COLOR_CHANNELS = { {}, {}, {} }
 
 local function wrap_angle(angle)
     local two_pi = 2.0 * math.pi
@@ -68,18 +69,23 @@ local function read_color_channels(bytes, offs, slots, count, default)
     return { r, g, b }
 end
 
-local function interpolate_colors(begin, slots, multiply_colors, screen_colors)
+local function interpolate_colors(begin, slots, multiply_colors, screen_colors, multiply, screen)
+    multiply = multiply or { 0, 0, 0 }
+    screen = screen or { 0, 0, 0 }
     if begin == nil or begin < 0 then
-        return { 1, 1, 1 }, { 0, 0, 0 }
+        multiply[1], multiply[2], multiply[3] = 1, 1, 1
+        screen[1], screen[2], screen[3] = 0, 0, 0
+        return multiply, screen
     end
 
-    local multiply = { 0, 0, 0 }
-    local screen = { 0, 0, 0 }
-    for _, slot in ipairs(slots) do
+    multiply[1], multiply[2], multiply[3] = 0, 0, 0
+    screen[1], screen[2], screen[3] = 0, 0, 0
+    for slot_index = 1, #slots do
+        local slot = slots[slot_index]
         local color_index = begin + slot.local_index + 1
         for channel = 1, 3 do
-            local multiply_channel = multiply_colors[channel] or {}
-            local screen_channel = screen_colors[channel] or {}
+            local multiply_channel = multiply_colors[channel] or EMPTY_COLOR_CHANNELS[channel]
+            local screen_channel = screen_colors[channel] or EMPTY_COLOR_CHANNELS[channel]
             multiply[channel] = multiply[channel] + (multiply_channel[color_index] or 1) * slot.weight
             screen[channel] = screen[channel] + (screen_channel[color_index] or 0) * slot.weight
         end
@@ -87,9 +93,9 @@ local function interpolate_colors(begin, slots, multiply_colors, screen_colors)
     return multiply, screen
 end
 
-local function compose_colors(local_multiply, local_screen, parent_multiply, parent_screen)
-    local multiply = { 0, 0, 0 }
-    local screen = { 0, 0, 0 }
+local function compose_colors(local_multiply, local_screen, parent_multiply, parent_screen, multiply, screen)
+    multiply = multiply or { 0, 0, 0 }
+    screen = screen or { 0, 0, 0 }
     for channel = 1, 3 do
         multiply[channel] = local_multiply[channel] * parent_multiply[channel]
         screen[channel] = local_screen[channel] + parent_screen[channel]
@@ -299,9 +305,7 @@ local function warp_grid(self, warp_index, keyform_index)
 end
 
 -- Interpolate warp grid
-local function interpolated_warp_grid(self, warp_index, bindings, parameter_values, out_grid)
-    local slots = warp_keyform_slots(self, warp_index, bindings, parameter_values)
-    if not slots then return nil end
+local function interpolated_warp_grid(self, warp_index, slots, out_grid)
     local begin = self.warp_keyform_begin_indices[warp_index + 1]
     if begin == nil or begin < 0 then return nil end
     local vertex_count = self.warp_vertex_counts[warp_index + 1]
@@ -338,25 +342,23 @@ local function interpolated_warp_grid(self, warp_index, bindings, parameter_valu
 end
 
 -- Interpolate rotation
-local function interpolated_rotation(self, rotation_index, bindings, parameter_values)
-    local slots = rotation_keyform_slots(self, rotation_index, bindings, parameter_values)
-    if not slots then return nil end
+local function interpolated_rotation(self, rotation_index, slots, out_rotation)
     local begin = self.rotation_keyform_begin_indices[rotation_index + 1]
     if begin == nil or begin < 0 then return nil end
 
     local angle = 0.0
-    local translation = Vector2.new(0, 0)
+    local translation_x = 0.0
+    local translation_y = 0.0
     local scale = 0.0
     local flip_x = 0.0
     local flip_y = 0.0
 
-    for _, slot in ipairs(slots) do
+    for slot_index = 1, #slots do
+        local slot = slots[slot_index]
         local kf_idx = begin + slot.local_index
         angle = angle + (self.rotation_keyform_angles[kf_idx + 1] or 0) * slot.weight
-        translation = Vector2.new(
-            translation:x() + (self.rotation_keyform_origin_xs[kf_idx + 1] or 0) * slot.weight,
-            translation:y() + (self.rotation_keyform_origin_ys[kf_idx + 1] or 0) * slot.weight
-        )
+        translation_x = translation_x + (self.rotation_keyform_origin_xs[kf_idx + 1] or 0) * slot.weight
+        translation_y = translation_y + (self.rotation_keyform_origin_ys[kf_idx + 1] or 0) * slot.weight
         scale = scale + (self.rotation_keyform_scales[kf_idx + 1] or 0) * slot.weight
         local reflectXSign = self.rotation_keyform_reflect_xs[kf_idx + 1] and 1 or 0
         local reflectYSign = self.rotation_keyform_reflect_ys[kf_idx + 1] and 1 or 0
@@ -368,19 +370,18 @@ local function interpolated_rotation(self, rotation_index, bindings, parameter_v
     local flip_x_bool = math.floor(flip_x + 0.001) ~= 0
     local flip_y_bool = math.floor(flip_y + 0.001) ~= 0
 
-    return {
-        angle_degrees = base_angle + angle,
-        translation = translation,
-        scale = scale,
-        flip_x = flip_x_bool,
-        flip_y = flip_y_bool,
-    }
+    local rotation = out_rotation or {}
+    rotation.angle_degrees = base_angle + angle
+    rotation.translation_x = translation_x
+    rotation.translation_y = translation_y
+    rotation.scale = scale
+    rotation.flip_x = flip_x_bool
+    rotation.flip_y = flip_y_bool
+    return rotation
 end
 
 -- Interpolate warp opacity
-local function interpolated_warp_opacity(self, warp_index, bindings, parameter_values)
-    local slots = warp_keyform_slots(self, warp_index, bindings, parameter_values)
-    if not slots then return nil end
+local function interpolated_warp_opacity(self, warp_index, slots)
     local begin = self.warp_keyform_begin_indices[warp_index + 1]
     if begin == nil or begin < 0 then return nil end
     local opacity = 0.0
@@ -391,22 +392,20 @@ local function interpolated_warp_opacity(self, warp_index, bindings, parameter_v
     return opacity
 end
 
-local function interpolated_warp_colors(self, warp_index, bindings, parameter_values)
-    local slots = warp_keyform_slots(self, warp_index, bindings, parameter_values)
-    if not slots then return nil end
+local function interpolated_warp_colors(self, warp_index, slots, multiply, screen)
     local begins = self.warp_keyform_color_begin_indices or {}
     return interpolate_colors(
         begins[warp_index + 1] or -1,
         slots,
-        self.keyform_multiply_colors or { {}, {}, {} },
-        self.keyform_screen_colors or { {}, {}, {} }
+        self.keyform_multiply_colors or EMPTY_COLOR_CHANNELS,
+        self.keyform_screen_colors or EMPTY_COLOR_CHANNELS,
+        multiply,
+        screen
     )
 end
 
 -- Interpolate rotation opacity
-local function interpolated_rotation_opacity(self, rotation_index, bindings, parameter_values)
-    local slots = rotation_keyform_slots(self, rotation_index, bindings, parameter_values)
-    if not slots then return nil end
+local function interpolated_rotation_opacity(self, rotation_index, slots)
     local begin = self.rotation_keyform_begin_indices[rotation_index + 1]
     if begin == nil or begin < 0 then return nil end
     local opacity = 0.0
@@ -417,15 +416,15 @@ local function interpolated_rotation_opacity(self, rotation_index, bindings, par
     return opacity
 end
 
-local function interpolated_rotation_colors(self, rotation_index, bindings, parameter_values)
-    local slots = rotation_keyform_slots(self, rotation_index, bindings, parameter_values)
-    if not slots then return nil end
+local function interpolated_rotation_colors(self, rotation_index, slots, multiply, screen)
     local begins = self.rotation_keyform_color_begin_indices or {}
     return interpolate_colors(
         begins[rotation_index + 1] or -1,
         slots,
-        self.keyform_multiply_colors or { {}, {}, {} },
-        self.keyform_screen_colors or { {}, {}, {} }
+        self.keyform_multiply_colors or EMPTY_COLOR_CHANNELS,
+        self.keyform_screen_colors or EMPTY_COLOR_CHANNELS,
+        multiply,
+        screen
     )
 end
 
@@ -434,125 +433,117 @@ function deformers.compose(self, bindings, parameter_values, out_composed)
     local order = compose_order(self)
     local composed = out_composed or {}
 
-    for _, idx in ipairs(order) do
+    for order_index = 1, #order do
+        local idx = order[order_index]
         local parent = self.parent_deformer_indices[idx + 1] or -1
         local specific = self.specific_indices[idx + 1]
         if specific == nil or specific < 0 then
             return nil
         end
         local kind = self.deformer_kinds[idx + 1]
-
-        -- Helper: apply composed parent to point
-        local function apply_parent(p, point)
-            if p < 0 then return point end
-            local childIndex = p + 1
-            if not composed[childIndex] then return point end
-            return apply_one(composed[childIndex], point)
-        end
-
-        -- Helper: parent scale accum
-        local function parent_scale(p)
-            if p < 0 then return 1.0 end
-            local childIndex = p + 1
-            local c = composed[childIndex]
-            if not c then return 1.0 end
-            if c.kind == "warp" then return c.scale_accum end
-            if c.kind == "rotation" then return c.scale_accum end
-            return 1.0
-        end
-
-        -- Helper: parent opacity accum
-        local function parent_opacity(p)
-            if p < 0 then return 1.0 end
-            local childIndex = p + 1
-            local c = composed[childIndex]
-            if not c then return 1.0 end
-            if c.kind == "warp" then return c.opacity_accum end
-            if c.kind == "rotation" then return c.opacity_accum end
-            return 1.0
-        end
-
-        local function parent_colors(p)
-            if p < 0 then return IDENTITY_MULTIPLY, ZERO_SCREEN end
-            local childIndex = p + 1
-            local c = composed[childIndex]
-            if not c then return IDENTITY_MULTIPLY, ZERO_SCREEN end
-            return c.multiply_color or IDENTITY_MULTIPLY, c.screen_color or ZERO_SCREEN
-        end
+        local parent_deformer = parent >= 0 and composed[parent + 1] or nil
+        local parent_scale_accum = parent_deformer and parent_deformer.scale_accum or 1.0
+        local parent_opacity_accum = parent_deformer and parent_deformer.opacity_accum or 1.0
+        local parent_multiply = parent_deformer and parent_deformer.multiply_color or IDENTITY_MULTIPLY
+        local parent_screen = parent_deformer and parent_deformer.screen_color or ZERO_SCREEN
 
         if kind == DEFORMER_WARP then
             local target = composed[idx + 1] or {}
-            local grid = interpolated_warp_grid(self, specific, bindings, parameter_values, target.grid)
+            local slots = warp_keyform_slots(self, specific, bindings, parameter_values)
+            if not slots then return nil end
+            local grid = interpolated_warp_grid(self, specific, slots, target.grid)
             if not grid then return nil end
             local cols = self.warp_cols[specific + 1] or 0
             local rows = self.warp_rows[specific + 1] or 0
             -- Apply parent transforms to grid
-            for i, point in ipairs(grid) do
-                local x, y = apply_one_xy(composed[parent + 1], point._x, point._y)
+            for i = 1, #grid do
+                local point = grid[i]
+                local x, y = apply_one_xy(parent_deformer, point._x, point._y)
                 if not x then return nil end
                 point._x = x
                 point._y = y
             end
-            local scale_accum = parent_scale(parent)
-            local opacity = interpolated_warp_opacity(self, specific, bindings, parameter_values)
+            local opacity = interpolated_warp_opacity(self, specific, slots)
             if not opacity then return nil end
-            local opacity_accum = opacity * parent_opacity(parent)
-            local local_multiply, local_screen = interpolated_warp_colors(self, specific, bindings, parameter_values)
+            local local_multiply, local_screen = interpolated_warp_colors(
+                self,
+                specific,
+                slots,
+                target._local_multiply_color,
+                target._local_screen_color
+            )
             if not local_multiply then return nil end
-            local parent_multiply, parent_screen = parent_colors(parent)
             local multiply_color, screen_color = compose_colors(
                 local_multiply,
                 local_screen,
                 parent_multiply,
-                parent_screen
+                parent_screen,
+                target.multiply_color,
+                target.screen_color
             )
             target.kind = "warp"
             target.grid = grid
             target.cols = cols
             target.rows = rows
-            target.scale_accum = scale_accum
-            target.opacity_accum = opacity_accum
+            target.scale_accum = parent_scale_accum
+            target.opacity_accum = opacity * parent_opacity_accum
+            target._local_multiply_color = local_multiply
+            target._local_screen_color = local_screen
             target.multiply_color = multiply_color
             target.screen_color = screen_color
             composed[idx + 1] = target
         elseif kind == DEFORMER_ROTATION then
-            local rotation = interpolated_rotation(self, specific, bindings, parameter_values)
+            local target = composed[idx + 1] or {}
+            local slots = rotation_keyform_slots(self, specific, bindings, parameter_values)
+            if not slots then return nil end
+            local rotation = interpolated_rotation(self, specific, slots, target._rotation)
             if not rotation then return nil end
-            local origin = apply_parent(parent, rotation.translation)
-            if not origin then return nil end
+            local origin_x, origin_y = apply_one_xy(
+                parent_deformer,
+                rotation.translation_x,
+                rotation.translation_y
+            )
+            if not origin_x then return nil end
+            local origin = target.origin or Vector2.new(0, 0)
+            origin._x = origin_x
+            origin._y = origin_y
             local step = ROTATION_PROBE_STEP_WARP_PARENT
-            local parent_deformer = parent >= 0 and composed[parent + 1] or nil
             if parent_deformer and parent_deformer.kind == "rotation" then
                 step = ROTATION_PROBE_STEP_ROTATION_PARENT
             end
 
-            local direction = Vector2.new(0, 0)
+            local direction_x = 0.0
+            local direction_y = 0.0
             local scale = 1.0
             for _ = 1, ROTATION_PROBE_ITERATIONS do
                 local offset = step * scale
-                local forward = apply_parent(parent, Vector2.new(
-                    rotation.translation:x(),
-                    rotation.translation:y() + offset
-                ))
-                if not forward then return nil end
+                local forward_x, forward_y = apply_one_xy(
+                    parent_deformer,
+                    rotation.translation_x,
+                    rotation.translation_y + offset
+                )
+                if not forward_x then return nil end
 
-                local dx = forward:x() - origin:x()
-                local dy = forward:y() - origin:y()
+                local dx = forward_x - origin_x
+                local dy = forward_y - origin_y
                 if dx ~= 0 or dy ~= 0 then
-                    direction = Vector2.new(dx, dy)
+                    direction_x = dx
+                    direction_y = dy
                     break
                 end
 
-                local backward = apply_parent(parent, Vector2.new(
-                    rotation.translation:x(),
-                    rotation.translation:y() - offset
-                ))
-                if not backward then return nil end
+                local backward_x, backward_y = apply_one_xy(
+                    parent_deformer,
+                    rotation.translation_x,
+                    rotation.translation_y - offset
+                )
+                if not backward_x then return nil end
 
-                dx = backward:x() - origin:x()
-                dy = backward:y() - origin:y()
+                dx = backward_x - origin_x
+                dy = backward_y - origin_y
                 if dx ~= 0 or dy ~= 0 then
-                    direction = Vector2.new(-dx, -dy)
+                    direction_x = -dx
+                    direction_y = -dy
                     break
                 end
 
@@ -560,31 +551,38 @@ function deformers.compose(self, bindings, parameter_values, out_composed)
             end
 
             local parent_angle_rad = wrap_angle(
-                math.atan2(direction:y(), direction:x()) - math.atan2(step, 0.0)
+                math.atan2(direction_y, direction_x) - math.atan2(step, 0.0)
             )
             local parent_angle_deg = parent_angle_rad * 180 / math.pi
-            local scale_accum = parent_scale(parent)
-            local opacity = interpolated_rotation_opacity(self, specific, bindings, parameter_values)
+            local opacity = interpolated_rotation_opacity(self, specific, slots)
             if not opacity then return nil end
-            local opacity_accum = opacity * parent_opacity(parent)
-            local local_multiply, local_screen = interpolated_rotation_colors(self, specific, bindings, parameter_values)
+            local local_multiply, local_screen = interpolated_rotation_colors(
+                self,
+                specific,
+                slots,
+                target._local_multiply_color,
+                target._local_screen_color
+            )
             if not local_multiply then return nil end
-            local parent_multiply, parent_screen = parent_colors(parent)
             local multiply_color, screen_color = compose_colors(
                 local_multiply,
                 local_screen,
                 parent_multiply,
-                parent_screen
+                parent_screen,
+                target.multiply_color,
+                target.screen_color
             )
-            local target = composed[idx + 1] or {}
             target.kind = "rotation"
             target.origin = origin
             target.angle_degrees = rotation.angle_degrees + parent_angle_deg
-            target.scale = rotation.scale * scale_accum
+            target.scale = rotation.scale * parent_scale_accum
             target.flip_x = rotation.flip_x
             target.flip_y = rotation.flip_y
-            target.scale_accum = rotation.scale * scale_accum
-            target.opacity_accum = opacity_accum
+            target.scale_accum = rotation.scale * parent_scale_accum
+            target.opacity_accum = opacity * parent_opacity_accum
+            target._rotation = rotation
+            target._local_multiply_color = local_multiply
+            target._local_screen_color = local_screen
             target.multiply_color = multiply_color
             target.screen_color = screen_color
             composed[idx + 1] = target

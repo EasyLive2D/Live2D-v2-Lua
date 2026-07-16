@@ -24,6 +24,7 @@ Renderer.__index = Renderer
 local current_renderer = nil
 local DEFAULT_MOTION_CACHE_LIMIT = 8
 local DEFAULT_EXPRESSION_CACHE_LIMIT = 4
+local EMPTY_FRAME_CONTEXT = {}
 
 local function cache_store(cache, order, key, value, limit)
     for i = #order, 1, -1 do
@@ -473,7 +474,7 @@ end
 function Renderer:update(delta_seconds, frame_context)
     local runtime = require_runtime(self)
     delta_seconds = tonumber(delta_seconds) or 0
-    frame_context = frame_context or {}
+    frame_context = frame_context or EMPTY_FRAME_CONTEXT
     runtime:configure_parameter_trace(frame_context.trace_parameters)
     runtime:begin_parameter_frame(frame_context.frame_number, frame_context.time_msec, delta_seconds)
 
