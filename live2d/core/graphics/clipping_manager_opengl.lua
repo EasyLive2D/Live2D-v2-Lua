@@ -101,41 +101,43 @@ function ClippingManagerOpenGL:setupClip(modelContext, drawParam)
 
         for clipIndex = 1, #self.clipContextList do
             local clipCtx = self.clipContextList[clipIndex]
-            local clippedBounds = clipCtx.allClippedDrawRect
-            local layoutBounds = clipCtx.layoutBounds
-            local boundsExpandRatio = 0.05
-            self.tmpBoundsOnModel:setRect(clippedBounds)
-            self.tmpBoundsOnModel:expand(clippedBounds.width * boundsExpandRatio, clippedBounds.height * boundsExpandRatio)
-            local scaleX = layoutBounds.width / self.tmpBoundsOnModel.width
-            local scaleY = layoutBounds.height / self.tmpBoundsOnModel.height
+            if clipCtx.isUsing then
+                local clippedBounds = clipCtx.allClippedDrawRect
+                local layoutBounds = clipCtx.layoutBounds
+                local boundsExpandRatio = 0.05
+                self.tmpBoundsOnModel:setRect(clippedBounds)
+                self.tmpBoundsOnModel:expand(clippedBounds.width * boundsExpandRatio, clippedBounds.height * boundsExpandRatio)
+                local scaleX = layoutBounds.width / self.tmpBoundsOnModel.width
+                local scaleY = layoutBounds.height / self.tmpBoundsOnModel.height
 
-            self.tmpMatrix2:identity()
-            self.tmpMatrix2:translate(-1, -1, 0)
-            self.tmpMatrix2:scale(2, 2, 1)
-            self.tmpMatrix2:translate(layoutBounds.x, layoutBounds.y, 0)
-            self.tmpMatrix2:scale(scaleX, scaleY, 1)
-            self.tmpMatrix2:translate(-self.tmpBoundsOnModel.x, -self.tmpBoundsOnModel.y, 0)
-            self.tmpMatrixForMask:setMatrix(self.tmpMatrix2.m)
+                self.tmpMatrix2:identity()
+                self.tmpMatrix2:translate(-1, -1, 0)
+                self.tmpMatrix2:scale(2, 2, 1)
+                self.tmpMatrix2:translate(layoutBounds.x, layoutBounds.y, 0)
+                self.tmpMatrix2:scale(scaleX, scaleY, 1)
+                self.tmpMatrix2:translate(-self.tmpBoundsOnModel.x, -self.tmpBoundsOnModel.y, 0)
+                self.tmpMatrixForMask:setMatrix(self.tmpMatrix2.m)
 
-            self.tmpMatrix2:identity()
-            self.tmpMatrix2:translate(layoutBounds.x, layoutBounds.y, 0)
-            self.tmpMatrix2:scale(scaleX, scaleY, 1)
-            self.tmpMatrix2:translate(-self.tmpBoundsOnModel.x, -self.tmpBoundsOnModel.y, 0)
-            self.tmpMatrixForDraw:setMatrix(self.tmpMatrix2.m)
+                self.tmpMatrix2:identity()
+                self.tmpMatrix2:translate(layoutBounds.x, layoutBounds.y, 0)
+                self.tmpMatrix2:scale(scaleX, scaleY, 1)
+                self.tmpMatrix2:translate(-self.tmpBoundsOnModel.x, -self.tmpBoundsOnModel.y, 0)
+                self.tmpMatrixForDraw:setMatrix(self.tmpMatrix2.m)
 
-            local maskMatrixArray = self.tmpMatrixForMask:getArray()
-            for aX = 1, 16 do clipCtx.matrixForMask[aX] = maskMatrixArray[aX] end
-            local drawMatrixArray = self.tmpMatrixForDraw:getArray()
-            for aX = 1, 16 do clipCtx.matrixForDraw[aX] = drawMatrixArray[aX] end
+                local maskMatrixArray = self.tmpMatrixForMask:getArray()
+                for aX = 1, 16 do clipCtx.matrixForMask[aX] = maskMatrixArray[aX] end
+                local drawMatrixArray = self.tmpMatrixForDraw:getArray()
+                for aX = 1, 16 do clipCtx.matrixForDraw[aX] = drawMatrixArray[aX] end
 
-            local maskDrawCount = #clipCtx.clippingMaskDrawIndexList
-            for maskIndex = 1, maskDrawCount do
-                local drawIndex = clipCtx.clippingMaskDrawIndexList[maskIndex]
-                local drawData = modelContext:getDrawData(drawIndex)
-                if drawData ~= nil then
-                    local drawCtx = modelContext:getDrawContext(drawIndex)
-                    drawParam:setClipBufPre_clipContextForMask(clipCtx)
-                    drawData:draw(drawParam, modelContext, drawCtx)
+                local maskDrawCount = #clipCtx.clippingMaskDrawIndexList
+                for maskIndex = 1, maskDrawCount do
+                    local drawIndex = clipCtx.clippingMaskDrawIndexList[maskIndex]
+                    local drawData = modelContext:getDrawData(drawIndex)
+                    if drawData ~= nil then
+                        local drawCtx = modelContext:getDrawContext(drawIndex)
+                        drawParam:setClipBufPre_clipContextForMask(clipCtx)
+                        drawData:draw(drawParam, modelContext, drawCtx)
+                    end
                 end
             end
         end
@@ -224,17 +226,42 @@ function ClippingManagerOpenGL:setupLayoutBounds(activeClipCount)
     local clipsPerChannel = math.floor(activeClipCount / ClippingManagerOpenGL.CHANNEL_COUNT)
     local extraClips = activeClipCount % ClippingManagerOpenGL.CHANNEL_COUNT
     local clipIndex = 1
+
+    local function nextActiveClip()
+        while clipIndex <= #self.clipContextList do
+            local clipCtx = self.clipContextList[clipIndex]
+            clipIndex = clipIndex + 1
+            if clipCtx.isUsing then return clipCtx end
+        end
+        return nil
+    end
+
+    local function assignGrid(clipsInThisChannel, columns, rows, channelIndex)
+        for rowIndex = 1, clipsInThisChannel do
+            local columnIndex = (rowIndex - 1) % columns
+            local gridRowIndex = math.floor((rowIndex - 1) / columns)
+            local clipCtx = nextActiveClip()
+            if clipCtx == nil then return false end
+            clipCtx.layoutChannelNo = channelIndex - 1
+            clipCtx.layoutBounds.x = columnIndex / columns
+            clipCtx.layoutBounds.y = gridRowIndex / rows
+            clipCtx.layoutBounds.width = 1 / columns
+            clipCtx.layoutBounds.height = 1 / rows
+        end
+        return true
+    end
+
     for channelIndex = 1, ClippingManagerOpenGL.CHANNEL_COUNT do
         local clipsInThisChannel = clipsPerChannel + (channelIndex <= extraClips and 1 or 0)
         if clipsInThisChannel == 1 then
-            local clipCtx = self.clipContextList[clipIndex]; clipIndex = clipIndex + 1
+            local clipCtx = nextActiveClip(); if clipCtx == nil then return end
             clipCtx.layoutChannelNo = channelIndex - 1
             clipCtx.layoutBounds.x = 0; clipCtx.layoutBounds.y = 0
             clipCtx.layoutBounds.width = 1; clipCtx.layoutBounds.height = 1
         elseif clipsInThisChannel == 2 then
             for rowIndex = 1, clipsInThisChannel do
                 local columnIndex = (rowIndex - 1) % 2
-                local clipCtx = self.clipContextList[clipIndex]; clipIndex = clipIndex + 1
+                local clipCtx = nextActiveClip(); if clipCtx == nil then return end
                 clipCtx.layoutChannelNo = channelIndex - 1
                 clipCtx.layoutBounds.x = columnIndex * 0.5; clipCtx.layoutBounds.y = 0
                 clipCtx.layoutBounds.width = 0.5; clipCtx.layoutBounds.height = 1
@@ -242,21 +269,26 @@ function ClippingManagerOpenGL:setupLayoutBounds(activeClipCount)
         elseif clipsInThisChannel <= 4 then
             for rowIndex = 1, clipsInThisChannel do
                 local columnIndex = (rowIndex - 1) % 2
-                local rowIndex = math.floor((rowIndex - 1) / 2)
-                local clipCtx = self.clipContextList[clipIndex]; clipIndex = clipIndex + 1
+                local gridRowIndex = math.floor((rowIndex - 1) / 2)
+                local clipCtx = nextActiveClip(); if clipCtx == nil then return end
                 clipCtx.layoutChannelNo = channelIndex - 1
-                clipCtx.layoutBounds.x = columnIndex * 0.5; clipCtx.layoutBounds.y = rowIndex * 0.5
+                clipCtx.layoutBounds.x = columnIndex * 0.5; clipCtx.layoutBounds.y = gridRowIndex * 0.5
                 clipCtx.layoutBounds.width = 0.5; clipCtx.layoutBounds.height = 0.5
             end
         elseif clipsInThisChannel <= 9 then
             for rowIndex = 1, clipsInThisChannel do
                 local columnIndex = (rowIndex - 1) % 3
-                local rowIndex = math.floor((rowIndex - 1) / 3)
-                local clipCtx = self.clipContextList[clipIndex]; clipIndex = clipIndex + 1
+                local gridRowIndex = math.floor((rowIndex - 1) / 3)
+                local clipCtx = nextActiveClip(); if clipCtx == nil then return end
                 clipCtx.layoutChannelNo = channelIndex - 1
-                clipCtx.layoutBounds.x = columnIndex / 3; clipCtx.layoutBounds.y = rowIndex / 3
+                clipCtx.layoutBounds.x = columnIndex / 3; clipCtx.layoutBounds.y = gridRowIndex / 3
                 clipCtx.layoutBounds.width = 1 / 3; clipCtx.layoutBounds.height = 1 / 3
             end
+        elseif clipsInThisChannel <= 16 then
+            if not assignGrid(clipsInThisChannel, 4, 4, channelIndex) then return end
+        else
+            local columns = math.ceil(math.sqrt(clipsInThisChannel))
+            if not assignGrid(clipsInThisChannel, columns, columns, channelIndex) then return end
         end
     end
 end
